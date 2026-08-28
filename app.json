@@ -47,6 +47,10 @@
     },
     "android": {
       "package": "com.skario.clubhq",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/clubhq-adaptive-foreground.png",
+        "backgroundColor": "#0A6CFF"
+      },
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA",
