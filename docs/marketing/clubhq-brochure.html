@@ -1,0 +1,482 @@
+<title>ClubHQ Brochure</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Unbounded:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg: #0B0B0D;
+    --surface: #141416;
+    --surface-2: #17181B;
+    --border: #23252A;
+    --text: #F2F2F3;
+    --text-dim: #9CA3AF;
+    --text-faint: #6B6F76;
+    --accent: #0A6CFF;
+    --accent-2: #FFB020;
+    --accent-soft: #0A6CFF1A;
+    --amber-soft: #FFB0201A;
+  }
+  :root[data-theme="light"] {
+    --bg: #F6F7F9; --surface: #FFFFFF; --surface-2: #EFF1F4; --border: #E1E4E9;
+    --text: #14161A; --text-dim: #565C66; --text-faint: #8A8F99;
+    --accent: #0A6CFF; --accent-2: #B9750A; --accent-soft: #0A6CFF12; --amber-soft: #B9750A12;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #F6F7F9; --surface: #FFFFFF; --surface-2: #EFF1F4; --border: #E1E4E9;
+      --text: #14161A; --text-dim: #565C66; --text-faint: #8A8F99;
+      --accent: #0A6CFF; --accent-2: #B9750A; --accent-soft: #0A6CFF12; --amber-soft: #B9750A12;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: "IBM Plex Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 900px; margin: 0 auto; }
+
+  /* ---------- Cover ---------- */
+  .cover {
+    padding: 96px 28px 72px;
+    text-align: center;
+    border-bottom: 1px dashed var(--border);
+  }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 32px;
+  }
+  .brand-card {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 30px 44px;
+    margin-bottom: 40px;
+  }
+  .wordmark { display: inline-flex; flex-direction: column; }
+  .wordmark-text { font-family: "Anton", sans-serif; font-style: italic; font-size: 36px; color: var(--text); display: inline-block; }
+  .wordmark-text .hq { color: var(--accent); }
+  .wordmark-stripe { height: 7px; background: var(--accent-2); transform: skewX(-16deg); margin-top: 9px; width: 100%; }
+
+  .cover h1 {
+    font-family: "Unbounded", sans-serif;
+    font-weight: 800;
+    font-size: clamp(30px, 5vw, 46px);
+    line-height: 1.12;
+    margin: 0 auto 18px;
+    max-width: 16ch;
+    text-wrap: balance;
+  }
+  .cover .sub {
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    max-width: 52ch;
+    margin: 0 auto;
+  }
+
+  /* ---------- Panels ---------- */
+  .panel {
+    padding: 64px 28px;
+    border-bottom: 1px dashed var(--border);
+  }
+  .panel.alt { background: var(--surface); }
+  .panel-inner { max-width: 720px; margin: 0 auto; }
+
+  .panel-tag {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 16px;
+  }
+  .panel h2 {
+    font-family: "Unbounded", sans-serif;
+    font-weight: 700;
+    font-size: clamp(24px, 3.4vw, 32px);
+    line-height: 1.2;
+    margin: 0 0 24px;
+    text-wrap: balance;
+    max-width: 20ch;
+  }
+  .panel p { font-size: 15.5px; line-height: 1.7; color: var(--text-dim); margin: 0 0 18px; max-width: 65ch; }
+  .panel p:last-child { margin-bottom: 0; }
+  .panel p b { color: var(--text); font-weight: 600; }
+
+  .pull-quote {
+    font-family: "Unbounded", sans-serif;
+    font-weight: 600;
+    font-size: clamp(18px, 2.4vw, 22px);
+    line-height: 1.45;
+    color: var(--text);
+    border-left: 3px solid var(--accent-2);
+    padding-left: 22px;
+    margin: 28px 0;
+    text-wrap: balance;
+  }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    margin-top: 8px;
+  }
+  .feature-item { display: flex; flex-direction: column; gap: 6px; }
+  .feature-item .num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    color: var(--accent);
+  }
+  .feature-item h3 {
+    font-family: "Unbounded", sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    margin: 0;
+    color: var(--text);
+  }
+  .feature-item p { font-size: 13.5px; margin: 0; color: var(--text-dim); line-height: 1.55; }
+
+  /* ---------- Screens panel ---------- */
+  .screens-row { display: flex; gap: 28px; flex-wrap: wrap; justify-content: center; margin-top: 32px; }
+  .screen-col { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .phone {
+    width: 220px;
+    border-radius: 28px;
+    padding: 14px 12px;
+    background: linear-gradient(160deg,#111318,#05070d);
+    border: 1px solid #24262c;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.35);
+  }
+  .phone-status { display: flex; justify-content: space-between; padding: 0 4px 10px; font-family: "IBM Plex Sans", sans-serif; font-size: 9px; color: #e8eaf0; font-weight: 600; }
+  .phone-screen { background: #0B0B0D; border-radius: 14px; padding: 12px; height: 340px; overflow: hidden; }
+  .p-card { background: #141416; border-radius: 10px; padding: 10px 11px; margin-bottom: 8px; }
+  .p-label { font-family: "IBM Plex Mono", monospace; font-size: 8px; font-weight: 700; letter-spacing: 0.04em; color: #9CA3AF; text-transform: uppercase; margin-bottom: 5px; }
+  .p-chip-row { display: flex; gap: 5px; margin-bottom: 6px; }
+  .p-chip { font-family: "IBM Plex Sans", sans-serif; font-size: 8px; font-weight: 700; color: #9CA3AF; background: #17181B; border-radius: 8px; padding: 3px 7px; }
+  .p-chip.active { background: #0A6CFF; color: #fff; }
+  .p-name { font-family: "IBM Plex Sans", sans-serif; font-size: 11px; font-weight: 700; color: #F2F2F3; }
+  .p-score-row { display: flex; align-items: baseline; gap: 5px; margin: 3px 0; }
+  .p-score { font-family: "IBM Plex Mono", monospace; font-size: 20px; font-weight: 600; color: #0A6CFF; }
+  .p-delta { font-family: "IBM Plex Sans", sans-serif; font-size: 9px; font-weight: 700; color: #30D158; }
+  .p-summary { font-family: "IBM Plex Sans", sans-serif; font-size: 8.5px; color: #9CA3AF; line-height: 1.4; }
+  .p-link { font-family: "IBM Plex Sans", sans-serif; font-size: 8.5px; font-weight: 700; color: #0A6CFF; margin-top: 5px; }
+  .p-toggle-row { display: flex; gap: 5px; margin-bottom: 8px; }
+  .p-toggle { flex: 1; text-align: center; font-family: "IBM Plex Sans", sans-serif; font-size: 8.5px; font-weight: 700; padding: 5px; border-radius: 6px; background: #17181B; color: #9CA3AF; }
+  .p-toggle.active { background: #0A6CFF; color: #fff; }
+  .p-section-header { font-family: "IBM Plex Sans", sans-serif; font-size: 8px; font-weight: 700; color: #9CA3AF; text-transform: uppercase; margin: 6px 0 4px; }
+  .p-event { display: flex; align-items: center; gap: 8px; background: #141416; border-radius: 8px; padding: 8px 9px; margin-bottom: 6px; }
+  .p-emoji { font-size: 13px; }
+  .p-event-title { font-family: "IBM Plex Sans", sans-serif; font-size: 9.5px; font-weight: 700; color: #F2F2F3; }
+  .p-event-meta { font-family: "IBM Plex Sans", sans-serif; font-size: 7.5px; color: #9CA3AF; margin-top: 1px; }
+  .p-tag { font-family: "IBM Plex Sans", sans-serif; font-size: 6.5px; font-weight: 700; color: #8FD19E; background: #1F2A1C; border-radius: 5px; padding: 2px 5px; margin-left: auto; white-space: nowrap; }
+  .p-priority { display: flex; gap: 6px; align-items: flex-start; margin-bottom: 6px; }
+  .p-priority-dot { width: 5px; height: 5px; border-radius: 50%; background: #0A6CFF; margin-top: 4px; flex-shrink: 0; }
+  .p-priority-text { font-family: "IBM Plex Sans", sans-serif; font-size: 8px; color: #B5B8BE; line-height: 1.4; }
+  .p-priority-text b { color: #F2F2F3; }
+  .p-watch { display: inline-flex; align-items: center; gap: 4px; font-family: "IBM Plex Sans", sans-serif; font-size: 7.5px; font-weight: 700; color: #fff; background: #0A6CFF; border-radius: 6px; padding: 4px 8px; margin-top: 4px; }
+  .screen-caption { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--text-faint); text-align: center; }
+
+  /* ---------- AI/privacy panel ---------- */
+  .privacy-panel { background: var(--surface); }
+  .privacy-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent-2);
+    border: 1px solid var(--accent-2);
+    background: var(--amber-soft);
+    border-radius: 999px;
+    padding: 6px 14px;
+    margin-bottom: 20px;
+  }
+  .name-demo {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 24px;
+    margin: 24px 0;
+  }
+  .name-demo .before, .name-demo .after { display: flex; flex-direction: column; gap: 6px; }
+  .name-demo .name-label { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); }
+  .name-demo .name-value { font-family: "IBM Plex Sans", sans-serif; font-size: 16px; font-weight: 600; color: var(--text); }
+  .name-demo .before .name-value { text-decoration: line-through; color: var(--text-faint); }
+  .name-demo .after .name-value { color: var(--accent); }
+  .name-demo .arrow { font-size: 20px; color: var(--text-faint); }
+
+  .privacy-list { list-style: none; margin: 24px 0 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
+  .privacy-list li { display: flex; gap: 14px; font-size: 14.5px; line-height: 1.6; color: var(--text-dim); }
+  .privacy-list li .check { color: var(--good, var(--accent)); font-weight: 700; flex-shrink: 0; }
+  .privacy-list li b { color: var(--text); }
+
+  /* ---------- Closing ---------- */
+  .closing {
+    padding: 80px 28px;
+    text-align: center;
+    background: var(--accent);
+  }
+  .closing h2 {
+    font-family: "Unbounded", sans-serif;
+    font-weight: 800;
+    font-size: clamp(26px, 3.8vw, 36px);
+    color: #fff;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  .closing p { color: #DCE8FF; font-size: 16px; margin: 0 0 30px; }
+  .closing .wordmark-text { color: #fff; }
+  .closing .wordmark-text .hq { color: #0B0B0D; }
+  .closing-brand { margin-bottom: 32px; }
+  .btn {
+    display: inline-block;
+    font-family: "IBM Plex Sans", sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    padding: 15px 30px;
+    border-radius: 10px;
+    background: #fff;
+    color: var(--accent);
+  }
+
+  footer {
+    padding: 28px;
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--text-faint);
+  }
+
+  @media (max-width: 640px) {
+    .feature-grid { grid-template-columns: 1fr; }
+    .cover { padding: 72px 20px 56px; }
+    .panel { padding: 52px 20px; }
+  }
+
+  @media print {
+    .screen-col, .phone, .feature-item, .name-demo, .pull-quote, .cover, .closing {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .panel, .cover, .closing { break-after: auto; }
+  }
+</style>
+
+<div class="wrap">
+
+  <!-- COVER -->
+  <div class="cover">
+    <p class="eyebrow">The Club Operating System</p>
+    <div class="brand-card">
+      <div class="wordmark">
+        <span class="wordmark-text">Club<span class="hq">HQ</span></span>
+        <div class="wordmark-stripe"></div>
+      </div>
+    </div>
+    <h1>Built by coaches. Proven in a real club. Ready for yours.</h1>
+    <p class="sub">Scheduling, player development, messaging, and payments in one system, running a real training business every week, not a demo built to look good in a meeting.</p>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="panel">
+    <div class="panel-inner">
+      <p class="panel-tag">Our Story</p>
+      <h2>Built to solve one club's real problem first.</h2>
+      <p>ClubHQ started as a private tool for one business: <b>Williams Soccer Clinic</b>, a youth soccer training business founded by twin brothers Samaan and Samir Williams, running sessions across three Atlanta-area locations: Dunwoody, Snellville, and Stone Mountain.</p>
+      <p>Spreadsheets, group texts, and generic scheduling apps could handle a calendar. None of them understood what a coach actually does day to day: evaluate a player, track their development, assign real homework, and follow up on it weeks later. So the brothers built the system they wished existed, for their own business first.</p>
+      <div class="pull-quote">We didn't research a market and guess what clubs might want. We ran a club on it ourselves, every week, until it actually worked.</div>
+      <p>Once it was carrying the full weight of a real, paying training business, three locations, real families, real coaches, it stopped being an internal tool and became a platform other clubs and private trainers could run on too.</p>
+    </div>
+  </div>
+
+  <!-- WHY EVERY CLUB SHOULD USE IT -->
+  <div class="panel alt">
+    <div class="panel-inner">
+      <p class="panel-tag">Why ClubHQ</p>
+      <h2>Everything a club actually needs, in one place.</h2>
+      <p>Most club software handles a calendar and stops there. ClubHQ was built around the full coaching workflow, the parts that actually determine whether players improve and parents stay engaged.</p>
+
+      <div class="feature-grid">
+        <div class="feature-item">
+          <span class="num">01</span>
+          <h3>Real scheduling</h3>
+          <p>Club-wide, one team, or a hand-picked group of specific players. A private session with two kids from different age groups is a normal case, not a workaround.</p>
+        </div>
+        <div class="feature-item">
+          <span class="num">02</span>
+          <h3>Coach-led development</h3>
+          <p>Skill evaluations become development plans and real homework, tied to a vetted drill video library, including drills a coach films right in the app.</p>
+        </div>
+        <div class="feature-item">
+          <span class="num">03</span>
+          <h3>Payments, without a processor</h3>
+          <p>Lightweight paid or unpaid tracking per player per month, visible to staff and to the parent actually being asked to pay.</p>
+        </div>
+        <div class="feature-item">
+          <span class="num">04</span>
+          <h3>Built for real families</h3>
+          <p>Multiple kids in one household switch with a tap. Search finds an old message instead of endless scrolling. Notifications can be tuned, not all or nothing.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREENS -->
+  <div class="panel">
+    <div class="panel-inner">
+      <p class="panel-tag">Inside The App</p>
+      <h2>What your coaches and parents actually see.</h2>
+      <p>Mocked up from the real screens in the app, not concept art. Sample data shown, no real family's information.</p>
+
+      <div class="screens-row">
+        <div class="screen-col">
+          <div class="phone">
+            <div class="phone-status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+            <div class="phone-screen">
+              <div class="p-card">
+                <p class="p-label">My Players</p>
+                <div class="p-chip-row">
+                  <span class="p-chip active">Alex R.</span>
+                  <span class="p-chip">Sam T.</span>
+                </div>
+                <p class="p-name">Alex Rivera</p>
+                <div class="p-score-row"><span class="p-score">78</span><span class="p-delta">&#8593; 12</span></div>
+                <p class="p-summary">Great progress on first touch this month. Keep working the weak-foot drills before next evaluation.</p>
+                <p class="p-link">View development profile &rarr;</p>
+              </div>
+              <div class="p-card">
+                <p class="p-label">Next Event</p>
+                <p class="p-event-title">Practice, Thu 6:00 PM</p>
+                <p class="p-event-meta">Dunwoody Fields</p>
+              </div>
+              <div class="p-card">
+                <p class="p-label">Announcements</p>
+                <p class="p-event-title">&#128204; Weekly Training Focus</p>
+              </div>
+            </div>
+          </div>
+          <p class="screen-caption">Home / Dashboard</p>
+        </div>
+
+        <div class="screen-col">
+          <div class="phone">
+            <div class="phone-status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+            <div class="phone-screen">
+              <div class="p-toggle-row">
+                <span class="p-toggle active">Events</span>
+                <span class="p-toggle">Announcements</span>
+              </div>
+              <p class="p-section-header">Wednesday, September 3</p>
+              <div class="p-event">
+                <span class="p-emoji">&#9917;</span>
+                <div>
+                  <p class="p-event-title">Practice</p>
+                  <p class="p-event-meta">5:30 PM &middot; Snellville Fields</p>
+                </div>
+                <span class="p-tag" style="color:#7FB3E8; background:#1C2733;">U12 Team</span>
+              </div>
+              <div class="p-event">
+                <span class="p-emoji">&#127942;</span>
+                <div>
+                  <p class="p-event-title">Private Session</p>
+                  <p class="p-event-meta">7:00 PM &middot; Stone Mountain</p>
+                </div>
+                <span class="p-tag">Alex R., Sam T.</span>
+              </div>
+              <p class="p-section-header">Saturday, September 6</p>
+              <div class="p-event">
+                <span class="p-emoji">&#9917;</span>
+                <div>
+                  <p class="p-event-title">Game Day</p>
+                  <p class="p-event-meta">9:00 AM &middot; Dunwoody Fields</p>
+                </div>
+                <span class="p-tag" style="color:#7FB3E8; background:#1C2733;">Club-wide</span>
+              </div>
+            </div>
+          </div>
+          <p class="screen-caption">Schedule</p>
+        </div>
+
+        <div class="screen-col">
+          <div class="phone">
+            <div class="phone-status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>
+            <div class="phone-screen">
+              <p class="p-name" style="font-size:13px;">Alex Rivera</p>
+              <div class="p-score-row"><span class="p-score">78</span><span class="p-delta">&#8593; 12</span></div>
+              <p class="p-summary" style="margin-bottom:8px;">Alex is showing real improvement in ball control and first touch since the last evaluation.</p>
+              <p class="p-section-header">Priorities</p>
+              <div class="p-priority"><span class="p-priority-dot"></span><span class="p-priority-text"><b>Weak foot.</b> Still hesitant to use it under pressure.</span></div>
+              <div class="p-priority"><span class="p-priority-dot"></span><span class="p-priority-text"><b>Scanning.</b> Check surroundings before receiving.</span></div>
+              <p class="p-section-header">This Week's Homework</p>
+              <div class="p-card" style="margin-bottom:6px;">
+                <p class="p-event-title" style="font-size:9px;">Weak Foot Wall Passes</p>
+                <span class="p-watch">&#9654; Watch</span>
+              </div>
+              <div class="p-card">
+                <p class="p-event-title" style="font-size:9px;">Scanning Ladder Drill</p>
+                <span class="p-watch">&#9654; Watch</span>
+              </div>
+            </div>
+          </div>
+          <p class="screen-caption">Player Development</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI & PRIVACY -->
+  <div class="panel privacy-panel">
+    <div class="panel-inner">
+      <p class="panel-tag">AI, Handled Responsibly</p>
+      <span class="privacy-badge">A player's real name never reaches the AI</span>
+      <h2>AI helps write the plan. It never learns who your players are.</h2>
+      <p>ClubHQ uses AI in three places: turning a coach's evaluation into a draft development plan, powering a director's data assistant, and transcribing a coach's spoken voice notes into structured player updates. In every one of those, the actual child's name is stripped out before anything is sent, and only put back afterward, on ClubHQ's own server, never inside the request to the AI itself.</p>
+
+      <div class="name-demo">
+        <div class="before">
+          <span class="name-label">What a coach sees</span>
+          <span class="name-value">Jordan Smith</span>
+        </div>
+        <span class="arrow">&rarr;</span>
+        <div class="after">
+          <span class="name-label">What the AI sees</span>
+          <span class="name-value">Player_7</span>
+        </div>
+      </div>
+
+      <ul class="privacy-list">
+        <li><span class="check">&#10003;</span><span><b>No full name, ever.</b> Not a first name, not a last name, not even an initial reaches the AI in any feature, including spoken voice notes.</span></li>
+        <li><span class="check">&#10003;</span><span><b>A coach reviews every plan first.</b> An AI-drafted development plan sits as a draft until a coach reads and publishes it. Nothing AI-generated reaches a parent unsupervised.</span></li>
+        <li><span class="check">&#10003;</span><span><b>Homework is never invented.</b> It's pulled from the club's own vetted drill library, or left blank rather than guessed.</span></li>
+        <li><span class="check">&#10003;</span><span><b>The anonymization happens automatically,</b> not as an opt-in setting a director has to remember to turn on.</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- CLOSING -->
+  <div class="closing">
+    <div class="closing-brand">
+      <div class="wordmark">
+        <span class="wordmark-text">Club<span class="hq">HQ</span></span>
+        <div class="wordmark-stripe" style="background:#0B0B0D;"></div>
+      </div>
+    </div>
+    <h2>This is the exact system running a real club today.</h2>
+    <p>See what it could run for yours.</p>
+    <span class="btn">Book a Walkthrough</span>
+  </div>
+
+  <footer>The club operating system, proven in production.</footer>
+
+</div>
