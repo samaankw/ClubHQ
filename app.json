@@ -1,0 +1,66 @@
+{
+  "expo": {
+    "name": "ClubHQ",
+    "slug": "clubhq",
+    "scheme": "clubhq",
+    "version": "0.2.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/images/clubhq-icon.png",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow ClubHQ to use the microphone for coach voice evaluations.",
+          "speechRecognitionPermission": "Allow ClubHQ to use speech recognition to transcribe coach evaluations.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ],
+      "expo-secure-store",
+      "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow ClubHQ to access your photos so coaches can upload drill videos.",
+          "cameraPermission": "Allow ClubHQ to use the camera so coaches can record drill videos directly in the app."
+        }
+      ],
+      "expo-video"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.skario.clubhq",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Allow ClubHQ to use speech recognition to transcribe coach evaluations.",
+        "NSMicrophoneUsageDescription": "Allow ClubHQ to use the microphone for coach voice evaluations and to record audio when filming drill videos.",
+        "NSCalendarsUsageDescription": "Allow ClubHQ to add events to your calendar.",
+        "NSCalendarsFullAccessUsageDescription": "Allow ClubHQ to add events to your calendar."
+      }
+    },
+    "android": {
+      "package": "com.skario.clubhq",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR"
+      ]
+    },
+    "extra": {
+      "supabaseUrl": "SUPABASE_URL_HERE",
+      "supabaseAnonKey": "SUPABASE_ANON_KEY_HERE",
+      "legalContactEmail": "hello@skariox.com",
+      "router": {},
+      "eas": {
+        "projectId": "d0c83dd9-5dee-477c-ad0e-66d40716f6fb"
+      }
+    },
+    "owner": "samaankw5"
+  }
+}

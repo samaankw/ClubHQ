@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 220" width="820" height="220">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Anton&amp;display=swap');
+      .word { font-family: 'Anton', sans-serif; font-style: italic; font-size: 108px; }
+    </style>
+  </defs>
+  <text x="60" y="130" class="word" fill="#F2F2F3">Club<tspan fill="#0A6CFF">HQ</tspan></text>
+  <rect x="60" y="160" width="700" height="18" rx="2" fill="#FFB020" transform="skewX(-16)"/>
+</svg>

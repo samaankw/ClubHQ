@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Anton&amp;display=swap');
+      .mark { font-family: 'Anton', sans-serif; }
+    </style>
+  </defs>
+  <rect width="1024" height="1024" fill="#0A6CFF"/>
+  <text x="512" y="716" class="mark" font-size="560" fill="#F2F2F3" text-anchor="middle">C</text>
+</svg>
