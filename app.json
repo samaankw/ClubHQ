@@ -28,7 +28,9 @@
           "cameraPermission": "Allow ClubHQ to use the camera so coaches can record drill videos directly in the app."
         }
       ],
-      "expo-video"
+      "expo-video",
+      "expo-font",
+      "expo-splash-screen"
     ],
     "ios": {
       "supportsTablet": true,
