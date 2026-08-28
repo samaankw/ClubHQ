@@ -87,6 +87,9 @@ export default function AnnouncementsList() {
         keyExtractor={(a) => a.id}
         onRefresh={refresh}
         refreshing={loading}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
         contentContainerStyle={{ padding: 16, paddingTop: 4 }}
         ListEmptyComponent={<Text style={styles.muted}>No announcements yet.</Text>}
         renderItem={({ item }) => {

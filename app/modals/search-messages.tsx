@@ -75,6 +75,9 @@ export default function SearchMessages() {
       <FlatList
         data={results}
         keyExtractor={(r) => r.message_id}
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={7}
         contentContainerStyle={{ padding: 16 }}
         ListEmptyComponent={
           searched && !searching ? (

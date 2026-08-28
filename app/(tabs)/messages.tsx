@@ -75,6 +75,9 @@ export default function Messages() {
         keyExtractor={(c) => c.id}
         onRefresh={load}
         refreshing={loading}
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={7}
         contentContainerStyle={{ padding: 16, paddingTop: 8 }}
         ListEmptyComponent={<Text style={styles.muted}>No conversations yet. Tap + to start one.</Text>}
         renderItem={({ item }) => (

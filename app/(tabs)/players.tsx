@@ -159,6 +159,9 @@ export default function Players() {
         keyExtractor={(player) => player.id}
         onRefresh={load}
         refreshing={loading}
+        initialNumToRender={12}
+        maxToRenderPerBatch={12}
+        windowSize={7}
         contentContainerStyle={{ padding: 16 }}
         ListHeaderComponent={
           isCoachOrDirector && teams.length > 0 ? (

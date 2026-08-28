@@ -80,6 +80,9 @@ function EventsSection() {
         keyExtractor={(item) => item.id}
         onRefresh={load}
         refreshing={loading}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
         contentContainerStyle={{ padding: 16 }}
         renderSectionHeader={({ section }) => <Text style={styles.sectionHeader}>{section.title}</Text>}
         ListEmptyComponent={<Text style={styles.muted}>No upcoming events.</Text>}

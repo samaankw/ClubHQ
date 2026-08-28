@@ -242,6 +242,9 @@ export default function ManageDrills() {
       <FlatList
         data={drills}
         keyExtractor={(d) => d.id}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
         contentContainerStyle={{ paddingTop: 8 }}
         renderItem={({ item }) => (
           <View style={styles.drillCard}>

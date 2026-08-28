@@ -80,6 +80,9 @@ export default function Copilot() {
           ref={listRef}
           data={messages}
           keyExtractor={(m) => m.id}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={7}
           contentContainerStyle={{ padding: 16 }}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
           renderItem={({ item }) => (

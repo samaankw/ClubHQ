@@ -86,6 +86,9 @@ export default function NewConversation() {
         <FlatList
           data={teams}
           keyExtractor={(t) => t.id}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={7}
           ListEmptyComponent={<Text style={styles.muted}>No teams found for your club yet.</Text>}
           renderItem={({ item }) => (
             <Pressable style={styles.row} onPress={() => startTeamChat(item)}>
@@ -97,6 +100,9 @@ export default function NewConversation() {
         <FlatList
           data={people}
           keyExtractor={(p) => p.id}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={7}
           ListEmptyComponent={<Text style={styles.muted}>No one else in your club yet.</Text>}
           renderItem={({ item }) => (
             <Pressable style={styles.row} onPress={() => startDirect(item)}>
