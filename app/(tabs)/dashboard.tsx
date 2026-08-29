@@ -18,7 +18,6 @@ import {
   IconChip,
   StatTile,
   ListRow,
-  SectionHeader,
   ProgressBar,
   Divider,
 } from "@/components/ui";
@@ -164,7 +163,7 @@ export default function Dashboard() {
         {profile?.role === "parent" && <PlayerDevelopmentCard />}
 
         <Card style={{ gap: space[2] }}>
-          <SectionHeader title="Announcements" />
+          <Eyebrow>Announcements</Eyebrow>
           {annLoading ? (
             <Text tone="secondary">Loading…</Text>
           ) : announcements.length === 0 ? (
