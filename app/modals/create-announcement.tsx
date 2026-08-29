@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, Switch, ScrollView } from "react-native";
+import { View, Pressable, StyleSheet, ScrollView } from "react-native";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
@@ -9,6 +10,9 @@ import { notify } from "@/lib/alertCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { goBackOr } from "@/lib/navigation";
 import ModalBackButton from "@/components/ModalBackButton";
+import { Screen, Card, Text, Eyebrow, Field, Button, Chip, IconChip, Toggle } from "@/components/ui";
+import type { ChipTone } from "@/components/ui";
+import { color, space, radius, borderWidth } from "@/theme";
 
 interface PlayerOption {
   id: string;
@@ -23,6 +27,39 @@ const AUDIENCE_LABELS: Record<AnnouncementTargetType, string> = {
   players: "Selected Players",
   parents: "Selected Parents",
 };
+
+// Maps each category's urgency tier to an IconChip tint, so the grid reads
+// at a glance without depending on the selection outline alone.
+const TIER_TONE: Record<"changed" | "opportunity" | "info", ChipTone> = {
+  changed: "warning",
+  opportunity: "success",
+  info: "brand",
+};
+
+function CategoryCard({
+  meta,
+  selected,
+  onPress,
+}: {
+  meta: (typeof ANNOUNCEMENT_CATEGORIES)[AnnouncementCategory];
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={meta.label}
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={[styles.typeCard, selected && styles.typeCardSelected]}
+    >
+      <IconChip name={meta.icon} tone={TIER_TONE[meta.tier]} />
+      <Text role="label" tone={selected ? "brand" : "primary"} style={styles.typeCardLabel}>
+        {meta.label}
+      </Text>
+    </Pressable>
+  );
+}
 
 export default function CreateAnnouncement() {
   const { profile } = useAuth();
@@ -165,114 +202,126 @@ export default function CreateAnnouncement() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <Screen>
       <Stack.Screen
         options={{
           title: isEditing ? "Edit Announcement" : "New Announcement",
           headerLeft: () => <ModalBackButton onPress={() => goBackOr("/(tabs)/schedule?section=announcements")} />,
         }}
       />
-      <Text style={styles.label}>CATEGORY</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }} contentContainerStyle={styles.chipRow}>
-        {CATEGORY_KEYS.map((key) => (
-          <Pressable
-            key={key}
-            style={[styles.chip, category === key && { backgroundColor: ANNOUNCEMENT_CATEGORIES[key].color }]}
-            onPress={() => setCategory(key)}
-          >
-            <Text style={[styles.chipText, category === key && styles.chipTextActive]}>{ANNOUNCEMENT_CATEGORIES[key].label}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
 
-      <Text style={styles.label}>AUDIENCE</Text>
-      {isEditing ? (
-        <View style={styles.audienceLockedRow}>
-          <Text style={styles.audienceLockedText}>
-            {AUDIENCE_LABELS[targetType]}{targetType === "team" && teams.find((t) => t.id === teamId) ? ` · ${teamLabel(teams.find((t) => t.id === teamId)!)}` : ""}
-          </Text>
-          <Text style={styles.mutedNote}>Who this was sent to can't be changed after posting — post a new announcement to reach a different audience.</Text>
+      <View style={styles.section}>
+        <Eyebrow>What kind of announcement?</Eyebrow>
+        <View style={styles.typeGrid}>
+          {CATEGORY_KEYS.map((key) => (
+            <CategoryCard
+              key={key}
+              meta={ANNOUNCEMENT_CATEGORIES[key]}
+              selected={category === key}
+              onPress={() => setCategory(key)}
+            />
+          ))}
         </View>
-      ) : (
-        <>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }} contentContainerStyle={styles.chipRow}>
-            {profile?.role === "director" && (
-              <Pressable style={[styles.chip, targetType === "everyone" && styles.chipActive]} onPress={() => setTargetType("everyone")}>
-                <Text style={[styles.chipText, targetType === "everyone" && styles.chipTextActive]}>Everyone</Text>
-              </Pressable>
-            )}
-            <Pressable style={[styles.chip, targetType === "team" && styles.chipActive]} onPress={() => setTargetType("team")}>
-              <Text style={[styles.chipText, targetType === "team" && styles.chipTextActive]}>Training Group</Text>
-            </Pressable>
-            <Pressable style={[styles.chip, targetType === "players" && styles.chipActive]} onPress={() => setTargetType("players")}>
-              <Text style={[styles.chipText, targetType === "players" && styles.chipTextActive]}>Selected Players</Text>
-            </Pressable>
-            <Pressable style={[styles.chip, targetType === "parents" && styles.chipActive]} onPress={() => setTargetType("parents")}>
-              <Text style={[styles.chipText, targetType === "parents" && styles.chipTextActive]}>Selected Parents</Text>
-            </Pressable>
-          </ScrollView>
+      </View>
 
-          {targetType === "team" && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }} contentContainerStyle={styles.chipRow}>
-              {teams.map((team) => (
-                <Pressable key={team.id} style={[styles.chip, teamId === team.id && styles.chipActive]} onPress={() => setTeamId(team.id)}>
-                  <Text style={[styles.chipText, teamId === team.id && styles.chipTextActive]}>{teamLabel(team)}</Text>
-                </Pressable>
-              ))}
+      <View style={styles.section}>
+        <Eyebrow>Audience</Eyebrow>
+        {isEditing ? (
+          <Card style={styles.audienceLockedCard}>
+            <Text role="h3">
+              {AUDIENCE_LABELS[targetType]}
+              {targetType === "team" && teams.find((t) => t.id === teamId) ? ` · ${teamLabel(teams.find((t) => t.id === teamId)!)}` : ""}
+            </Text>
+            <Text tone="secondary">
+              Who this was sent to can't be changed after posting — post a new announcement to reach a different audience.
+            </Text>
+          </Card>
+        ) : (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              {profile?.role === "director" && (
+                <Chip label="Everyone" selected={targetType === "everyone"} onPress={() => setTargetType("everyone")} />
+              )}
+              <Chip label="Training Group" selected={targetType === "team"} onPress={() => setTargetType("team")} />
+              <Chip label="Selected Players" selected={targetType === "players"} onPress={() => setTargetType("players")} />
+              <Chip label="Selected Parents" selected={targetType === "parents"} onPress={() => setTargetType("parents")} />
             </ScrollView>
-          )}
 
-          {(targetType === "players" || targetType === "parents") && (
-            <View style={{ marginBottom: 14 }}>
+            {targetType === "team" && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-                {players.map((p) => (
-                  <Pressable key={p.id} style={[styles.chip, selectedPlayerIds.includes(p.id) && styles.chipActive]} onPress={() => togglePlayer(p.id)}>
-                    <Text style={[styles.chipText, selectedPlayerIds.includes(p.id) && styles.chipTextActive]}>{p.full_name}</Text>
-                  </Pressable>
+                {teams.map((team) => (
+                  <Chip key={team.id} label={teamLabel(team)} selected={teamId === team.id} onPress={() => setTeamId(team.id)} />
                 ))}
               </ScrollView>
-              {!players.length && <Text style={styles.mutedNote}>No players found yet.</Text>}
-            </View>
-          )}
-        </>
-      )}
+            )}
 
-      <TextInput style={styles.input} placeholder="Title" placeholderTextColor="#8A8D93" value={title} onChangeText={setTitle} />
-      <TextInput
-        style={[styles.input, styles.textarea]}
-        placeholder="Keep it short — 1 to 3 sentences is plenty…"
-        placeholderTextColor="#8A8D93"
-        value={body}
-        onChangeText={setBody}
-        multiline
-        numberOfLines={6}
-      />
-      <View style={styles.pinRow}>
-        <Text style={styles.pinLabel}>Pin to top</Text>
-        <Switch value={pinned} onValueChange={setPinned} trackColor={{ true: "#0A6CFF" }} />
+            {(targetType === "players" || targetType === "parents") && (
+              <View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                  {players.map((p) => (
+                    <Chip key={p.id} label={p.full_name} selected={selectedPlayerIds.includes(p.id)} onPress={() => togglePlayer(p.id)} />
+                  ))}
+                </ScrollView>
+                {!players.length && <Text tone="secondary">No players found yet.</Text>}
+              </View>
+            )}
+          </>
+        )}
       </View>
-      <Pressable style={styles.button} onPress={handleSubmit} disabled={submitting}>
-        <Text style={styles.buttonText}>{submitting ? (isEditing ? "Saving…" : "Posting…") : isEditing ? "Save Changes" : "Post Announcement"}</Text>
-      </Pressable>
-    </ScrollView>
+
+      <View style={styles.section}>
+        <Field placeholder="Title" value={title} onChangeText={setTitle} />
+
+        <View>
+          <View style={styles.fieldLabelRow}>
+            <Eyebrow>Message</Eyebrow>
+            <View style={styles.aiPolish}>
+              <Ionicons name="sparkles" size={12} color={color.icon.brand} />
+              <Text role="caption" tone="brand">AI Polish</Text>
+            </View>
+          </View>
+          <Field
+            placeholder="Keep it short — 1 to 3 sentences is plenty…"
+            value={body}
+            onChangeText={setBody}
+            multiline
+            numberOfLines={6}
+          />
+        </View>
+
+        <Toggle label="Pin to top" value={pinned} onValueChange={setPinned} />
+      </View>
+
+      <Button
+        label={submitting ? (isEditing ? "Saving…" : "Posting…") : isEditing ? "Save Changes" : "Post Announcement"}
+        onPress={handleSubmit}
+        disabled={submitting}
+        size="lg"
+        fullWidth
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, backgroundColor: "#0B0B0D", flexGrow: 1 },
-  label: { fontSize: 11, fontWeight: "800", color: "#8A8D93", letterSpacing: 0.5, marginBottom: 8 },
-  chipRow: { flexDirection: "row", alignItems: "flex-start" },
-  chip: { marginRight: 8, paddingVertical: 8, paddingHorizontal: 13, borderRadius: 18, backgroundColor: "#1A1B1E" },
-  chipActive: { backgroundColor: "#0A6CFF" },
-  chipText: { color: "#C7C9CE", fontWeight: "600" },
-  chipTextActive: { color: "#fff" },
-  mutedNote: { color: "#8A8D93", fontSize: 13, marginTop: 6 },
-  audienceLockedRow: { backgroundColor: "#141416", borderRadius: 10, padding: 14, marginBottom: 14 },
-  audienceLockedText: { color: "#F2F2F3", fontWeight: "700", fontSize: 14 },
-  input: { borderWidth: 1, borderColor: "#242529", borderRadius: 10, padding: 14, marginBottom: 14, fontSize: 16, color: "#fff", backgroundColor: "#141416" },
-  textarea: { height: 140, textAlignVertical: "top" },
-  pinRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
-  pinLabel: { fontSize: 15, fontWeight: "600", color: "#fff" },
-  button: { backgroundColor: "#0A6CFF", borderRadius: 10, padding: 16, alignItems: "center" },
-  buttonText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  section: { gap: space[3] },
+  typeGrid: { flexDirection: "row", flexWrap: "wrap", gap: space[2] },
+  typeCard: {
+    flexBasis: "47%",
+    flexGrow: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space[2],
+    padding: space[3],
+    borderRadius: radius.card,
+    borderWidth: borderWidth.thin,
+    borderColor: color.border.subtle,
+    backgroundColor: color.bg.surface,
+  },
+  typeCardSelected: { borderColor: color.border.brand },
+  typeCardLabel: { flexShrink: 1 },
+  chipRow: { flexDirection: "row", gap: space[2] },
+  audienceLockedCard: { gap: space[2] },
+  fieldLabelRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: space[2] },
+  aiPolish: { flexDirection: "row", alignItems: "center", gap: space[1] },
 });
