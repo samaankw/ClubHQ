@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { View, Pressable } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { format } from "date-fns";
+import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { AttendanceRecord, AttendanceStatus, ClubEvent, EventRSVP, PaymentStatus, Player, PlayerPayment, RSVPStatus } from "@/types/db";
@@ -9,6 +10,8 @@ import { confirmAsync, notify } from "@/lib/alertCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { goBackOr } from "@/lib/navigation";
 import { addEventToDeviceCalendar } from "@/lib/calendarExport";
+import { Screen, Card, SpotlightCard, Text, Eyebrow, Button, Badge, Chip, Avatar, EmptyState } from "@/components/ui";
+import { color, space } from "@/theme";
 
 function audienceLabel(event: ClubEvent): string {
   const targets = event.event_players ?? [];
@@ -198,134 +201,132 @@ export default function EventDetail() {
     maybe: rsvps.filter((r) => r.status === "maybe").length,
   }), [rsvps]);
 
-  if (loading || !event) return <View style={styles.center}><Text style={{ color: "#9A9DA3" }}>Loading…</Text></View>;
+  if (loading || !event) {
+    return (
+      <Screen>
+        <Text tone="secondary">Loading…</Text>
+      </Screen>
+    );
+  }
+
+  const paymentMonth = format(new Date(event.starts_at), "MMMM");
+  const noResponse = Math.max(0, players.length - counts.yes - counts.no - counts.maybe);
+  const sectionTitle = event.event_players?.length
+    ? event.team_id
+      ? "Attending Today"
+      : event.event_players.length > 1 ? "Players" : "Player"
+    : isStaff ? "Roster" : "Your Players";
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <Screen>
       <Stack.Screen options={{ title: event.title }} />
-      <View style={styles.hero}>
-        <View style={styles.typeRow}>
-          <Text style={styles.type}>{event.type.replace("_", " ").toUpperCase()}</Text>
-          <View style={styles.audienceTag}><Text style={styles.audienceTagText}>{audienceLabel(event)}</Text></View>
-        </View>
-        <Text style={styles.title}>{event.title}</Text>
-        <Text style={styles.meta}>{format(new Date(event.starts_at), "EEEE, MMMM d · h:mm a")}</Text>
-        {event.location ? <Text style={styles.meta}>{event.location}</Text> : null}
-        {event.notes ? <Text style={styles.notes}>{event.notes}</Text> : null}
 
-        <Pressable style={styles.calendarButton} onPress={handleAddToCalendar} disabled={addingToCalendar}>
-          <Text style={styles.calendarButtonText}>{addingToCalendar ? "Adding…" : "📅 Add to Calendar"}</Text>
-        </Pressable>
+      <SpotlightCard style={{ gap: space[3] }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], flexWrap: "wrap" }}>
+          <Eyebrow tone="onSpotlightMuted">{event.type.replace("_", " ")}</Eyebrow>
+          <Badge label={audienceLabel(event)} tone="neutral" />
+        </View>
+        <Text role="h1" tone="onSpotlight">{event.title}</Text>
+        <Text tone="onSpotlightMuted">{format(new Date(event.starts_at), "EEEE, MMMM d · h:mm a")}</Text>
+        {event.location ? <Text tone="onSpotlightMuted">{event.location}</Text> : null}
+        {event.notes ? <Text tone="onSpotlight">{event.notes}</Text> : null}
+
+        <Button
+          label={addingToCalendar ? "Adding…" : "Add to Calendar"}
+          variant="secondary"
+          size="sm"
+          left={<Ionicons name="calendar" size={16} color={color.icon.default} />}
+          onPress={handleAddToCalendar}
+          disabled={addingToCalendar}
+        />
 
         {canEdit && (
-          <View style={styles.heroActions}>
-            <Pressable style={styles.heroButton} onPress={() => router.push(`/modals/create-event?eventId=${event.id}`)}>
-              <Text style={styles.heroButtonText}>Edit</Text>
-            </Pressable>
-            <Pressable style={styles.heroButton} onPress={deleteEvent}>
-              <Text style={[styles.heroButtonText, styles.heroButtonTextDanger]}>Delete</Text>
-            </Pressable>
+          <View style={{ flexDirection: "row", gap: space[2] }}>
+            <View style={{ flex: 1 }}>
+              <Button label="Edit" variant="secondary" fullWidth onPress={() => router.push(`/modals/create-event?eventId=${event.id}`)} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button label="Delete" variant="danger" fullWidth onPress={deleteEvent} />
+            </View>
           </View>
         )}
-        {canEdit && hasFutureInSeries && (
-          <Pressable onPress={cancelRemainingSeries} style={styles.cancelSeriesLink}>
-            <Text style={styles.cancelSeriesLinkText}>Cancel this and all future sessions in this series</Text>
-          </Pressable>
-        )}
-      </View>
+      </SpotlightCard>
 
-      {isStaff && (
-        <View style={styles.summaryCard}>
-          <Text style={styles.sectionLabel}>AVAILABILITY</Text>
-          <Text style={styles.summaryText}>✅ {counts.yes} yes   ❌ {counts.no} no   🤔 {counts.maybe} maybe   · {Math.max(0, players.length - counts.yes - counts.no - counts.maybe)} no response</Text>
-        </View>
+      {canEdit && hasFutureInSeries && (
+        <Pressable accessibilityRole="button" accessibilityLabel="Cancel this and all future sessions in this series" onPress={cancelRemainingSeries}>
+          <Text role="bodySm" tone="danger" style={{ textAlign: "center", textDecorationLine: "underline" }}>
+            Cancel this and all future sessions in this series
+          </Text>
+        </Pressable>
       )}
 
-      <Text style={styles.sectionTitle}>
-        {event.event_players?.length
-          ? event.team_id
-            ? "Attending Today"
-            : event.event_players.length > 1 ? "Players" : "Player"
-          : isStaff ? "Roster" : "Your Players"}
-      </Text>
-      {players.length === 0 ? <Text style={styles.muted}>No eligible players for this event.</Text> : players.map((player) => {
-        const rsvp = rsvps.find((r) => r.player_id === player.id)?.status ?? "no_response";
-        const att = attendance.find((r) => r.player_id === player.id)?.status;
-        const isPaid = (payments.find((p) => p.player_id === player.id)?.status ?? "unpaid") === "paid";
-        return (
-          <View key={player.id} style={styles.card}>
-            <Text style={styles.playerName}>{player.full_name}</Text>
-            <Text style={styles.smallLabel}>RSVP</Text>
-            <View style={styles.optionRow}>
-              {RSVP_OPTIONS.map((option) => (
-                <Pressable key={option.value} onPress={() => setRsvp(player.id, option.value)} style={[styles.chip, rsvp === option.value && styles.chipActive]}>
-                  <Text style={[styles.chipText, rsvp === option.value && styles.chipTextActive]}>{option.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-            {isStaff && (
-              <>
-                <Text style={styles.smallLabel}>ATTENDANCE</Text>
-                <View style={styles.optionRow}>
-                  {ATTENDANCE_OPTIONS.map((option) => (
-                    <Pressable key={option.value} onPress={() => setAttendanceStatus(player.id, option.value)} style={[styles.chip, att === option.value && styles.chipActive]}>
-                      <Text style={[styles.chipText, att === option.value && styles.chipTextActive]}>{option.label}</Text>
-                    </Pressable>
+      {isStaff && (
+        <Card style={{ gap: space[3] }}>
+          <Eyebrow>Availability</Eyebrow>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
+            <Badge label={`${counts.yes} yes`} tone="success" />
+            <Badge label={`${counts.no} no`} tone="danger" />
+            <Badge label={`${counts.maybe} maybe`} tone="warning" />
+            <Badge label={`${noResponse} no response`} tone="neutral" />
+          </View>
+        </Card>
+      )}
+
+      <Eyebrow>{sectionTitle}</Eyebrow>
+
+      {players.length === 0 ? (
+        <EmptyState title="No eligible players for this event." />
+      ) : (
+        players.map((player) => {
+          const rsvp = rsvps.find((r) => r.player_id === player.id)?.status ?? "no_response";
+          const att = attendance.find((r) => r.player_id === player.id)?.status;
+          const isPaid = (payments.find((p) => p.player_id === player.id)?.status ?? "unpaid") === "paid";
+          return (
+            <Card key={player.id} style={{ gap: space[3] }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space[3] }}>
+                <Avatar name={player.full_name} uri={player.photo_url} />
+                <Text role="h3">{player.full_name}</Text>
+              </View>
+
+              <View style={{ gap: space[2] }}>
+                <Eyebrow>RSVP</Eyebrow>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
+                  {RSVP_OPTIONS.map((option) => (
+                    <Chip key={option.value} label={option.label} selected={rsvp === option.value} onPress={() => setRsvp(player.id, option.value)} />
                   ))}
                 </View>
-              </>
-            )}
-            <Text style={styles.smallLabel}>PAYMENT ({format(new Date(event.starts_at), "MMMM")})</Text>
-            {isStaff ? (
-              <Pressable style={[styles.paymentPill, isPaid && styles.paymentPillPaid]} onPress={() => togglePayment(player.id)}>
-                <Text style={[styles.paymentPillText, isPaid && styles.paymentPillTextPaid]}>{isPaid ? "Paid" : "Unpaid"}</Text>
-              </Pressable>
-            ) : (
-              <View style={[styles.paymentPill, isPaid && styles.paymentPillPaid]}>
-                <Text style={[styles.paymentPillText, isPaid && styles.paymentPillTextPaid]}>{isPaid ? "Paid" : "Unpaid"}</Text>
               </View>
-            )}
-          </View>
-        );
-      })}
-    </ScrollView>
+
+              {isStaff && (
+                <View style={{ gap: space[2] }}>
+                  <Eyebrow>Attendance</Eyebrow>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
+                    {ATTENDANCE_OPTIONS.map((option) => (
+                      <Chip key={option.value} label={option.label} selected={att === option.value} onPress={() => setAttendanceStatus(player.id, option.value)} />
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              <View style={{ gap: space[2] }}>
+                <Eyebrow>{`Payment (${paymentMonth})`}</Eyebrow>
+                {isStaff ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={isPaid ? "Mark unpaid" : "Mark paid"}
+                    onPress={() => togglePayment(player.id)}
+                    style={{ alignSelf: "flex-start" }}
+                  >
+                    <Badge label={isPaid ? "Paid" : "Unpaid"} tone={isPaid ? "success" : "danger"} />
+                  </Pressable>
+                ) : (
+                  <Badge label={isPaid ? "Paid" : "Unpaid"} tone={isPaid ? "success" : "danger"} />
+                )}
+              </View>
+            </Card>
+          );
+        })
+      )}
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 40, backgroundColor: "#0B0B0D" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#0B0B0D" },
-  hero: { backgroundColor: "#0A6CFF", padding: 20, borderRadius: 14, marginBottom: 14 },
-  typeRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  type: { color: "#CFE0F0", fontSize: 11, fontWeight: "800", letterSpacing: 0.8 },
-  audienceTag: { backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  audienceTagText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  title: { color: "#fff", fontSize: 23, fontWeight: "800", marginTop: 4 },
-  meta: { color: "#DCE8F2", marginTop: 6 },
-  notes: { color: "#fff", marginTop: 12, lineHeight: 20 },
-  calendarButton: { marginTop: 14, alignSelf: "flex-start", backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 10, paddingVertical: 9, paddingHorizontal: 14 },
-  calendarButtonText: { color: "#fff", fontWeight: "700", fontSize: 13 },
-  heroActions: { flexDirection: "row", gap: 10, marginTop: 16 },
-  heroButton: { flex: 1, backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 10, paddingVertical: 10, alignItems: "center" },
-  heroButtonText: { color: "#fff", fontWeight: "700", fontSize: 14 },
-  heroButtonTextDanger: { color: "#FFD4D0" },
-  cancelSeriesLink: { marginTop: 12, alignItems: "center" },
-  cancelSeriesLinkText: { color: "#FFD4D0", fontSize: 12, fontWeight: "600", textDecorationLine: "underline" },
-  summaryCard: { backgroundColor: "#141416", padding: 14, borderRadius: 12, marginBottom: 14 },
-  sectionLabel: { fontSize: 11, fontWeight: "800", color: "#9A9DA3", letterSpacing: 0.5 },
-  summaryText: { marginTop: 6, color: "#B5B8BE", fontWeight: "600" },
-  sectionTitle: { fontSize: 17, fontWeight: "800", marginVertical: 10, color: "#F2F2F3" },
-  card: { backgroundColor: "#141416", padding: 14, borderRadius: 12, marginBottom: 10 },
-  playerName: { fontSize: 16, fontWeight: "800", color: "#F2F2F3" },
-  smallLabel: { fontSize: 10, fontWeight: "800", color: "#6B6F76", marginTop: 12, marginBottom: 6 },
-  optionRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
-  chip: { borderWidth: 1, borderColor: "#3A3B3E", paddingVertical: 6, paddingHorizontal: 10, borderRadius: 16 },
-  chipActive: { backgroundColor: "#0A6CFF", borderColor: "#0A6CFF" },
-  chipText: { color: "#9A9DA3", fontSize: 12, fontWeight: "700" },
-  chipTextActive: { color: "#fff" },
-  muted: { color: "#6B6F76", textAlign: "center", marginTop: 20 },
-  paymentPill: { alignSelf: "flex-start", backgroundColor: "#3A1616", borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10 },
-  paymentPillPaid: { backgroundColor: "#173A22" },
-  paymentPillText: { color: "#FF8A80", fontSize: 12, fontWeight: "700" },
-  paymentPillTextPaid: { color: "#6FDB8F" },
-});
