@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Stack, router, useSegments } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import * as Notifications from "expo-notifications";
 import { AuthProvider, useAuth } from "@/lib/AuthProvider";
 import { color } from "@/theme";
@@ -74,6 +75,10 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      {/* The design is deliberately light-only (no dark mode), so the status
+          bar must not follow the device's dark-mode setting — otherwise a
+          device in dark mode renders white glyphs on this near-white page. */}
+      <StatusBar style="dark" />
       <AuthProvider>
         <RootNavigator />
       </AuthProvider>
