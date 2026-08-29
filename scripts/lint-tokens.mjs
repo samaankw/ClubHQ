@@ -41,7 +41,10 @@ export const CONVERTED = [
 ];
 
 const RULES = [
-  { rule: "raw-color", re: /#[0-9a-fA-F]{3,8}\b/ },
+  // Hex, rgb()/rgba(), and hsl()/hsla() are all raw color literals — hex was
+  // the only shape originally caught here, which is exactly the hole the
+  // rgba() scrim color went through undetected.
+  { rule: "raw-color", re: /#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(/ },
   { rule: "raw-font-size", re: /fontSize:\s*\d/ },
   { rule: "raw-border-radius", re: /borderRadius:\s*\d/ },
   { rule: "raw-border-width", re: /borderWidth:\s*\d/ },

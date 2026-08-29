@@ -50,6 +50,16 @@ describe("findViolations", () => {
   it("allows a borderWidth token reference", () => {
     expect(findViolations("const s = { borderWidth: borderWidth.thin };", "app/x.tsx")).toHaveLength(0);
   });
+
+  it("flags a raw rgba() color", () => {
+    const v = findViolations('const s = { backgroundColor: "rgba(15, 23, 42, 0.6)" };', "app/x.tsx");
+    expect(v.map((x) => x.rule)).toEqual(["raw-color"]);
+  });
+
+  it("flags a raw hsl() color", () => {
+    const v = findViolations('const s = { backgroundColor: "hsl(210, 100%, 50%)" };', "app/x.tsx");
+    expect(v.map((x) => x.rule)).toEqual(["raw-color"]);
+  });
 });
 
 describe("lintScoped", () => {

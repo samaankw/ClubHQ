@@ -13,6 +13,10 @@ describe("semantic color", () => {
     expect(color.bg.spotlight).toBe(palette.slate[900]);
     expect(color.text.onSpotlight).toBe(palette.white);
   });
+  it("derives the scrim from slate 900 at 60% opacity", () => {
+    // palette.slate[900] is "#0F172A" -> rgb(15, 23, 42).
+    expect(color.bg.scrim).toBe("rgba(15, 23, 42, 0.6)");
+  });
 });
 
 describe("space", () => {

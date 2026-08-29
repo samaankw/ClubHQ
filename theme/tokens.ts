@@ -11,6 +11,15 @@ const brand = palette.brand;                // try: palette.purple
 const activeRadius = radiusScales.rounded;  // try: radiusScales.sharp
 // ═══════════════════════════════════════════════════════════════
 
+/** "#RRGGBB" + alpha (0–1) → "rgba(r, g, b, a)", so translucent surfaces
+ * still derive from the palette instead of being bare rgba() literals. */
+function withAlpha(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export const color = {
   bg: {
     page: palette.slate[50],
@@ -22,6 +31,8 @@ export const color = {
     successSubtle: palette.green[50],
     warningSubtle: palette.orange[50],
     dangerSubtle: palette.red[50],
+    /** Modal/sheet backdrop — slate[900] at 60%. */
+    scrim: withAlpha(palette.slate[900], 0.6),
   },
   text: {
     primary: palette.slate[900],
