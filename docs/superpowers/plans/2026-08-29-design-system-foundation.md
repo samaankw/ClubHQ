@@ -21,6 +21,8 @@
 - No custom fonts. Type tokens set `fontSize`, `lineHeight`, `fontWeight` only — never `fontFamily`.
 - Only `theme/` is exempt from the token linter. `components/ui/` is held to the same rule.
 - Every task ends with a commit.
+- **Preserve FlatList/SectionList performance props.** Commit `191aa8a` on `main` ("Tune FlatList/SectionList rendering across the app") deliberately set `initialNumToRender`, `maxToRenderPerBatch`, `windowSize`, `removeClippedSubviews`, and `keyExtractor` across 8 screens: `(tabs)/players.tsx`, `(tabs)/schedule.tsx`, `(tabs)/messages.tsx`, `(tabs)/copilot.tsx`, `manage-drills.tsx`, `conversation/[id].tsx`, `modals/new-conversation.tsx`, `modals/search-messages.tsx`. A visual reskin can silently drop these and regress scroll performance with no test or lint catching it. Any task touching those files must keep every such prop byte-identical, and verify with:
+  `git diff -- <file> | grep "^-" | grep -E "initialNumToRender|maxToRenderPerBatch|windowSize|removeClippedSubviews|keyExtractor"` — expected empty.
 - **RNTL 14.0.1 is async.** `render()` returns `Promise<...>` and `fireEvent.press()` must be awaited — verified against the installed `dist/render.d.ts`. The test code shown in Tasks 5–12 below was written against the older synchronous v13 API and **will fail verbatim**. Adapt every test body: make it `async`, and `await` both `render(...)` and `fireEvent...(...)`. Change nothing else — assertions, expected values, and component code stay exactly as written.
 
 ---
