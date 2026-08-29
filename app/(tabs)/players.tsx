@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
 
   listContent: {
     padding: space[4],
-    gap: space[3],
+    gap: space[4],
   },
 
   filterCard: {
