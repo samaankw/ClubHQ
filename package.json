@@ -12,6 +12,7 @@
     "prebuild:clean": "expo prebuild --clean",
     "verify": "npm run verify:static && npm run typecheck && npx expo-doctor@latest",
     "verify:static": "node scripts/project-check.mjs",
+    "lint:tokens": "node scripts/lint-tokens.mjs",
     "test": "jest",
     "test:watch": "jest --watch"
   },
