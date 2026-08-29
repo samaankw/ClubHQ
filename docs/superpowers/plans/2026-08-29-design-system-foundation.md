@@ -2558,6 +2558,92 @@ All three now use one token-driven treatment."
 
 ---
 
+### Task 18: Convert the Profile tab (mockup 06)
+
+**Files:** Modify `app/(tabs)/profile.tsx` (315 lines)
+
+This one has a mockup. Follow **mockup 06**, which maps almost directly onto
+the component library:
+
+| mockup element | component |
+|---|---|
+| avatar + camera badge, name, role | `Avatar` + `Text role="h1"` + `Eyebrow tone="brand"` |
+| "MEET THE COACH BIO" card with EDIT | `Card` + `Eyebrow` + `Text role="label" tone="brand"` action |
+| club access code block (dark, big code) | `SpotlightCard` + `Eyebrow tone="onSpotlightMuted"` + share `Button` |
+| "ADMINISTRATION" list | `Eyebrow` + `ListRow` with `IconChip` per row |
+| "SETTINGS & SAFETY" toggles | `Eyebrow` + `Toggle` rows |
+| Sign Out | `Button variant="danger"` |
+| DELETE MY ACCOUNT | `Text role="caption" tone="tertiary"` pressable |
+
+**Data layer — preserve exactly:**
+- `useAuth` (`profile`, `refreshProfile`)
+- the avatar flow: `supabase.storage.from("club-media").upload` / `getPublicUrl`,
+  then `supabase.from("profiles").update({ avatar_url })`
+- the coach-bio save: `supabase.from("profiles").update({ [key]: value })`
+- the club lookup: `supabase.from("clubs").select("name, join_code")`
+- `supabase.auth.refreshSession()` in its existing effect
+- **`supabase.functions.invoke("delete-account")` and `supabase.auth.signOut()`** —
+  account deletion is irreversible; its confirm-then-invoke sequence and
+  `confirmAsync` guard must not change
+- all five `router.push` targets: `/club-management`, `/claim-player`,
+  `/manage-drills`, `/(tabs)/copilot`, `/pilot-metrics`
+- `shareText` for the club code, and the notification-preference writes
+
+- [ ] **Step 1: Convert the screen** per the mapping above.
+- [ ] **Step 2: Verify**
+
+```bash
+node scripts/lint-tokens.mjs 2>&1 | grep "profile.tsx" || echo "profile clean"
+npx tsc --noEmit && npm test
+```
+
+- [ ] **Step 3: Data-layer guard**
+
+```bash
+git diff -- "app/(tabs)/profile.tsx" | grep "^-" \
+  | grep -E "supabase\.|router\.|refreshProfile|shareText|confirmAsync|invoke\(" || echo "no data-layer lines removed"
+```
+
+Expected: `no data-layer lines removed`.
+
+- [ ] **Step 4: Commit** — `git commit -m "Convert the Profile tab to the design system"`
+
+---
+
+### Task 19: Convert the Players tab
+
+**Files:** Modify `app/(tabs)/players.tsx` (628 lines — the largest screen in the app)
+
+**No mockup covers this screen.** Apply the established design language rather
+than reproducing a drawing: page ground, white `Card` surfaces, `Eyebrow`
+section labels, `ListRow` for roster entries, `Avatar` for players, `Badge` for
+team labels, `EmptyState` where the roster is empty. Use
+`app/(tabs)/dashboard.tsx` as the reference implementation.
+
+**Data layer — preserve exactly:**
+- `useAuth`, the `load` callback and its `useEffect`, and every Supabase query inside it
+- the player-removal flow including `removing` / `removeError` state
+- `teamLabel()` usage for team naming
+- both `router.push({...})` object-form navigations and the
+  `router.push('/player/${item.id}')` and `/claim-player` targets
+- the parent-vs-staff branching in the list
+
+Because this file is large, convert it section by section and re-run the guard
+after each; do not rewrite its structure.
+
+- [ ] **Step 1: Convert the screen.**
+- [ ] **Step 2: Verify** — same three commands as Task 18, with `players.tsx`.
+- [ ] **Step 3: Data-layer guard**
+
+```bash
+git diff -- "app/(tabs)/players.tsx" | grep "^-" \
+  | grep -E "supabase\.|router\.|teamLabel|useAuth|setRemov" || echo "no data-layer lines removed"
+```
+
+- [ ] **Step 4: Commit** — `git commit -m "Convert the Players tab to the design system"`
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Token layers (Tasks 3–4), radius scale exploration (Task 3), component library (Tasks 5–12), token lint (Task 2), tab bar reskin (Task 13), first screen (Task 14). **Deferred to later plans by design:** the remaining 13 screen conversions (Plan 2) and the Figma variables and components (Plan 3). The spec's success criteria 3 and 4 are met across Plans 2 and 3, not here.
