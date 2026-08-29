@@ -59,8 +59,6 @@
       ]
     },
     "extra": {
-      "supabaseUrl": "SUPABASE_URL_HERE",
-      "supabaseAnonKey": "SUPABASE_ANON_KEY_HERE",
       "legalContactEmail": "hello@skariox.com",
       "router": {},
       "eas": {
