@@ -31,3 +31,5 @@ export { Field } from "./Field";
 export type { FieldProps } from "./Field";
 export { Toggle } from "./Toggle";
 export type { ToggleProps } from "./Toggle";
+export { StepDots } from "./StepDots";
+export type { StepDotsProps } from "./StepDots";

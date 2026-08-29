@@ -121,4 +121,14 @@ export const elevation = {
     shadowOffset: { width: 0, height: 8 },
     elevation: 12,
   },
+  // Brand-tinted glow for emphasis surfaces (e.g. the primary CTA on
+  // onboarding screens). Resolves through the `brand` lever above, so
+  // swapping the brand ramp restyles the glow too.
+  brandGlow: {
+    shadowColor: brand[500],
+    shadowOpacity: 0.32,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
 } as const;

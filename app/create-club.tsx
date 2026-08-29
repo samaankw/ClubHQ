@@ -1,11 +1,11 @@
 import React, { useState } from "react";
-import { StyleSheet } from "react-native";
+import { View, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { notify } from "@/lib/alertCompat";
-import { Screen, Card, Text, Field, Button, SegmentedControl } from "@/components/ui";
-import { space } from "@/theme";
+import { Screen, Card, Text, Field, Button, SegmentedControl, StepDots } from "@/components/ui";
+import { space, radius, elevation } from "@/theme";
 
 export default function CreateOrJoinClub() {
   const { profile, refreshProfile } = useAuth();
@@ -75,12 +75,14 @@ export default function CreateOrJoinClub() {
               Creating a club makes you its director.
             </Text>
             <Field placeholder="Club name" value={clubName} onChangeText={setClubName} />
-            <Button
-              label={working ? "Creating…" : "Create Club"}
-              onPress={createClub}
-              disabled={working}
-              fullWidth
-            />
+            <View style={styles.glow}>
+              <Button
+                label={working ? "Creating…" : "Create Club"}
+                onPress={createClub}
+                disabled={working}
+                fullWidth
+              />
+            </View>
           </>
         ) : (
           <>
@@ -94,16 +96,22 @@ export default function CreateOrJoinClub() {
               </Text>
             )}
             <Field placeholder="Invite code" value={joinCode} onChangeText={setJoinCode} autoCapitalize="none" />
-            <Button label={working ? "Joining…" : "Join Club"} onPress={joinClub} disabled={working} fullWidth />
+            <View style={styles.glow}>
+              <Button label={working ? "Joining…" : "Join Club"} onPress={joinClub} disabled={working} fullWidth />
+            </View>
           </>
         )}
       </Card>
+
+      <StepDots count={2} active={0} style={styles.stepDots} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   center: { textAlign: "center" },
-  subtitle: { marginTop: space[2] },
-  card: { gap: space[3] },
+  subtitle: { marginTop: space[2], maxWidth: 280, alignSelf: "center" },
+  card: { gap: space[2], maxWidth: 340, width: "100%", alignSelf: "center" },
+  glow: { borderRadius: radius.button, ...elevation.brandGlow },
+  stepDots: { marginTop: space[6] },
 });
