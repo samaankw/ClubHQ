@@ -2401,6 +2401,93 @@ extends the linter to catch raw borderWidth so this class cannot recur."
 
 ---
 
+### Task 16: Convert the first-run path (login, signup, create-club)
+
+Added mid-execution at the user's direction, after they signed up and landed on
+an unconverted dark `create-club` screen. None of these three are among the 14
+mockups, so the original plan would have left the entire first-run experience —
+the first thing any new user or demo audience sees — in the old design forever.
+
+These three screens are also inconsistent **with each other** today:
+`login.tsx` is a white screen using `#0F4C81` navy as its brand; `create-club.tsx`
+is a dark screen using `#0A6CFF`. Converting them to the token system fixes that
+as a side effect.
+
+**Files:**
+- Modify: `app/(auth)/login.tsx` (54 lines)
+- Modify: `app/(auth)/signup.tsx` (103 lines)
+- Modify: `app/create-club.tsx` (112 lines)
+
+**Interfaces:**
+- Consumes: `@/theme` and `@/components/ui`. Produces nothing others import.
+
+**Data layer — preserve every one of these exactly:**
+
+| screen | must survive untouched |
+|---|---|
+| login | `supabase.auth.signInWithPassword`, the `notify` error paths, `router.replace("/(tabs)/dashboard")`, both `Link`s (reset-password, signup) |
+| signup | `supabase.auth.signUp` with `options.data` (`full_name`, `role`, `terms_accepted: true`, `terms_version: "v2"`), the `agreedToTerms` gate, the `!data.session` "check your email" branch, the coach/parent role choice |
+| create-club | `supabase.rpc("create_club")`, `supabase.rpc("join_club")`, `refreshProfile()`, the parent→`/claim-player` vs staff→dashboard routing, the create/join mode state |
+
+- [ ] **Step 1: Convert `login.tsx`**
+
+Use `Screen` (with `scroll={false}`, centered), `Text` roles for the title and
+subtitle, `Field` for both inputs, `Button` for submit, and `Text tone="brand"`
+inside the two `Link`s. Delete the entire `StyleSheet.create` block's colour,
+size, and radius values; keep only layout (centering, gaps).
+
+- [ ] **Step 2: Convert `signup.tsx`**
+
+Same treatment. The role picker (coach / parent) becomes a `SegmentedControl`.
+The terms checkbox row keeps its behaviour exactly — only its presentation
+changes; it still gates submission.
+
+- [ ] **Step 3: Convert `create-club.tsx`**
+
+The create/join toggle becomes a `SegmentedControl` driving the same `mode`
+state. Wrap the form in a `Card` on the standard page ground. `Field` for both
+inputs, `Button` for both actions. Keep the parent-specific explanatory note.
+
+- [ ] **Step 4: Verify**
+
+```bash
+node scripts/lint-tokens.mjs 2>&1 | grep -E "login|signup|create-club" || echo "all three clean"
+npx tsc --noEmit
+npm test
+```
+
+Expected: all three clean, no new type errors, 69/69 tests still passing.
+
+- [ ] **Step 5: Confirm the data layer is intact**
+
+```bash
+git diff HEAD~1 -- app/\(auth\)/login.tsx app/\(auth\)/signup.tsx app/create-club.tsx \
+  | grep -E "^-" | grep -E "supabase\.|router\.|refreshProfile|terms_accepted|signUp|signInWithPassword|rpc\("
+```
+
+Expected: **no output**. Any removed line matching that pattern means a data-layer
+call was dropped — put it back.
+
+- [ ] **Step 6: Render check**
+
+Start the web server and confirm the login screen renders on the new tokens
+(light page ground, brand-blue button) rather than the old navy.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add "app/(auth)/login.tsx" "app/(auth)/signup.tsx" app/create-club.tsx
+git commit -m "Convert the first-run path to the design system
+
+login, signup, and create-club are not among the 14 mockups, so the
+original scope would have left the first screens any new user sees in the
+old design. They were also inconsistent with each other — login was a
+white screen on #0F4C81 navy, create-club a dark screen on #0A6CFF.
+Presentation only; every auth call, RPC, and route is unchanged."
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Token layers (Tasks 3–4), radius scale exploration (Task 3), component library (Tasks 5–12), token lint (Task 2), tab bar reskin (Task 13), first screen (Task 14). **Deferred to later plans by design:** the remaining 13 screen conversions (Plan 2) and the Figma variables and components (Plan 3). The spec's success criteria 3 and 4 are met across Plans 2 and 3, not here.
