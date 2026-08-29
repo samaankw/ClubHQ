@@ -1,4 +1,4 @@
-import { findViolations, lintScoped, CONVERTED } from "../scripts/lint-tokens.mjs";
+import { findViolations, lintScoped, evaluate, PENDING } from "../scripts/lint-tokens.mjs";
 
 describe("findViolations", () => {
   it("flags a raw hex color", () => {
@@ -87,11 +87,46 @@ describe("lintScoped", () => {
     expect(violations.map((v: { file: string }) => v.file)).toEqual(["app/a.tsx", "app/b.tsx"]);
   });
 
-  it("CONVERTED lists at least the screens named in the design-system plan", () => {
-    expect(CONVERTED).toEqual(expect.arrayContaining([
+  it("PENDING does not list the screens already converted by the design-system plan", () => {
+    expect(PENDING).toEqual(expect.not.arrayContaining([
       "app/(tabs)/dashboard.tsx",
       "app/(tabs)/profile.tsx",
       "app/(tabs)/players.tsx",
     ]));
+  });
+});
+
+describe("evaluate (the ratchet)", () => {
+  it("flags a converted file that was never added to the list", () => {
+    // schedule.tsx is clean and not pending — fine.
+    // players.tsx has violations and is not pending — that is the hole.
+    const r = evaluate({ files: { "app/players.tsx": 3 }, pending: [] });
+    expect(r.unexpected).toEqual(["app/players.tsx"]);
+  });
+
+  it("flags a pending file that is now clean, so the list can only shrink", () => {
+    const r = evaluate({ files: { "app/schedule.tsx": 0 }, pending: ["app/schedule.tsx"] });
+    expect(r.converted).toEqual(["app/schedule.tsx"]);
+  });
+
+  it("allows a pending file that still has violations", () => {
+    const r = evaluate({ files: { "app/schedule.tsx": 12 }, pending: ["app/schedule.tsx"] });
+    expect(r.unexpected).toEqual([]);
+    expect(r.converted).toEqual([]);
+  });
+
+  it("passes when every non-pending file is clean", () => {
+    const r = evaluate({
+      files: { "app/a.tsx": 0, "app/b.tsx": 5 },
+      pending: ["app/b.tsx"],
+    });
+    expect(r.unexpected).toEqual([]);
+    expect(r.converted).toEqual([]);
+    expect(r.missing).toEqual([]);
+  });
+
+  it("reports a pending entry that no longer exists on disk", () => {
+    const r = evaluate({ files: { "app/a.tsx": 0 }, pending: ["app/deleted.tsx"] });
+    expect(r.missing).toEqual(["app/deleted.tsx"]);
   });
 });
