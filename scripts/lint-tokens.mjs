@@ -16,13 +16,8 @@ import path from "node:path";
 // running the scan (see `scan()` below) and reading off the leftover dirty
 // files.
 export const PENDING = [
-  "app/(auth)/reset-password.tsx",
-  "app/(auth)/update-password.tsx",
   "app/(tabs)/copilot.tsx",
-  "app/(tabs)/messages.tsx",
-  "app/claim-player.tsx",
   "app/club-management.tsx",
-  "app/conversation/[id].tsx",
   "app/event/[id].tsx",
   "app/manage-drills.tsx",
   "app/modals/create-announcement.tsx",
