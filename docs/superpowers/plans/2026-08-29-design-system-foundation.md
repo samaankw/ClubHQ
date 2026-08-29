@@ -2269,6 +2269,138 @@ untouched — presentation only."
 
 ---
 
+### Task 15: Close the token surface — border width and state opacity
+
+Added mid-execution. The Task 5–7 review found `borderWidth: 1` and
+`opacity: 0.6` written as raw numbers in `Button.tsx`, because the theme
+exports no token for either. `Chip.tsx` repeats `borderWidth: 1`, and the
+remaining component code adds five more occurrences. The linter does not catch
+them (it only checks hex, `fontSize`, `borderRadius`), so the constraint "no
+raw design values in `components/ui/`" is currently unenforced for these two
+properties. Run this AFTER Task 12, before the screen tasks.
+
+**Files:**
+- Modify: `theme/tokens.ts`
+- Modify: `components/ui/Button.tsx`, `components/ui/Chip.tsx`, and any other
+  `components/ui/*.tsx` containing a raw `borderWidth:` or `opacity:`
+- Modify: `scripts/lint-tokens.mjs`, `__tests__/lint-tokens.test.ts`
+- Modify: `__tests__/theme/tokens.test.ts`
+
+**Interfaces:**
+- Produces, from `@/theme`: `borderWidth.{hairline,thin}` and
+  `opacity.{pressed,disabled}`.
+
+- [ ] **Step 1: Write the failing token tests**
+
+Append to `__tests__/theme/tokens.test.ts`:
+
+```ts
+describe("borderWidth", () => {
+  it("exposes hairline and thin", () => {
+    expect(borderWidth.hairline).toBeGreaterThan(0);
+    expect(borderWidth.thin).toBe(1);
+  });
+});
+
+describe("opacity", () => {
+  it("exposes pressed and disabled states between 0 and 1", () => {
+    for (const v of [opacity.pressed, opacity.disabled]) {
+      expect(v).toBeGreaterThan(0);
+      expect(v).toBeLessThan(1);
+    }
+  });
+});
+```
+
+Add `borderWidth, opacity` to that file's existing import from `../../theme`.
+
+- [ ] **Step 2: Run and watch it fail**
+
+Run: `npm test -- tokens`
+Expected: FAIL — `borderWidth` / `opacity` are not exported.
+
+- [ ] **Step 3: Add the tokens**
+
+In `theme/tokens.ts`, after the `radius` block:
+
+```ts
+import { StyleSheet } from "react-native";
+
+export const borderWidth = {
+  hairline: StyleSheet.hairlineWidth,
+  thin: 1,
+} as const;
+
+export const opacity = {
+  pressed: 0.6,
+  disabled: 0.4,
+} as const;
+```
+
+Export both from `theme/index.ts`.
+
+- [ ] **Step 4: Run and watch it pass**
+
+Run: `npm test -- tokens`
+Expected: PASS.
+
+- [ ] **Step 5: Sweep components/ui**
+
+Replace every raw `borderWidth: 1` with `borderWidth: borderWidth.thin` and
+every raw `opacity: 0.6` with `opacity: opacity.pressed`, importing the tokens
+from `@/theme`. Find them with:
+
+```bash
+grep -rn "borderWidth: [0-9]\|opacity: [0-9]" components/ui/
+```
+
+Run `npm test` — every component test must still pass unchanged. These are
+identical values, so no assertion should need editing. If a test fails, you
+changed a value; put it back.
+
+- [ ] **Step 6: Teach the linter to catch this class**
+
+Add one rule to `RULES` in `scripts/lint-tokens.mjs`:
+
+```js
+{ rule: "raw-border-width", re: /borderWidth:\s*\d/ },
+```
+
+Do NOT add a rule for `opacity` — animated and computed opacity values are
+legitimate and a rule would produce false positives.
+
+Add a test to `__tests__/lint-tokens.test.ts`:
+
+```ts
+it("flags a raw borderWidth", () => {
+  const v = findViolations("const s = { borderWidth: 1 };", "app/x.tsx");
+  expect(v.map((x) => x.rule)).toEqual(["raw-border-width"]);
+});
+
+it("allows a borderWidth token reference", () => {
+  expect(findViolations("const s = { borderWidth: borderWidth.thin };", "app/x.tsx")).toHaveLength(0);
+});
+```
+
+- [ ] **Step 7: Verify nothing in components/ui trips the linter**
+
+Run: `node scripts/lint-tokens.mjs 2>&1 | grep -c "components/ui" || true`
+Expected: `0`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add theme/ components/ui/ scripts/lint-tokens.mjs __tests__/
+git commit -m "Add borderWidth and opacity tokens, enforce borderWidth
+
+The Task 5-7 review found raw borderWidth and opacity values in
+components/ui with no token to use instead — a gap in the theme surface,
+not an implementer shortcut. Adds the tokens, sweeps the components, and
+extends the linter to catch raw borderWidth so this class cannot recur."
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Token layers (Tasks 3–4), radius scale exploration (Task 3), component library (Tasks 5–12), token lint (Task 2), tab bar reskin (Task 13), first screen (Task 14). **Deferred to later plans by design:** the remaining 13 screen conversions (Plan 2) and the Figma variables and components (Plan 3). The spec's success criteria 3 and 4 are met across Plans 2 and 3, not here.
