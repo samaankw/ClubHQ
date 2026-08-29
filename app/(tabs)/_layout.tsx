@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { StyleSheet } from "react-native";
 import { Tabs, Redirect } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/AuthProvider";
 import { registerPushToken } from "@/lib/notifications";
 import { useUnreadAnnouncementsCount } from "@/lib/hooks";
@@ -10,6 +11,7 @@ import { color, space, type } from "@/theme";
 export default function TabsLayout() {
   const { profile } = useAuth();
   const unreadAnnouncements = useUnreadAnnouncementsCount();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (profile?.id) void registerPushToken(profile.id);
@@ -29,9 +31,13 @@ export default function TabsLayout() {
           backgroundColor: color.bg.surface,
           borderTopColor: color.border.subtle,
           borderTopWidth: StyleSheet.hairlineWidth,
-          height: space[9] + space[4],
+          // Base height for icon + label + vertical padding, plus the
+          // device's own bottom safe-area inset (home-indicator strip) so
+          // labels never sit inside that strip. A fixed height here would
+          // override react-navigation's own inset-aware sizing.
+          height: space[9] + space[4] + insets.bottom,
           paddingTop: space[2],
-          paddingBottom: space[3],
+          paddingBottom: space[3] + insets.bottom,
         },
         tabBarLabelStyle: {
           fontSize: type.caption.fontSize,
