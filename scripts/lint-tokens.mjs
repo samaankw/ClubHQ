@@ -13,7 +13,7 @@ const RULES = [
 export function findViolations(source, file) {
   const out = [];
   source.split("\n").forEach((raw, i) => {
-    const line = raw.replace(/\/\/.*$/, "");
+    const line = raw.replace(/(?<!:)\/\/.*$/, "");
     for (const { rule, re } of RULES) {
       if (re.test(line)) out.push({ file, line: i + 1, rule, text: raw.trim() });
     }

@@ -32,4 +32,13 @@ describe("findViolations", () => {
     const v = findViolations('// was #0066FF before tokens', "app/x.tsx");
     expect(v).toHaveLength(0);
   });
+
+  it("does not let a URL's // swallow a real violation on the same line", () => {
+    const v = findViolations(
+      'const s = { uri: "https://cdn.example.com/a.png", borderRadius: 8 };',
+      "app/x.tsx"
+    );
+    expect(v).toHaveLength(1);
+    expect(v[0].rule).toBe("raw-border-radius");
+  });
 });
