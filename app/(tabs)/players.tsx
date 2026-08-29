@@ -1,18 +1,13 @@
 import React, { useCallback, useEffect, useState } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  Pressable,
-  ScrollView,
-  Modal,
-} from "react-native";
+import { View, FlatList, Pressable, ScrollView, Modal, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { Player, Team } from "@/types/db";
 import { teamLabel } from "@/lib/teamLabel";
+import { Screen, Text, Eyebrow, Card, Button, Chip, Avatar, EmptyState } from "@/components/ui";
+import { color, space, layout } from "@/theme";
 
 export default function Players() {
   const { profile } = useAuth();
@@ -153,8 +148,9 @@ export default function Players() {
     : players;
 
   return (
-    <View style={styles.container}>
+    <Screen scroll={false}>
       <FlatList
+        style={styles.list}
         data={visiblePlayers}
         keyExtractor={(player) => player.id}
         onRefresh={load}
@@ -162,62 +158,37 @@ export default function Players() {
         initialNumToRender={12}
         maxToRenderPerBatch={12}
         windowSize={7}
-        contentContainerStyle={{ padding: 16 }}
+        contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           isCoachOrDirector && teams.length > 0 ? (
-            <View style={styles.teamSection}>
-              <Text style={styles.teamLabel}>TEAM FILTER</Text>
+            <Card style={styles.filterCard}>
+              <Eyebrow>Team Filter</Eyebrow>
 
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.teamRow}
               >
-                <Pressable
-                  style={[
-                    styles.teamChip,
-                    selectedTeamId === null &&
-                      styles.teamChipActive,
-                  ]}
+                <Chip
+                  label="All Players"
+                  selected={selectedTeamId === null}
                   onPress={() => setSelectedTeamId(null)}
-                >
-                  <Text
-                    style={[
-                      styles.teamChipText,
-                      selectedTeamId === null &&
-                        styles.teamChipTextActive,
-                    ]}
-                  >
-                    All Players
-                  </Text>
-                </Pressable>
+                />
 
                 {teams.map((team) => (
-                  <Pressable
+                  <Chip
                     key={team.id}
-                    style={[
-                      styles.teamChip,
-                      selectedTeamId === team.id &&
-                        styles.teamChipActive,
-                    ]}
+                    label={teamLabel(team)}
+                    selected={selectedTeamId === team.id}
                     onPress={() => setSelectedTeamId(team.id)}
-                  >
-                    <Text
-                      style={[
-                        styles.teamChipText,
-                        selectedTeamId === team.id &&
-                          styles.teamChipTextActive,
-                      ]}
-                    >
-                      {teamLabel(team)}
-                    </Text>
-                  </Pressable>
+                  />
                 ))}
               </ScrollView>
 
               {selectedTeamId ? (
-                <Pressable
-                  style={styles.voiceButton}
+                <Button
+                  label="🎙️ Voice Evaluation for Selected Team"
+                  variant="secondary"
                   onPress={() =>
                     router.push({
                       pathname: "/modals/voice-evaluation",
@@ -226,90 +197,86 @@ export default function Players() {
                       },
                     })
                   }
-                >
-                  <Text style={styles.voiceButtonText}>
-                    🎙️ Voice Evaluation for Selected Team
-                  </Text>
-                </Pressable>
+                />
               ) : (
-                <Text style={styles.voiceHint}>
+                <Text role="bodySm" tone="tertiary">
                   Choose a team above to start a whole-team
                   voice evaluation.
                 </Text>
               )}
-            </View>
+            </Card>
           ) : null
         }
         ListEmptyComponent={
           profile?.role === "parent" ? (
             <View style={styles.linkPrompt}>
-              <Text style={styles.linkPromptTitle}>No child linked yet</Text>
-              <Text style={styles.linkPromptCopy}>
-                Joining the club doesn't automatically connect your child's record — your director gives you a separate one-time player code for that.
-              </Text>
-              <Pressable style={styles.linkPromptButton} onPress={() => router.push("/claim-player")}>
-                <Text style={styles.linkPromptButtonText}>Link a Player</Text>
-              </Pressable>
+              <EmptyState
+                icon="link"
+                title="No child linked yet"
+                body="Joining the club doesn't automatically connect your child's record — your director gives you a separate one-time player code for that."
+              />
+              <Button label="Link a Player" onPress={() => router.push("/claim-player")} />
             </View>
           ) : (
-            <Text style={styles.muted}>No players yet.</Text>
+            <EmptyState title="No players yet." />
           )
         }
         renderItem={({ item }) => (
-          <Pressable
-            style={styles.card}
-            onPress={() =>
-              router.push(`/player/${item.id}` as never)
-            }
-          >
-            <View style={styles.playerInfo}>
-              <Text style={styles.name}>
-                {item.full_name}
-              </Text>
+          <Card style={styles.playerCard}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={item.full_name}
+              style={styles.playerMain}
+              onPress={() =>
+                router.push(`/player/${item.id}` as never)
+              }
+            >
+              <Avatar name={item.full_name} uri={item.photo_url} />
 
-              {item.position ? (
-                <Text style={styles.meta}>
-                  {item.position}
+              <View style={styles.playerInfo}>
+                <Text role="h3">
+                  {item.full_name}
                 </Text>
-              ) : null}
-            </View>
+
+                {item.position ? (
+                  <Text role="bodySm" tone="secondary">
+                    {item.position}
+                  </Text>
+                ) : null}
+              </View>
+
+              <Ionicons name="chevron-forward" size={18} color={color.icon.muted} />
+            </Pressable>
 
             {isCoachOrDirector && (
               <View style={styles.actions}>
-                <Pressable
-                  style={styles.evalButton}
-                  onPress={(event) => {
-                    event.stopPropagation();
-
+                <Button
+                  label="Evaluate"
+                  variant="secondary"
+                  size="sm"
+                  onPress={() =>
                     router.push({
                       pathname: "/modals/evaluate-player",
                       params: {
                         playerId: item.id,
                         playerName: item.full_name,
                       },
-                    });
-                  }}
-                >
-                  <Text style={styles.evalButtonText}>
-                    Evaluate
-                  </Text>
-                </Pressable>
+                    })
+                  }
+                />
 
-                <Pressable
-                  style={styles.removeButton}
-                  onPress={(event) => {
-                    event.stopPropagation();
+                <Button
+                  label="Remove"
+                  variant="danger"
+                  size="sm"
+                  onPress={() => {
                     setRemoveError("");
                     setPlayerToRemove(item);
                   }}
-                >
-                  <Text style={styles.removeButtonText}>
-                    Remove
-                  </Text>
-                </Pressable>
+                />
               </View>
             )}
-          </Pressable>
+          </Card>
         )}
       />
 
@@ -325,305 +292,113 @@ export default function Players() {
         }}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>
+          <Card style={styles.modalCard}>
+            <Text role="h1">
               Remove Player?
             </Text>
 
-            <Text style={styles.modalText}>
+            <Text tone="secondary">
               Are you sure you want to remove{" "}
-              <Text style={styles.modalPlayerName}>
+              <Text tone="primary">
                 {playerToRemove?.full_name}
               </Text>
               {" "}from the active roster?
             </Text>
 
-            <Text style={styles.modalHint}>
+            <Text role="bodySm" tone="tertiary">
               Their existing history will be preserved.
             </Text>
 
             {removeError ? (
-              <Text style={styles.errorText}>
+              <Text role="bodySm" tone="danger">
                 {removeError}
               </Text>
             ) : null}
 
             <View style={styles.modalActions}>
-              <Pressable
-                style={styles.cancelButton}
+              <Button
+                label="Cancel"
+                variant="secondary"
                 disabled={removing}
                 onPress={() => {
                   setPlayerToRemove(null);
                   setRemoveError("");
                 }}
-              >
-                <Text style={styles.cancelButtonText}>
-                  Cancel
-                </Text>
-              </Pressable>
+              />
 
-              <Pressable
-                style={[
-                  styles.confirmRemoveButton,
-                  removing && styles.disabledButton,
-                ]}
+              <Button
+                label={removing ? "Removing…" : "Remove Player"}
+                variant="danger"
                 disabled={removing}
                 onPress={removePlayer}
-              >
-                <Text style={styles.confirmRemoveText}>
-                  {removing ? "Removing..." : "Remove Player"}
-                </Text>
-              </Pressable>
+              />
             </View>
-          </View>
+          </Card>
         </View>
       </Modal>
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  list: {
     flex: 1,
-    backgroundColor: "#0B0B0D",
   },
 
-  card: {
-    backgroundColor: "#141416",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
+  listContent: {
+    padding: space[4],
+    gap: space[4],
+  },
+
+  filterCard: {
+    gap: space[3],
+  },
+
+  teamRow: {
+    gap: space[2],
+  },
+
+  linkPrompt: {
+    gap: space[4],
+  },
+
+  playerCard: {
+    gap: space[3],
+  },
+
+  playerMain: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: space[3],
   },
 
   playerInfo: {
     flex: 1,
-  },
-
-  name: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#F2F2F3",
-  },
-
-  meta: {
-    fontSize: 13,
-    color: "#9A9DA3",
-    marginTop: 2,
-  },
-
-  muted: {
-    color: "#6B6F76",
-    textAlign: "center",
-    marginTop: 40,
-  },
-
-  linkPrompt: {
-    marginTop: 40,
-    marginHorizontal: 8,
-    backgroundColor: "#141416",
-    borderRadius: 14,
-    padding: 20,
-    alignItems: "center",
-  },
-  linkPromptTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: "#F2F2F3",
-    marginBottom: 8,
-  },
-  linkPromptCopy: {
-    fontSize: 13,
-    color: "#9A9DA3",
-    textAlign: "center",
-    lineHeight: 19,
-    marginBottom: 16,
-  },
-  linkPromptButton: {
-    backgroundColor: "#0A6CFF",
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-  },
-  linkPromptButtonText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 14,
+    gap: space[1],
   },
 
   actions: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-
-  evalButton: {
-    backgroundColor: "#0A6CFF",
-    borderRadius: 8,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-  },
-
-  evalButtonText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 13,
-  },
-
-  removeButton: {
-    backgroundColor: "#3A1616",
-    borderRadius: 8,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-  },
-
-  removeButtonText: {
-    color: "#FF6B6B",
-    fontWeight: "700",
-    fontSize: 13,
-  },
-
-  teamSection: {
-    marginBottom: 14,
-  },
-
-  teamLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#9A9DA3",
-    marginBottom: 8,
-    letterSpacing: 0.5,
-  },
-
-  teamRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    paddingBottom: 12,
-  },
-
-  teamChip: {
-    borderWidth: 1,
-    borderColor: "#0A6CFF",
-    borderRadius: 18,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: "#141416",
-  },
-
-  teamChipActive: {
-    backgroundColor: "#0A6CFF",
-  },
-
-  teamChipText: {
-    color: "#0A6CFF",
-    fontWeight: "600",
-    fontSize: 13,
-  },
-
-  teamChipTextActive: {
-    color: "#fff",
-  },
-
-  voiceButton: {
-    backgroundColor: "#17181B",
-    borderRadius: 12,
-    padding: 14,
-    alignItems: "center",
-  },
-
-  voiceButtonText: {
-    color: "#0A6CFF",
-    fontWeight: "700",
-  },
-
-  voiceHint: {
-    color: "#6B6F76",
-    fontSize: 12,
-    paddingHorizontal: 2,
+    gap: space[2],
   },
 
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
+    backgroundColor: color.bg.scrim,
     alignItems: "center",
     justifyContent: "center",
-    padding: 20,
+    padding: space[5],
   },
 
   modalCard: {
     width: "100%",
-    maxWidth: 440,
-    backgroundColor: "#141416",
-    borderRadius: 18,
-    padding: 24,
-  },
-
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#F2F2F3",
-    marginBottom: 12,
-  },
-
-  modalText: {
-    fontSize: 16,
-    color: "#B5B8BE",
-    lineHeight: 23,
-  },
-
-  modalPlayerName: {
-    fontWeight: "800",
-    color: "#F2F2F3",
-  },
-
-  modalHint: {
-    fontSize: 13,
-    color: "#9A9DA3",
-    marginTop: 10,
-  },
-
-  errorText: {
-    color: "#FF6B6B",
-    marginTop: 14,
-    fontWeight: "600",
+    maxWidth: layout.maxContent,
+    gap: space[3],
   },
 
   modalActions: {
     flexDirection: "row",
     justifyContent: "flex-end",
-    gap: 10,
-    marginTop: 24,
-  },
-
-  cancelButton: {
-    borderWidth: 1,
-    borderColor: "#3A3B3E",
-    borderRadius: 10,
-    paddingVertical: 11,
-    paddingHorizontal: 18,
-  },
-
-  cancelButtonText: {
-    color: "#B5B8BE",
-    fontWeight: "700",
-  },
-
-  confirmRemoveButton: {
-    backgroundColor: "#FF453A",
-    borderRadius: 10,
-    paddingVertical: 11,
-    paddingHorizontal: 18,
-  },
-
-  confirmRemoveText: {
-    color: "#FFFFFF",
-    fontWeight: "800",
-  },
-
-  disabledButton: {
-    opacity: 0.6,
+    gap: space[2],
   },
 });

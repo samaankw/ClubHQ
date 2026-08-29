@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, SectionList, StyleSheet, Pressable } from "react-native";
+import { View, SectionList, Pressable, StyleSheet } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { format } from "date-fns";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { ClubEvent } from "@/types/db";
@@ -9,12 +10,18 @@ import AnnouncementsList from "@/components/AnnouncementsList";
 import SwipeableRow from "@/components/SwipeableRow";
 import { confirmAsync, notify } from "@/lib/alertCompat";
 import { teamLabel } from "@/lib/teamLabel";
+import { Screen, Text, Eyebrow, Card, Badge, IconChip, EmptyState, SegmentedControl } from "@/components/ui";
+import type { IconName } from "@/components/ui";
+import { color, space, radius, elevation } from "@/theme";
 
-const TYPE_EMOJI: Record<string, string> = {
-  practice: "🏃",
-  game: "⚽",
-  tournament: "🏆",
-  club_event: "🎉",
+// Mirrors the icon choice dashboard.tsx already uses for these same four
+// event types (StatTile's games/practices/tournaments/club-events), so an
+// event card's icon matches what a user has already seen elsewhere.
+const TYPE_ICON: Record<string, IconName> = {
+  practice: "fitness",
+  game: "football",
+  tournament: "trophy",
+  club_event: "megaphone",
 };
 
 function audienceLabel(event: ClubEvent): string {
@@ -74,7 +81,7 @@ function EventsSection() {
   );
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.eventsWrap}>
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.id}
@@ -83,25 +90,32 @@ function EventsSection() {
         initialNumToRender={10}
         maxToRenderPerBatch={10}
         windowSize={7}
-        contentContainerStyle={{ padding: 16 }}
-        renderSectionHeader={({ section }) => <Text style={styles.sectionHeader}>{section.title}</Text>}
-        ListEmptyComponent={<Text style={styles.muted}>No upcoming events.</Text>}
+        contentContainerStyle={styles.listContent}
+        renderSectionHeader={({ section }) => <Eyebrow style={styles.sectionHeader}>{section.title}</Eyebrow>}
+        ListEmptyComponent={<EmptyState icon="calendar-outline" title="No upcoming events" />}
         renderItem={({ item }) => {
+          const isPrivate = !!item.event_players?.length;
           const row = (
-            <Pressable style={styles.card} onPress={() => router.push(`/event/${item.id}`)}>
-              <Text style={styles.emoji}>{TYPE_EMOJI[item.type]}</Text>
-              <View style={{ flex: 1 }}>
-                <View style={styles.titleRow}>
-                  <Text style={styles.title}>{item.title}</Text>
-                  <View style={[styles.audienceTag, !!item.event_players?.length && styles.audienceTagPrivate]}>
-                    <Text style={[styles.audienceTagText, !!item.event_players?.length && styles.audienceTagTextPrivate]}>{audienceLabel(item)}</Text>
+            <Pressable
+              onPress={() => router.push(`/event/${item.id}`)}
+              accessibilityRole="button"
+              accessibilityLabel={item.title}
+            >
+              <Card style={styles.card}>
+                <IconChip name={TYPE_ICON[item.type] ?? "calendar"} />
+                <View style={styles.cardBody}>
+                  <View style={styles.titleRow}>
+                    <Text role="h3" style={styles.titleText}>
+                      {item.title}
+                    </Text>
+                    <Badge label={audienceLabel(item)} tone={isPrivate ? "success" : "brand"} />
                   </View>
+                  <Text role="bodySm" tone="secondary">
+                    {format(new Date(item.starts_at), "h:mm a")}
+                    {item.location ? ` · ${item.location}` : ""}
+                  </Text>
                 </View>
-                <Text style={styles.meta}>
-                  {format(new Date(item.starts_at), "h:mm a")}
-                  {item.location ? ` · ${item.location}` : ""}
-                </Text>
-              </View>
+              </Card>
             </Pressable>
           );
           return canDelete(item.created_by) ? (
@@ -112,8 +126,13 @@ function EventsSection() {
         }}
       />
       {canCreate && (
-        <Pressable style={styles.fab} onPress={() => router.push("/modals/create-event")}>
-          <Text style={styles.fabText}>+</Text>
+        <Pressable
+          style={styles.fab}
+          onPress={() => router.push("/modals/create-event")}
+          accessibilityRole="button"
+          accessibilityLabel="Create event"
+        >
+          <Ionicons name="add" size={28} color={color.icon.inverse} />
         </Pressable>
       )}
     </View>
@@ -132,56 +151,39 @@ export default function Schedule() {
   }, [sectionParam]);
 
   return (
-    <View style={styles.container}>
+    <Screen scroll={false}>
       <View style={styles.toggleRow}>
-        <Pressable style={[styles.toggleButton, section === "events" && styles.toggleButtonActive]} onPress={() => setSection("events")}>
-          <Text style={[styles.toggleText, section === "events" && styles.toggleTextActive]}>Events</Text>
-        </Pressable>
-        <Pressable style={[styles.toggleButton, section === "announcements" && styles.toggleButtonActive]} onPress={() => setSection("announcements")}>
-          <Text style={[styles.toggleText, section === "announcements" && styles.toggleTextActive]}>Announcements</Text>
-        </Pressable>
+        <SegmentedControl
+          options={["Events", "Announcements"]}
+          value={section === "events" ? "Events" : "Announcements"}
+          onChange={(v) => setSection(v === "Events" ? "events" : "announcements")}
+        />
       </View>
 
       {section === "events" ? <EventsSection /> : <AnnouncementsList />}
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0B0B0D" },
-  toggleRow: {
-    flexDirection: "row",
-    padding: 12,
-    gap: 8,
-    backgroundColor: "#0B0B0D",
-    borderBottomWidth: 1,
-    borderBottomColor: "#1C1D20",
-  },
-  toggleButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: "center",
-    backgroundColor: "#17181B",
-  },
-  toggleButtonActive: { backgroundColor: "#0A6CFF" },
-  toggleText: { fontWeight: "700", color: "#9A9DA3", fontSize: 14 },
-  toggleTextActive: { color: "#fff" },
-  sectionHeader: { fontSize: 13, fontWeight: "700", color: "#9A9DA3", marginTop: 16, marginBottom: 6, textTransform: "uppercase" },
-  card: { backgroundColor: "#141416", borderRadius: 12, padding: 14, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 12 },
-  emoji: { fontSize: 22 },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  title: { fontSize: 15, fontWeight: "700", color: "#F2F2F3" },
-  audienceTag: { backgroundColor: "#1C2733", borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
-  audienceTagPrivate: { backgroundColor: "#1F2A1C" },
-  audienceTagText: { fontSize: 11, fontWeight: "700", color: "#7FB3E8" },
-  audienceTagTextPrivate: { color: "#8FD19E" },
-  meta: { fontSize: 13, color: "#9A9DA3", marginTop: 2 },
-  muted: { color: "#6B6F76", textAlign: "center", marginTop: 40 },
+  toggleRow: { padding: space[3] },
+  eventsWrap: { flex: 1 },
+  listContent: { padding: space[4] },
+  sectionHeader: { marginTop: space[4], marginBottom: space[2] },
+  card: { flexDirection: "row", alignItems: "center", gap: space[3], marginBottom: space[2] },
+  cardBody: { flex: 1, gap: space[1] },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: space[2], flexWrap: "wrap" },
+  titleText: { flexShrink: 1 },
   fab: {
-    position: "absolute", right: 20, bottom: 24, width: 56, height: 56, borderRadius: 28,
-    backgroundColor: "#0A6CFF", alignItems: "center", justifyContent: "center",
-    shadowColor: "#000", shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
+    position: "absolute",
+    right: space[5],
+    bottom: space[6],
+    width: 56,
+    height: 56,
+    borderRadius: radius.full,
+    backgroundColor: color.bg.brand,
+    alignItems: "center",
+    justifyContent: "center",
+    ...elevation.raised,
   },
-  fabText: { color: "#fff", fontSize: 28, fontWeight: "700", marginTop: -2 },
 });

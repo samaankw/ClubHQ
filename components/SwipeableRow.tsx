@@ -1,8 +1,10 @@
 import React, { useRef } from "react";
-import { StyleSheet, Text } from "react-native";
+import { StyleSheet } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { RectButton } from "react-native-gesture-handler";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { Text } from "@/components/ui";
+import { color, space } from "@/theme";
 
 interface SwipeableRowProps {
   onDelete: () => void;
@@ -29,8 +31,10 @@ export default function SwipeableRow({ onDelete, children }: SwipeableRowProps) 
             onDelete();
           }}
         >
-          <Ionicons name="trash-outline" size={20} color="#fff" />
-          <Text style={styles.deleteText}>Delete</Text>
+          <Ionicons name="trash-outline" size={20} color={color.icon.inverse} />
+          <Text role="label" tone="inverse" style={styles.deleteText}>
+            Delete
+          </Text>
         </RectButton>
       )}
     >
@@ -42,10 +46,10 @@ export default function SwipeableRow({ onDelete, children }: SwipeableRowProps) 
 const styles = StyleSheet.create({
   deleteAction: {
     width: 84,
-    backgroundColor: "#FF453A",
+    backgroundColor: color.bg.danger,
     alignItems: "center",
     justifyContent: "center",
-    gap: 2,
+    gap: space[1],
   },
-  deleteText: { color: "#fff", fontWeight: "700", fontSize: 12 },
+  deleteText: { fontWeight: "700" },
 });
