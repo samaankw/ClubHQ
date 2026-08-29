@@ -1,9 +1,11 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView } from "react-native";
+import { View, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { notify } from "@/lib/alertCompat";
+import { Screen, Card, Text, Field, Button, SegmentedControl, StepDots } from "@/components/ui";
+import { space, radius, elevation, layout } from "@/theme";
 
 export default function CreateOrJoinClub() {
   const { profile, refreshProfile } = useAuth();
@@ -52,61 +54,74 @@ export default function CreateOrJoinClub() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>One more step</Text>
-      <Text style={styles.subtitle}>Every account belongs to a club. Create a new one, or join with an invite code from your director.</Text>
+    <Screen scroll={false} style={styles.page}>
+      <View style={styles.content}>
+        <Text role="display" tone="brand" style={styles.center}>
+          One more step
+        </Text>
+        <Text tone="secondary" style={[styles.center, styles.subtitle]}>
+          Every account belongs to a club. Create a new one, or join with an invite code from your director.
+        </Text>
 
-      <View style={styles.toggleRow}>
-        <Pressable style={[styles.toggle, mode === "create" && styles.toggleActive]} onPress={() => setMode("create")}>
-          <Text style={[styles.toggleText, mode === "create" && styles.toggleTextActive]}>Create a Club</Text>
-        </Pressable>
-        <Pressable style={[styles.toggle, mode === "join" && styles.toggleActive]} onPress={() => setMode("join")}>
-          <Text style={[styles.toggleText, mode === "join" && styles.toggleTextActive]}>Join with Code</Text>
-        </Pressable>
-      </View>
-
-      {mode === "create" ? (
-        <>
-          <Text style={styles.note}>Creating a club makes you its director.</Text>
-          <TextInput style={styles.input} placeholder="Club name" placeholderTextColor="#6B6F76" value={clubName} onChangeText={setClubName} />
-          <Pressable style={styles.button} onPress={createClub} disabled={working}>
-            <Text style={styles.buttonText}>{working ? "Creating…" : "Create Club"}</Text>
-          </Pressable>
-        </>
-      ) : (
-        <>
-          <Text style={styles.note}>Your director can find their club's invite code in Profile.</Text>
-          {profile?.role === "parent" && (
-            <Text style={styles.note}>Right after this, you'll link your child with a separate one-time code from your director — that's a deliberate second step, not a mistake.</Text>
-          )}
-          <TextInput
-            style={styles.input}
-            placeholder="Invite code"
-            placeholderTextColor="#6B6F76"
-            value={joinCode}
-            onChangeText={setJoinCode}
-            autoCapitalize="none"
+        <Card style={styles.card}>
+          <SegmentedControl
+            options={["Create a Club", "Join with Code"]}
+            value={mode === "create" ? "Create a Club" : "Join with Code"}
+            onChange={(v) => setMode(v === "Create a Club" ? "create" : "join")}
           />
-          <Pressable style={styles.button} onPress={joinClub} disabled={working}>
-            <Text style={styles.buttonText}>{working ? "Joining…" : "Join Club"}</Text>
-          </Pressable>
-        </>
-      )}
-    </ScrollView>
+
+          {mode === "create" ? (
+            <>
+              <Text role="bodySm" tone="secondary" style={styles.center}>
+                Creating a club makes you its director.
+              </Text>
+              <Field placeholder="Club name" value={clubName} onChangeText={setClubName} />
+              <View style={styles.glow}>
+                <Button
+                  label={working ? "Creating…" : "Create Club"}
+                  size="lg"
+                  onPress={createClub}
+                  disabled={working}
+                  fullWidth
+                />
+              </View>
+            </>
+          ) : (
+            <>
+              <Text role="bodySm" tone="secondary" style={styles.center}>
+                Your director can find their club's invite code in Profile.
+              </Text>
+              {profile?.role === "parent" && (
+                <Text role="bodySm" tone="secondary" style={styles.center}>
+                  Right after this, you'll link your child with a separate one-time code from your director — that's a
+                  deliberate second step, not a mistake.
+                </Text>
+              )}
+              <Field placeholder="Invite code" value={joinCode} onChangeText={setJoinCode} autoCapitalize="none" />
+              <View style={styles.glow}>
+                <Button label={working ? "Joining…" : "Join Club"} onPress={joinClub} disabled={working} size="lg" fullWidth />
+              </View>
+            </>
+          )}
+        </Card>
+
+        <StepDots count={2} active={0} style={styles.stepDots} />
+      </View>
+    </Screen>
   );
 }
 
+// Proportions measured off mockup 00 (375x840): card 325 wide inset 25 each
+// side, 32 inner padding, button 261 — and 325 - 2*32 == 261 confirms the
+// reading. Expressed as scale steps (24 inset, 32 padding) rather than the
+// pixel widths that were here before: those were tuned to one screen width and
+// pinned the card to 340px, so it floated undersized on anything wider.
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, justifyContent: "center", padding: 24, backgroundColor: "#0B0B0D" },
-  title: { fontSize: 24, fontWeight: "800", textAlign: "center", color: "#0A6CFF" },
-  subtitle: { fontSize: 14, color: "#9A9DA3", textAlign: "center", marginTop: 8, marginBottom: 24, lineHeight: 20 },
-  toggleRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
-  toggle: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: "#0A6CFF", alignItems: "center" },
-  toggleActive: { backgroundColor: "#0A6CFF" },
-  toggleText: { color: "#0A6CFF", fontWeight: "700" },
-  toggleTextActive: { color: "#fff" },
-  note: { fontSize: 13, color: "#9A9DA3", marginBottom: 12, textAlign: "center" },
-  input: { borderWidth: 1, borderColor: "#242424", borderRadius: 10, padding: 14, marginBottom: 14, fontSize: 16, color: "#F2F2F3", backgroundColor: "#141416" },
-  button: { backgroundColor: "#0A6CFF", borderRadius: 10, padding: 16, alignItems: "center" },
-  buttonText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  page: { justifyContent: "center", paddingHorizontal: space[6] },
+  content: { width: "100%", maxWidth: layout.maxContent, alignSelf: "center" },
+  center: { textAlign: "center" },
+  subtitle: { marginTop: space[3] },
+  card: { marginTop: space[8], gap: space[5], padding: space[7] },
+  glow: { borderRadius: radius.button, ...elevation.brandGlow },
+  stepDots: { marginTop: space[6] },
 });
