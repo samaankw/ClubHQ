@@ -54,8 +54,8 @@ export default function CreateOrJoinClub() {
   };
 
   return (
-    <Screen>
-      <Text role="h1" tone="brand" style={styles.center}>
+    <Screen scroll={false} style={styles.page}>
+      <Text role="display" tone="brand" style={styles.center}>
         One more step
       </Text>
       <Text tone="secondary" style={[styles.center, styles.subtitle]}>
@@ -78,6 +78,7 @@ export default function CreateOrJoinClub() {
             <View style={styles.glow}>
               <Button
                 label={working ? "Creating…" : "Create Club"}
+                size="lg"
                 onPress={createClub}
                 disabled={working}
                 fullWidth
@@ -97,7 +98,7 @@ export default function CreateOrJoinClub() {
             )}
             <Field placeholder="Invite code" value={joinCode} onChangeText={setJoinCode} autoCapitalize="none" />
             <View style={styles.glow}>
-              <Button label={working ? "Joining…" : "Join Club"} onPress={joinClub} disabled={working} fullWidth />
+              <Button label={working ? "Joining…" : "Join Club"} onPress={joinClub} disabled={working} size="lg" fullWidth />
             </View>
           </>
         )}
@@ -108,10 +109,16 @@ export default function CreateOrJoinClub() {
   );
 }
 
+// Proportions measured off mockup 00 (375x840): card 325 wide inset 25 each
+// side, 32 inner padding, button 261 — and 325 - 2*32 == 261 confirms the
+// reading. Expressed as scale steps (24 inset, 32 padding) rather than the
+// pixel widths that were here before: those were tuned to one screen width and
+// pinned the card to 340px, so it floated undersized on anything wider.
 const styles = StyleSheet.create({
+  page: { justifyContent: "center", paddingHorizontal: space[6] },
   center: { textAlign: "center" },
-  subtitle: { marginTop: space[2], maxWidth: 280, alignSelf: "center" },
-  card: { gap: space[2], maxWidth: 340, width: "100%", alignSelf: "center" },
+  subtitle: { marginTop: space[3] },
+  card: { marginTop: space[8], gap: space[5], padding: space[7] },
   glow: { borderRadius: radius.button, ...elevation.brandGlow },
   stepDots: { marginTop: space[6] },
 });
