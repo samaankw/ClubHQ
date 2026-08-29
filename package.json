@@ -11,7 +11,9 @@
     "doctor": "expo-doctor",
     "prebuild:clean": "expo prebuild --clean",
     "verify": "npm run verify:static && npm run typecheck && npx expo-doctor@latest",
-    "verify:static": "node scripts/project-check.mjs"
+    "verify:static": "node scripts/project-check.mjs",
+    "test": "jest",
+    "test:watch": "jest --watch"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -43,8 +45,12 @@
   },
   "devDependencies": {
     "@babel/core": "^7.28.0",
+    "@testing-library/react-native": "^14.0.1",
     "@types/react": "~19.2.0",
     "babel-preset-expo": "^57.0.0",
+    "jest": "^29.7.0",
+    "jest-expo": "^57.0.5",
+    "react-test-renderer": "^19.2.3",
     "typescript": "~6.0.3"
   },
   "private": true,
