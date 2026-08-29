@@ -1,7 +1,7 @@
 import React from "react";
 import { render, fireEvent } from "@testing-library/react-native";
-import { Button } from "../../components/ui/Button";
-import { color, radius } from "../../theme";
+import { Button, stateStyle } from "../../components/ui/Button";
+import { color, radius, opacity } from "../../theme";
 
 const flat = (s: unknown) => Object.assign({}, ...[].concat(s as never));
 
@@ -40,5 +40,29 @@ describe("Button", () => {
   it("is accessible by its label", async () => {
     const { getByLabelText } = await render(<Button label="Publish to Parent" />);
     expect(getByLabelText("Publish to Parent")).toBeTruthy();
+  });
+
+  it("dims a disabled button with opacity.disabled, not opacity.pressed", async () => {
+    const { getByRole } = await render(<Button label="Go" disabled />);
+    expect(flat(getByRole("button").props.style).opacity).toBe(opacity.disabled);
+  });
+
+  // Pressable derives "pressed" from its internal touch-responder state,
+  // which isn't practical to simulate through fireEvent. stateStyle() is the
+  // exported precedence rule Button's style callback delegates to, so it's
+  // tested directly for each combination of pressed/disabled.
+  describe("stateStyle", () => {
+    it("is unstyled when neither pressed nor disabled", () => {
+      expect(stateStyle(false, false)).toBeUndefined();
+    });
+
+    it("dims with opacity.pressed when pressed and enabled", () => {
+      expect(stateStyle(true, false)).toEqual({ opacity: opacity.pressed });
+    });
+
+    it("dims with opacity.disabled when disabled, regardless of pressed", () => {
+      expect(stateStyle(false, true)).toEqual({ opacity: opacity.disabled });
+      expect(stateStyle(true, true)).toEqual({ opacity: opacity.disabled });
+    });
   });
 });

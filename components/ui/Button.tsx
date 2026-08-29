@@ -40,6 +40,19 @@ const PAD: Record<ButtonSize, { paddingVertical: number; paddingHorizontal: numb
   lg: { paddingVertical: space[4], paddingHorizontal: space[5] },
 };
 
+/**
+ * A disabled button must look disabled, not merely pressed — so disabled
+ * wins outright regardless of Pressable's own transient pressed state.
+ * Exported (rather than inlined in the style callback) so this precedence
+ * is directly unit-testable without simulating Pressable's internal touch
+ * responder system.
+ */
+export function stateStyle(pressed: boolean, disabled?: boolean): ViewStyle | undefined {
+  if (disabled) return styles.disabled;
+  if (pressed) return styles.pressed;
+  return undefined;
+}
+
 export function Button({
   label,
   onPress,
@@ -61,7 +74,7 @@ export function Button({
         PAD[size],
         SURFACE[variant],
         fullWidth && styles.fullWidth,
-        (pressed || disabled) && styles.dimmed,
+        stateStyle(pressed, disabled),
       ]}
     >
       {left}
@@ -81,5 +94,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.button,
   },
   fullWidth: { alignSelf: "stretch" },
-  dimmed: { opacity: opacity.pressed },
+  pressed: { opacity: opacity.pressed },
+  disabled: { opacity: opacity.disabled },
 });
