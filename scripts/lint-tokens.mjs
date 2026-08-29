@@ -8,6 +8,7 @@ const RULES = [
   { rule: "raw-color", re: /#[0-9a-fA-F]{3,8}\b/ },
   { rule: "raw-font-size", re: /fontSize:\s*\d/ },
   { rule: "raw-border-radius", re: /borderRadius:\s*\d/ },
+  { rule: "raw-border-width", re: /borderWidth:\s*\d/ },
 ];
 
 export function findViolations(source, file) {

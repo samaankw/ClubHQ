@@ -1,3 +1,4 @@
+import { StyleSheet } from "react-native";
 import { palette } from "./primitives";
 import { radiusScales } from "./scales";
 
@@ -61,6 +62,16 @@ export const radius = {
   tile: activeRadius.md,
   input: activeRadius.md,
   sheet: activeRadius.xl,
+} as const;
+
+export const borderWidth = {
+  hairline: StyleSheet.hairlineWidth,
+  thin: 1,
+} as const;
+
+export const opacity = {
+  pressed: 0.6,
+  disabled: 0.4,
 } as const;
 
 // No fontFamily anywhere: the app ships no custom fonts, so every role

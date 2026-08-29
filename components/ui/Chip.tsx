@@ -1,7 +1,7 @@
 import React from "react";
 import { Pressable, ScrollView, StyleSheet } from "react-native";
 import { Text } from "./Text";
-import { color, radius, space } from "@/theme";
+import { color, radius, space, borderWidth } from "@/theme";
 
 export interface ChipProps {
   label: string;
@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
     paddingVertical: space[2],
     paddingHorizontal: space[4],
     borderRadius: radius.chip,
-    borderWidth: 1,
+    borderWidth: borderWidth.thin,
   },
   on: { backgroundColor: color.bg.spotlight, borderColor: color.bg.spotlight },
   off: { backgroundColor: color.bg.surface, borderColor: color.border.subtle },

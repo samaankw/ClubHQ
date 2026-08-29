@@ -1,7 +1,7 @@
 import React from "react";
 import { Pressable, StyleSheet, ViewStyle } from "react-native";
 import { Text, TextTone } from "./Text";
-import { color, space, radius } from "@/theme";
+import { color, space, radius, borderWidth, opacity } from "@/theme";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
@@ -18,7 +18,11 @@ export interface ButtonProps {
 
 const SURFACE: Record<ButtonVariant, ViewStyle> = {
   primary: { backgroundColor: color.bg.brand },
-  secondary: { backgroundColor: color.bg.surface, borderWidth: 1, borderColor: color.border.subtle },
+  secondary: {
+    backgroundColor: color.bg.surface,
+    borderWidth: borderWidth.thin,
+    borderColor: color.border.subtle,
+  },
   ghost: { backgroundColor: "transparent" },
   danger: { backgroundColor: color.bg.dangerSubtle },
 };
@@ -77,5 +81,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.button,
   },
   fullWidth: { alignSelf: "stretch" },
-  dimmed: { opacity: 0.6 },
+  dimmed: { opacity: opacity.pressed },
 });

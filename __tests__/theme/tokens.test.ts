@@ -1,4 +1,4 @@
-import { color, space, radius, type, elevation } from "../../theme";
+import { color, space, radius, type, elevation, borderWidth, opacity } from "../../theme";
 import { palette } from "../../theme/primitives";
 
 describe("semantic color", () => {
@@ -51,5 +51,21 @@ describe("elevation", () => {
   it("sets both iOS shadow and Android elevation", () => {
     expect(elevation.card.shadowRadius).toBeGreaterThan(0);
     expect(elevation.card.elevation).toBeGreaterThan(0);
+  });
+});
+
+describe("borderWidth", () => {
+  it("exposes hairline and thin", () => {
+    expect(borderWidth.hairline).toBeGreaterThan(0);
+    expect(borderWidth.thin).toBe(1);
+  });
+});
+
+describe("opacity", () => {
+  it("exposes pressed and disabled states between 0 and 1", () => {
+    for (const v of [opacity.pressed, opacity.disabled]) {
+      expect(v).toBeGreaterThan(0);
+      expect(v).toBeLessThan(1);
+    }
   });
 });

@@ -41,4 +41,13 @@ describe("findViolations", () => {
     expect(v).toHaveLength(1);
     expect(v[0].rule).toBe("raw-border-radius");
   });
+
+  it("flags a raw borderWidth", () => {
+    const v = findViolations("const s = { borderWidth: 1 };", "app/x.tsx");
+    expect(v.map((x) => x.rule)).toEqual(["raw-border-width"]);
+  });
+
+  it("allows a borderWidth token reference", () => {
+    expect(findViolations("const s = { borderWidth: borderWidth.thin };", "app/x.tsx")).toHaveLength(0);
+  });
 });

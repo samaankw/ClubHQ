@@ -1,7 +1,7 @@
 import React from "react";
 import { View, TextInput, TextInputProps, StyleSheet } from "react-native";
 import { Eyebrow } from "./Text";
-import { color, radius, space, type as typeTokens } from "@/theme";
+import { color, radius, space, type as typeTokens, borderWidth } from "@/theme";
 
 export interface FieldProps extends TextInputProps {
   label?: string;
@@ -25,7 +25,7 @@ const styles = StyleSheet.create({
   wrap: { gap: space[2] },
   input: {
     backgroundColor: color.bg.surface,
-    borderWidth: 1,
+    borderWidth: borderWidth.thin,
     borderColor: color.border.subtle,
     borderRadius: radius.input,
     paddingVertical: space[3],
