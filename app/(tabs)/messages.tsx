@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { View, Text, FlatList, StyleSheet, Pressable } from "react-native";
+import { View, FlatList, Pressable, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { teamLabel } from "@/lib/teamLabel";
+import { Screen, Text, Card, IconChip, EmptyState } from "@/components/ui";
+import { color, space, radius, borderWidth, elevation } from "@/theme";
 
 interface ConversationRow {
   id: string;
@@ -65,10 +67,10 @@ export default function Messages() {
   }, [profile?.id, instanceId, load]);
 
   return (
-    <View style={styles.container}>
+    <Screen scroll={false}>
       <Pressable style={styles.searchEntry} onPress={() => router.push("/modals/search-messages")}>
-        <Ionicons name="search" size={16} color="#6B6F76" />
-        <Text style={styles.searchEntryText}>Search messages…</Text>
+        <Ionicons name="search" size={16} color={color.icon.muted} />
+        <Text tone="tertiary">Search messages…</Text>
       </Pressable>
       <FlatList
         data={conversations}
@@ -78,53 +80,79 @@ export default function Messages() {
         initialNumToRender={12}
         maxToRenderPerBatch={12}
         windowSize={7}
-        contentContainerStyle={{ padding: 16, paddingTop: 8 }}
-        ListEmptyComponent={<Text style={styles.muted}>No conversations yet. Tap + to start one.</Text>}
-        renderItem={({ item }) => (
-          <Pressable style={styles.card} onPress={() => router.push(`/conversation/${item.id}` as never)}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{item.type === "team_group" ? "👥" : "💬"}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.title}>
-                {item.type === "team_group"
-                  ? item.team_name
-                    ? teamLabel({ name: item.team_name, age_group: item.team_age_group })
-                    : "Team Chat"
-                  : item.other_participant_name ?? "Direct Message"}
-              </Text>
-              <Text style={styles.preview} numberOfLines={1}>
-                {item.last_message ?? "No messages yet"}
-              </Text>
-            </View>
-            {item.last_message_at && (
-              <Text style={styles.time}>{formatDistanceToNow(new Date(item.last_message_at), { addSuffix: false })}</Text>
-            )}
-          </Pressable>
-        )}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={<EmptyState title="No conversations yet." body="Tap + to start one." />}
+        renderItem={({ item }) => {
+          const title =
+            item.type === "team_group"
+              ? item.team_name
+                ? teamLabel({ name: item.team_name, age_group: item.team_age_group })
+                : "Team Chat"
+              : item.other_participant_name ?? "Direct Message";
+          return (
+            <Card>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={title}
+                style={styles.rowInner}
+                onPress={() => router.push(`/conversation/${item.id}` as never)}
+              >
+                <IconChip name={item.type === "team_group" ? "people" : "chatbubble"} />
+                <View style={styles.rowText}>
+                  <Text role="h3">{title}</Text>
+                  <Text role="bodySm" tone="secondary" numberOfLines={1}>
+                    {item.last_message ?? "No messages yet"}
+                  </Text>
+                </View>
+                {item.last_message_at && (
+                  <Text role="caption" tone="tertiary">
+                    {formatDistanceToNow(new Date(item.last_message_at), { addSuffix: false })}
+                  </Text>
+                )}
+              </Pressable>
+            </Card>
+          );
+        }}
       />
       <Pressable style={styles.fab} onPress={() => router.push("/modals/new-conversation")}>
-        <Text style={styles.fabText}>+</Text>
+        <Ionicons name="add" size={28} color={color.text.inverse} />
       </Pressable>
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0B0B0D" },
-  searchEntry: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#141416", borderRadius: 10, borderWidth: 1, borderColor: "#242424", marginHorizontal: 16, marginTop: 16, paddingHorizontal: 12, paddingVertical: 11 },
-  searchEntryText: { color: "#6B6F76", fontSize: 14 },
-  card: { backgroundColor: "#141416", borderRadius: 12, padding: 14, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 12 },
-  avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: "#17181B", alignItems: "center", justifyContent: "center" },
-  avatarText: { fontSize: 18 },
-  title: { fontSize: 15, fontWeight: "700", color: "#F2F2F3" },
-  preview: { fontSize: 13, color: "#9A9DA3", marginTop: 2 },
-  time: { fontSize: 11, color: "#6B6F76" },
-  muted: { color: "#6B6F76", textAlign: "center", marginTop: 40 },
-  fab: {
-    position: "absolute", right: 20, bottom: 24, width: 56, height: 56, borderRadius: 28,
-    backgroundColor: "#0A6CFF", alignItems: "center", justifyContent: "center",
-    shadowColor: "#000", shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
+  searchEntry: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space[2],
+    backgroundColor: color.bg.surface,
+    borderWidth: borderWidth.thin,
+    borderColor: color.border.subtle,
+    borderRadius: radius.input,
+    marginHorizontal: space[4],
+    marginTop: space[4],
+    paddingHorizontal: space[3],
+    paddingVertical: space[3],
   },
-  fabText: { color: "#fff", fontSize: 28, fontWeight: "700", marginTop: -2 },
+  listContent: {
+    paddingHorizontal: space[4],
+    paddingTop: space[3],
+    paddingBottom: space[4],
+    gap: space[3],
+  },
+  rowInner: { flexDirection: "row", alignItems: "center", gap: space[3] },
+  rowText: { flex: 1, gap: space[1] },
+  fab: {
+    position: "absolute",
+    right: space[5],
+    bottom: space[6],
+    width: 56,
+    height: 56,
+    borderRadius: radius.full,
+    backgroundColor: color.bg.brand,
+    alignItems: "center",
+    justifyContent: "center",
+    ...elevation.raised,
+  },
 });

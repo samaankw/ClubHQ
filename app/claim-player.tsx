@@ -1,9 +1,12 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
+import { View, Pressable, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { notify } from "@/lib/alertCompat";
+import { Screen, Text, Field, Button } from "@/components/ui";
+import { color, space, radius, borderWidth } from "@/theme";
 
 export default function ClaimPlayer() {
   const { profile } = useAuth();
@@ -24,33 +27,59 @@ export default function ClaimPlayer() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Link your child</Text>
-      <Text style={styles.copy}>Your director creates a one-time player link code. This keeps player records separate from the general club invite code.</Text>
-      <TextInput style={styles.input} placeholder="Player link code" placeholderTextColor="#6B6F76" autoCapitalize="characters" value={code} onChangeText={setCode} />
-      <Pressable style={styles.consentRow} onPress={() => setConsent((v) => !v)}>
-        <View style={[styles.checkbox, consent && styles.checkboxOn]}>{consent && <Text style={styles.check}>✓</Text>}</View>
-        <Text style={styles.consentText}>I confirm I am this player's parent or legal guardian and consent to ClubHQ processing this player's development data, including AI-assisted coaching reports.</Text>
+    <Screen>
+      <Text role="h1" tone="brand">
+        Link your child
+      </Text>
+      <Text tone="secondary">
+        Your director creates a one-time player link code. This keeps player records separate from the general club
+        invite code.
+      </Text>
+      <Field
+        placeholder="Player link code"
+        autoCapitalize="characters"
+        value={code}
+        onChangeText={setCode}
+        style={styles.codeInput}
+      />
+      <Pressable
+        style={styles.consentRow}
+        onPress={() => setConsent((v) => !v)}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: consent }}
+      >
+        <View style={[styles.checkbox, consent && styles.checkboxOn]}>
+          {consent && <Ionicons name="checkmark" size={14} color={color.text.inverse} />}
+        </View>
+        <Text role="bodySm" tone="secondary" style={styles.consentText}>
+          I confirm I am this player's parent or legal guardian and consent to ClubHQ processing this player's
+          development data, including AI-assisted coaching reports.
+        </Text>
       </Pressable>
-      <Pressable style={styles.button} onPress={claim} disabled={working}><Text style={styles.buttonText}>{working ? "Linking…" : "Link Player"}</Text></Pressable>
+      <Button label={working ? "Linking…" : "Link Player"} onPress={claim} disabled={working} fullWidth />
       <Pressable style={styles.skipLink} onPress={() => router.replace("/(tabs)/dashboard")}>
-        <Text style={styles.skipLinkText}>Don't have the code yet? Skip for now</Text>
+        <Text role="label" tone="secondary" style={styles.skipLinkText}>
+          Don't have the code yet? Skip for now
+        </Text>
       </Pressable>
-    </View>
+    </Screen>
   );
 }
+
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: "#0B0B0D" },
-  title: { fontSize: 24, fontWeight: "800", color: "#0A6CFF" },
-  copy: { color: "#9A9DA3", lineHeight: 20, marginTop: 8, marginBottom: 20 },
-  input: { borderWidth: 1, borderColor: "#242424", borderRadius: 10, padding: 14, fontSize: 17, letterSpacing: 2, marginBottom: 18, color: "#F2F2F3", backgroundColor: "#141416" },
-  consentRow: { flexDirection: "row", gap: 10, alignItems: "flex-start", marginBottom: 20 },
-  checkbox: { width: 22, height: 22, borderWidth: 2, borderColor: "#0A6CFF", borderRadius: 6, alignItems: "center", justifyContent: "center" },
-  checkboxOn: { backgroundColor: "#0A6CFF" },
-  check: { color: "#fff", fontWeight: "800" },
-  consentText: { flex: 1, color: "#B5B8BE", fontSize: 13, lineHeight: 19 },
-  button: { backgroundColor: "#0A6CFF", borderRadius: 10, padding: 16, alignItems: "center" },
-  buttonText: { color: "#fff", fontWeight: "700" },
-  skipLink: { marginTop: 16, alignItems: "center" },
-  skipLinkText: { color: "#9A9DA3", fontSize: 13, fontWeight: "600", textDecorationLine: "underline" },
+  codeInput: { letterSpacing: 2 },
+  consentRow: { flexDirection: "row", gap: space[2], alignItems: "flex-start" },
+  checkbox: {
+    width: space[5],
+    height: space[5],
+    borderRadius: radius.xs,
+    borderWidth: borderWidth.thin,
+    borderColor: color.border.brand,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxOn: { backgroundColor: color.bg.brand, borderColor: color.bg.brand },
+  consentText: { flex: 1 },
+  skipLink: { alignSelf: "center" },
+  skipLinkText: { textDecorationLine: "underline" },
 });
