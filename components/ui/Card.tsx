@@ -22,7 +22,12 @@ export function AICard({ padded = true, style, ...rest }: CardProps) {
 }
 
 const styles = StyleSheet.create({
-  base: { borderRadius: radius.card, overflow: "hidden" },
+  // No overflow: "hidden" here — on iOS that sets clipsToBounds/masksToBounds,
+  // which clips this same View's own shadow (elevation.card below), so the
+  // card has no visible edge on a near-white page. Nothing currently inside
+  // a Card needs corner clipping; if that changes, clip on an inner View
+  // instead of this shadowed one.
+  base: { borderRadius: radius.card },
   surface: { backgroundColor: color.bg.surface, ...elevation.card },
   spotlight: { backgroundColor: color.bg.spotlight },
   ai: { backgroundColor: color.bg.brand },
