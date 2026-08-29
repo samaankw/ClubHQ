@@ -21,6 +21,7 @@
 - No custom fonts. Type tokens set `fontSize`, `lineHeight`, `fontWeight` only — never `fontFamily`.
 - Only `theme/` is exempt from the token linter. `components/ui/` is held to the same rule.
 - Every task ends with a commit.
+- **RNTL 14.0.1 is async.** `render()` returns `Promise<...>` and `fireEvent.press()` must be awaited — verified against the installed `dist/render.d.ts`. The test code shown in Tasks 5–12 below was written against the older synchronous v13 API and **will fail verbatim**. Adapt every test body: make it `async`, and `await` both `render(...)` and `fireEvent...(...)`. Change nothing else — assertions, expected values, and component code stay exactly as written.
 
 ---
 
