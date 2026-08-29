@@ -75,6 +75,14 @@ export const radius = {
   sheet: activeRadius.xl,
 } as const;
 
+// Caps a page's content column. This app is phone-first, but it also runs on
+// web and tablet, where an unconstrained column stretches a 375-wide design
+// across 2000px. Set above the widest common phone (~430) so it never binds on
+// a real device and only takes effect on the larger screens it exists for.
+export const layout = {
+  maxContent: 440,
+} as const;
+
 export const borderWidth = {
   hairline: StyleSheet.hairlineWidth,
   thin: 1,

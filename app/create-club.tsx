@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { notify } from "@/lib/alertCompat";
 import { Screen, Card, Text, Field, Button, SegmentedControl, StepDots } from "@/components/ui";
-import { space, radius, elevation } from "@/theme";
+import { space, radius, elevation, layout } from "@/theme";
 
 export default function CreateOrJoinClub() {
   const { profile, refreshProfile } = useAuth();
@@ -55,56 +55,58 @@ export default function CreateOrJoinClub() {
 
   return (
     <Screen scroll={false} style={styles.page}>
-      <Text role="display" tone="brand" style={styles.center}>
-        One more step
-      </Text>
-      <Text tone="secondary" style={[styles.center, styles.subtitle]}>
-        Every account belongs to a club. Create a new one, or join with an invite code from your director.
-      </Text>
+      <View style={styles.content}>
+        <Text role="display" tone="brand" style={styles.center}>
+          One more step
+        </Text>
+        <Text tone="secondary" style={[styles.center, styles.subtitle]}>
+          Every account belongs to a club. Create a new one, or join with an invite code from your director.
+        </Text>
 
-      <Card style={styles.card}>
-        <SegmentedControl
-          options={["Create a Club", "Join with Code"]}
-          value={mode === "create" ? "Create a Club" : "Join with Code"}
-          onChange={(v) => setMode(v === "Create a Club" ? "create" : "join")}
-        />
+        <Card style={styles.card}>
+          <SegmentedControl
+            options={["Create a Club", "Join with Code"]}
+            value={mode === "create" ? "Create a Club" : "Join with Code"}
+            onChange={(v) => setMode(v === "Create a Club" ? "create" : "join")}
+          />
 
-        {mode === "create" ? (
-          <>
-            <Text role="bodySm" tone="secondary" style={styles.center}>
-              Creating a club makes you its director.
-            </Text>
-            <Field placeholder="Club name" value={clubName} onChangeText={setClubName} />
-            <View style={styles.glow}>
-              <Button
-                label={working ? "Creating…" : "Create Club"}
-                size="lg"
-                onPress={createClub}
-                disabled={working}
-                fullWidth
-              />
-            </View>
-          </>
-        ) : (
-          <>
-            <Text role="bodySm" tone="secondary" style={styles.center}>
-              Your director can find their club's invite code in Profile.
-            </Text>
-            {profile?.role === "parent" && (
+          {mode === "create" ? (
+            <>
               <Text role="bodySm" tone="secondary" style={styles.center}>
-                Right after this, you'll link your child with a separate one-time code from your director — that's a
-                deliberate second step, not a mistake.
+                Creating a club makes you its director.
               </Text>
-            )}
-            <Field placeholder="Invite code" value={joinCode} onChangeText={setJoinCode} autoCapitalize="none" />
-            <View style={styles.glow}>
-              <Button label={working ? "Joining…" : "Join Club"} onPress={joinClub} disabled={working} size="lg" fullWidth />
-            </View>
-          </>
-        )}
-      </Card>
+              <Field placeholder="Club name" value={clubName} onChangeText={setClubName} />
+              <View style={styles.glow}>
+                <Button
+                  label={working ? "Creating…" : "Create Club"}
+                  size="lg"
+                  onPress={createClub}
+                  disabled={working}
+                  fullWidth
+                />
+              </View>
+            </>
+          ) : (
+            <>
+              <Text role="bodySm" tone="secondary" style={styles.center}>
+                Your director can find their club's invite code in Profile.
+              </Text>
+              {profile?.role === "parent" && (
+                <Text role="bodySm" tone="secondary" style={styles.center}>
+                  Right after this, you'll link your child with a separate one-time code from your director — that's a
+                  deliberate second step, not a mistake.
+                </Text>
+              )}
+              <Field placeholder="Invite code" value={joinCode} onChangeText={setJoinCode} autoCapitalize="none" />
+              <View style={styles.glow}>
+                <Button label={working ? "Joining…" : "Join Club"} onPress={joinClub} disabled={working} size="lg" fullWidth />
+              </View>
+            </>
+          )}
+        </Card>
 
-      <StepDots count={2} active={0} style={styles.stepDots} />
+        <StepDots count={2} active={0} style={styles.stepDots} />
+      </View>
     </Screen>
   );
 }
@@ -116,6 +118,7 @@ export default function CreateOrJoinClub() {
 // pinned the card to 340px, so it floated undersized on anything wider.
 const styles = StyleSheet.create({
   page: { justifyContent: "center", paddingHorizontal: space[6] },
+  content: { width: "100%", maxWidth: layout.maxContent, alignSelf: "center" },
   center: { textAlign: "center" },
   subtitle: { marginTop: space[3] },
   card: { marginTop: space[8], gap: space[5], padding: space[7] },

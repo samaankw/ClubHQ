@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/AuthProvider";
 import { Player, Team } from "@/types/db";
 import { teamLabel } from "@/lib/teamLabel";
 import { Screen, Text, Eyebrow, Card, Button, Chip, Avatar, EmptyState } from "@/components/ui";
-import { color, space } from "@/theme";
+import { color, space, layout } from "@/theme";
 
 export default function Players() {
   const { profile } = useAuth();
@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
 
   modalCard: {
     width: "100%",
-    maxWidth: 440,
+    maxWidth: layout.maxContent,
     gap: space[3],
   },
 
