@@ -18,7 +18,6 @@ import path from "node:path";
 export const PENDING = [
   "app/(tabs)/copilot.tsx",
   "app/club-management.tsx",
-  "app/event/[id].tsx",
   "app/manage-drills.tsx",
   "app/modals/create-announcement.tsx",
   "app/modals/create-event.tsx",
@@ -27,8 +26,6 @@ export const PENDING = [
   "app/modals/search-messages.tsx",
   "app/modals/voice-evaluation.tsx",
   "app/pilot-metrics.tsx",
-  "app/player/[id].tsx",
-  "components/DrillVideoModal.tsx",
   "components/LegalTermsContent.tsx",
   "components/ModalBackButton.tsx",
 ];
