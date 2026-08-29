@@ -2488,6 +2488,76 @@ Presentation only; every auth call, RPC, and route is unchanged."
 
 ---
 
+### Task 17: Convert the root layout
+
+Found immediately after Task 16: `app/_layout.tsx` is the root `Stack` and
+hardcodes dark colours that sit behind **every** screen in the app, including
+the ones already converted. This is why a converted screen still shows a dark
+header bar and a dark ground.
+
+**Files:**
+- Modify: `app/_layout.tsx`
+
+**What is wrong (all raw hex, all root-level):**
+
+| line | value | effect |
+|---|---|---|
+| 35 | `backgroundColor: "#0B0B0D"` | dark loading screen on every cold start |
+| 36 | `color: "#0A6CFF"` | spinner tint |
+| 45 | `headerStyle: "#0B0B0D"` | dark header bar on every stack screen |
+| 46-47 | `"#F2F2F3"` | header text/tint |
+| 48 | `contentStyle: "#0B0B0D"` | **dark ground behind every screen in the app** |
+| 71, 75 | `"#fff"` / `"#0F4C81"` / `"#1a1a1a"` | legal screens, a third colour scheme again |
+
+**Data layer — preserve exactly:**
+- the `useAuth` session gate and its `loading` branch
+- every `<Stack.Screen>` registration, its `name`, and its `options` **except**
+  the colour values
+- the `headerShown` value on each screen — do not show or hide anything new
+- the deep-link / `createSessionFromUrl` wiring if present in this file
+
+- [ ] **Step 1: Replace the root colours with tokens**
+
+- `contentStyle` → `color.bg.page`
+- `headerStyle` → `color.bg.surface`
+- `headerTintColor` and `headerTitleStyle.color` → `color.text.primary`
+- loading screen background → `color.bg.page`; spinner → `color.icon.brand`
+- The two legal screens (lines 71, 75) currently set their own white/navy
+  scheme. Give them the same tokens as everything else so the app has ONE
+  header treatment, not three.
+
+- [ ] **Step 2: Verify**
+
+```bash
+node scripts/lint-tokens.mjs 2>&1 | grep "app/_layout" || echo "_layout clean"
+npx tsc --noEmit
+npm test
+```
+
+Expected: `_layout clean`, no new type errors, 69/69 passing.
+
+- [ ] **Step 3: Confirm no screen registration changed**
+
+```bash
+git diff -- app/_layout.tsx | grep -E "^[-+]" | grep -E "Stack.Screen|name=|headerShown" || echo "no registrations changed"
+```
+
+Expected: `no registrations changed`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add app/_layout.tsx
+git commit -m "Convert the root layout to design tokens
+
+app/_layout.tsx hardcoded a dark header and contentStyle behind every
+screen, so converted screens still rendered on a dark ground with a dark
+header bar. The legal screens carried a third scheme again (white/navy).
+All three now use one token-driven treatment."
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Token layers (Tasks 3–4), radius scale exploration (Task 3), component library (Tasks 5–12), token lint (Task 2), tab bar reskin (Task 13), first screen (Task 14). **Deferred to later plans by design:** the remaining 13 screen conversions (Plan 2) and the Figma variables and components (Plan 3). The spec's success criteria 3 and 4 are met across Plans 2 and 3, not here.
