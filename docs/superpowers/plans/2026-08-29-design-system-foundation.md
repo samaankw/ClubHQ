@@ -2646,6 +2646,166 @@ git diff -- "app/(tabs)/players.tsx" | grep "^-" \
 
 ---
 
+### Task 20: Refine create-club to mockup 00
+
+A new mockup (`00.png`) arrived for `create-club`, which is already converted.
+A colour census of it confirms **no new colours** — `#F8FAFC` page, `#FFFFFF`
+card, `#0066FF` brand, all existing tokens. The differences are layout
+refinement plus one new element.
+
+**Files:**
+- Create: `components/ui/StepDots.tsx`, `__tests__/ui/StepDots.test.tsx`
+- Modify: `components/ui/index.ts`, `theme/tokens.ts`, `app/create-club.tsx`
+
+**Interfaces:**
+- Produces: `StepDots({ count: number, active: number })` — `active` is a
+  0-based index. Renders `count` rounded bars; the active one takes
+  `color.bg.brand`, the rest `color.border.subtle`.
+- Produces: `elevation.brandGlow` — a brand-tinted shadow.
+
+#### Step 1: `StepDots` (TDD)
+
+Write `__tests__/ui/StepDots.test.tsx` first. Remember RNTL 14 is async —
+`async` test bodies, `await render(...)`.
+
+```tsx
+import React from "react";
+import { render } from "@testing-library/react-native";
+import { StepDots } from "../../components/ui/StepDots";
+import { color } from "../../theme";
+
+const flat = (s: unknown) => Object.assign({}, ...[].concat(s as never));
+
+describe("StepDots", () => {
+  it("renders one bar per step", async () => {
+    const { getAllByTestId } = await render(<StepDots count={2} active={0} />);
+    expect(getAllByTestId("step-dot")).toHaveLength(2);
+  });
+
+  it("fills only the active bar with the brand colour", async () => {
+    const { getAllByTestId } = await render(<StepDots count={2} active={0} />);
+    const [first, second] = getAllByTestId("step-dot");
+    expect(flat(first.props.style).backgroundColor).toBe(color.bg.brand);
+    expect(flat(second.props.style).backgroundColor).toBe(color.border.subtle);
+  });
+
+  it("moves the fill when active changes", async () => {
+    const { getAllByTestId } = await render(<StepDots count={2} active={1} />);
+    const [first, second] = getAllByTestId("step-dot");
+    expect(flat(first.props.style).backgroundColor).toBe(color.border.subtle);
+    expect(flat(second.props.style).backgroundColor).toBe(color.bg.brand);
+  });
+
+  it("is hidden from screen readers as decoration", async () => {
+    const { getByTestId } = await render(<StepDots count={2} active={0} />);
+    expect(getByTestId("step-dots").props.accessibilityElementsHidden).toBe(true);
+  });
+});
+```
+
+Then implement:
+
+```tsx
+import React from "react";
+import { View, StyleSheet } from "react-native";
+import { color, radius, space } from "@/theme";
+
+export interface StepDotsProps {
+  count: number;
+  /** 0-based index of the current step. */
+  active: number;
+}
+
+/** Decorative onboarding progress bars. Purely visual — hidden from a11y. */
+export function StepDots({ count, active }: StepDotsProps) {
+  return (
+    <View
+      testID="step-dots"
+      style={styles.row}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      {Array.from({ length: count }, (_, i) => (
+        <View
+          key={i}
+          testID="step-dot"
+          style={[styles.dot, { backgroundColor: i === active ? color.bg.brand : color.border.subtle }]}
+        />
+      ))}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: { flexDirection: "row", justifyContent: "center", gap: space[2] },
+  dot: { width: space[6], height: space[1], borderRadius: radius.full },
+});
+```
+
+Export both the component and `StepDotsProps` from `components/ui/index.ts`.
+
+#### Step 2: `elevation.brandGlow`
+
+The mockup's primary button sits on a soft blue glow rather than the neutral
+card shadow. Add to `theme/tokens.ts`, beside the existing elevation levels:
+
+```ts
+  brandGlow: {
+    shadowColor: brand[500],
+    shadowOpacity: 0.32,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+```
+
+Note it resolves through the `brand` lever like every other brand token, so
+swapping the brand ramp restyles the glow too.
+
+#### Step 3: Refine `app/create-club.tsx`
+
+Match the mockup's proportions. It is more compact than the current build:
+
+- Constrain the content column and centre it — the subtitle should wrap to
+  about three lines rather than two, and the card should not run edge to edge.
+- Reduce the gaps inside the card; the current `space[3]` between every child
+  is looser than the mockup.
+- Give the primary `Button` the new `elevation.brandGlow`.
+- Add `<StepDots count={2} active={0} />` below the card with generous top
+  margin.
+- The inactive segment label in the mockup is lighter than the current
+  `tone="secondary"` — use `tone="tertiary"` for the unselected segment if
+  `SegmentedControl` allows it without changing that shared component's API for
+  other screens. **If it would require changing `SegmentedControl`'s behaviour
+  elsewhere, leave it alone and say so** — one screen's polish does not justify
+  a regression on the Schedule tab.
+
+**Data layer — unchanged.** `create_club` / `join_club` RPCs, `refreshProfile`,
+the parent→`/claim-player` routing, and the parent-specific explanatory note all
+stay exactly as they are.
+
+#### Step 4: Verify
+
+```bash
+npm test
+npx tsc --noEmit
+node scripts/lint-tokens.mjs 2>&1 | grep -E "create-club|StepDots" || echo "clean"
+git diff -- app/create-club.tsx | grep "^-" | grep -E "supabase\.|router\.|refreshProfile|rpc\(" || echo "no data-layer lines removed"
+```
+
+#### Step 5: Commit
+
+```bash
+git add components/ui/StepDots.tsx components/ui/index.ts theme/tokens.ts app/create-club.tsx __tests__/ui/StepDots.test.tsx
+git commit -m "Refine create-club to mockup 00
+
+Adds a StepDots progress indicator and a brand-tinted elevation level,
+and tightens the screen's proportions to match. No new colours — the
+mockup's palette is entirely existing tokens."
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Token layers (Tasks 3–4), radius scale exploration (Task 3), component library (Tasks 5–12), token lint (Task 2), tab bar reskin (Task 13), first screen (Task 14). **Deferred to later plans by design:** the remaining 13 screen conversions (Plan 2) and the Figma variables and components (Plan 3). The spec's success criteria 3 and 4 are met across Plans 2 and 3, not here.
