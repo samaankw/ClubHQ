@@ -5,7 +5,11 @@ import { color, type as typeTokens } from "@/theme";
 export type TextRole = keyof typeof typeTokens;
 export type TextTone = keyof typeof color.text;
 
-export interface TextProps extends RNTextProps {
+// Omit RN's own "role" (an accessibility/web-aligned prop, e.g. "heading",
+// "link") since this component's "role" means something different: a
+// semantic typography role that maps to a type-scale token. This is purely
+// a type-level fix — RN's separate "accessibilityRole" prop is untouched.
+export interface TextProps extends Omit<RNTextProps, "role"> {
   role?: TextRole;
   tone?: TextTone;
 }
