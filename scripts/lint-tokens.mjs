@@ -19,15 +19,8 @@ export const PENDING = [
   "app/(tabs)/copilot.tsx",
   "app/club-management.tsx",
   "app/manage-drills.tsx",
-  "app/modals/create-announcement.tsx",
-  "app/modals/create-event.tsx",
-  "app/modals/evaluate-player.tsx",
-  "app/modals/new-conversation.tsx",
-  "app/modals/search-messages.tsx",
-  "app/modals/voice-evaluation.tsx",
   "app/pilot-metrics.tsx",
   "components/LegalTermsContent.tsx",
-  "components/ModalBackButton.tsx",
 ];
 
 // Top-level trees to scan, and the directory name to skip everywhere inside
