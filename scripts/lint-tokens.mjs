@@ -15,13 +15,7 @@ import path from "node:path";
 // Do not hand-edit this list by copying entries around — regenerate it by
 // running the scan (see `scan()` below) and reading off the leftover dirty
 // files.
-export const PENDING = [
-  "app/(tabs)/copilot.tsx",
-  "app/club-management.tsx",
-  "app/manage-drills.tsx",
-  "app/pilot-metrics.tsx",
-  "components/LegalTermsContent.tsx",
-];
+export const PENDING = [];
 
 // Top-level trees to scan, and the directory name to skip everywhere inside
 // them (tokens themselves are allowed to contain raw values).
