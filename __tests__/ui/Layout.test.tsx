@@ -4,7 +4,7 @@ jest.mock("react-native-safe-area-context", () =>
 );
 import { render, fireEvent } from "@testing-library/react-native";
 import { Screen } from "../../components/ui/Screen";
-import { SectionHeader } from "../../components/ui/SectionHeader";
+import { CardHeader } from "../../components/ui/CardHeader";
 import { ListRow } from "../../components/ui/ListRow";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { Text } from "../../components/ui/Text";
@@ -19,11 +19,11 @@ describe("Screen", () => {
   });
 });
 
-describe("SectionHeader", () => {
+describe("CardHeader", () => {
   it("renders a title and an optional action", async () => {
     const fn = jest.fn();
     const { getByText, getByLabelText } = await render(
-      <SectionHeader title="Active Teams" action="View Archive" onAction={fn} />
+      <CardHeader title="Active Teams" action="View Archive" onAction={fn} />
     );
     expect(getByText("Active Teams")).toBeTruthy();
     await fireEvent.press(getByLabelText("View Archive"));
@@ -31,7 +31,7 @@ describe("SectionHeader", () => {
   });
 
   it("omits the action when not given", async () => {
-    const { queryByRole } = await render(<SectionHeader title="Active Teams" />);
+    const { queryByRole } = await render(<CardHeader title="Active Teams" />);
     expect(queryByRole("button")).toBeNull();
   });
 });

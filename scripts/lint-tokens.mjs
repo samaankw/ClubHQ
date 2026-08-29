@@ -25,6 +25,7 @@ export const CONVERTED = [
   "components/ui/Badge.tsx",
   "components/ui/Button.tsx",
   "components/ui/Card.tsx",
+  "components/ui/CardHeader.tsx",
   "components/ui/Chip.tsx",
   "components/ui/Divider.tsx",
   "components/ui/EmptyState.tsx",

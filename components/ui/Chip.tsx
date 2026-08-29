@@ -31,7 +31,11 @@ export interface FilterChipRowProps {
   onChange: (value: string) => void;
 }
 
-/** Horizontally scrolling filter row — announcements, drill library. */
+/**
+ * Horizontally scrolling filter row. No call sites yet — staged for
+ * mockup 07's drill-library filters and mockup 10's announcement
+ * categories, both still unconverted.
+ */
 export function FilterChipRow({ options, value, onChange }: FilterChipRowProps) {
   return (
     <ScrollView

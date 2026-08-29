@@ -16,7 +16,11 @@ export function SpotlightCard({ padded = true, style, ...rest }: CardProps) {
   return <View style={[styles.base, styles.spotlight, padded && styles.pad, style]} {...rest} />;
 }
 
-/** Brand-blue card reserved for AI-generated content. */
+/**
+ * Brand-blue card reserved for AI-generated content. No call sites yet —
+ * staged for mockup 03's "AI GENERATED ANALYSIS" card and mockup 04's
+ * development-plan card, both still unconverted.
+ */
 export function AICard({ padded = true, style, ...rest }: CardProps) {
   return <View style={[styles.base, styles.ai, padded && styles.pad, style]} {...rest} />;
 }

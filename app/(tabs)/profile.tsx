@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { shareText } from "@/lib/shareCompat";
 import { confirmAsync, notify } from "@/lib/alertCompat";
-import { Screen, Text, Eyebrow, Card, SpotlightCard, Button, Avatar, ListRow, Toggle, Field } from "@/components/ui";
+import { Screen, Text, Eyebrow, Card, CardHeader, SpotlightCard, Button, Avatar, ListRow, Toggle, Field } from "@/components/ui";
 import { color, space, radius, borderWidth } from "@/theme";
 
 async function uploadAvatarPhoto(userId: string, localUri: string): Promise<string> {
@@ -164,14 +164,11 @@ export default function Profile() {
 
       {canManageDrills && (
         <Card style={styles.section}>
-          <View style={styles.cardHeaderRow}>
-            <Eyebrow>Meet the Coach Bio</Eyebrow>
-            <Pressable accessibilityRole="button" accessibilityLabel="Edit coach bio" onPress={() => setEditingBio((v) => !v)}>
-              <Text role="label" tone="brand">
-                {editingBio ? "Cancel" : profile?.coach_bio ? "Edit" : "Add"}
-              </Text>
-            </Pressable>
-          </View>
+          <CardHeader
+            title="Meet the Coach Bio"
+            action={editingBio ? "Cancel" : profile?.coach_bio ? "Edit" : "Add"}
+            onAction={() => setEditingBio((v) => !v)}
+          />
 
           {editingBio ? (
             <>
@@ -283,7 +280,6 @@ const styles = StyleSheet.create({
   },
   section: { gap: space[3] },
   list: { gap: space[1] },
-  cardHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   codeCard: { alignItems: "center", gap: space[2] },
   codeValue: { letterSpacing: 4 },
   codeHint: { textAlign: "center" },
