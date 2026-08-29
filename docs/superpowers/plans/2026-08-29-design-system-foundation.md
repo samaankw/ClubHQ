@@ -2806,6 +2806,134 @@ mockup's palette is entirely existing tokens."
 
 ---
 
+### Task 21: Turn the token linter into a ratchet
+
+The linter currently checks an explicit `CONVERTED` allowlist of 28 files. That
+guards in one direction only: `scripts/lint-tokens.mjs:78-80` fails if a
+**listed** file is missing from disk, but nothing fails if a **converted** file
+is missing from the list. Convert a screen, forget to add it, and the linter
+passes green while ignoring that file entirely — and the list must be updated
+correctly 17 more times as the remaining screens convert.
+
+A guardrail that silently stops guarding is worse than one that is honestly
+red, because people stop checking it.
+
+**Invert it.** Instead of listing what is clean, list what is known-dirty, and
+scan everything else.
+
+**Files:**
+- Modify: `scripts/lint-tokens.mjs`, `__tests__/lint-tokens.test.ts`
+
+**Interfaces:**
+- Keep `findViolations(source, file)` exactly as it is — pure, unit-tested, unchanged.
+- Replace the exported `CONVERTED` array with `PENDING`: the unconverted files
+  that are still allowed to contain raw values.
+
+#### The rule
+
+Walk all `.ts`/`.tsx` under `app/` and `components/`, excluding `theme/`. Then
+fail on any of three conditions:
+
+1. **A file NOT in `PENDING` has violations.** New and newly-converted files are
+   checked automatically, by default — this is the hole being closed.
+2. **A file IN `PENDING` has ZERO violations.** It has been converted, so it must
+   be removed from the list. This is what stops the list going stale in the
+   other direction, and makes it a ratchet: it can only shrink.
+3. **A file in `PENDING` no longer exists.** Same staleness guard the current
+   implementation already has — keep it.
+
+Each failure mode needs its own clear message saying exactly what to do:
+add nothing, remove the file from `PENDING`, or fix the violation.
+
+#### Step 1: Write the failing tests
+
+Add to `__tests__/lint-tokens.test.ts`. `findViolations` is pure, but the
+ratchet logic needs its own seam — export a pure `evaluate({ files, pending })`
+function from the script that takes a map of `file -> violation count` and the
+pending list, and returns `{ unexpected, converted, missing }`, so it can be
+tested without touching the filesystem.
+
+```ts
+import { evaluate } from "../scripts/lint-tokens.mjs";
+
+describe("evaluate (the ratchet)", () => {
+  it("flags a converted file that was never added to the list", () => {
+    // schedule.tsx is clean and not pending — fine.
+    // players.tsx has violations and is not pending — that is the hole.
+    const r = evaluate({ files: { "app/players.tsx": 3 }, pending: [] });
+    expect(r.unexpected).toEqual(["app/players.tsx"]);
+  });
+
+  it("flags a pending file that is now clean, so the list can only shrink", () => {
+    const r = evaluate({ files: { "app/schedule.tsx": 0 }, pending: ["app/schedule.tsx"] });
+    expect(r.converted).toEqual(["app/schedule.tsx"]);
+  });
+
+  it("allows a pending file that still has violations", () => {
+    const r = evaluate({ files: { "app/schedule.tsx": 12 }, pending: ["app/schedule.tsx"] });
+    expect(r.unexpected).toEqual([]);
+    expect(r.converted).toEqual([]);
+  });
+
+  it("passes when every non-pending file is clean", () => {
+    const r = evaluate({
+      files: { "app/a.tsx": 0, "app/b.tsx": 5 },
+      pending: ["app/b.tsx"],
+    });
+    expect(r.unexpected).toEqual([]);
+    expect(r.converted).toEqual([]);
+    expect(r.missing).toEqual([]);
+  });
+
+  it("reports a pending entry that no longer exists on disk", () => {
+    const r = evaluate({ files: { "app/a.tsx": 0 }, pending: ["app/deleted.tsx"] });
+    expect(r.missing).toEqual(["app/deleted.tsx"]);
+  });
+});
+```
+
+#### Step 2: Run them and watch them fail
+
+`npm test -- lint-tokens` — FAIL, `evaluate` is not exported.
+
+#### Step 3: Implement
+
+Build `PENDING` from the current reality: every file under `app/` and
+`components/` that is NOT in today's `CONVERTED` list and currently has
+violations. Derive it by running the scan — do not hand-type it.
+
+#### Step 4: Prove the ratchet actually catches the hole
+
+This is the point of the task, so demonstrate it rather than asserting it:
+
+```bash
+# temporarily remove a converted file from PENDING's complement by dirtying it
+cp app/create-club.tsx /tmp/cc.bak
+printf '\nconst x = { color: "#ff0000" };\n' >> app/create-club.tsx
+node scripts/lint-tokens.mjs; echo "exit=$?   # must be 1"
+cp /tmp/cc.bak app/create-club.tsx
+node scripts/lint-tokens.mjs; echo "exit=$?   # must be 0"
+```
+
+Paste both results in your report.
+
+#### Step 5: Verify and commit
+
+```bash
+npm test && npm run verify
+git add scripts/lint-tokens.mjs __tests__/lint-tokens.test.ts
+git commit -m "Turn the token linter into a ratchet
+
+The CONVERTED allowlist guarded one direction only: it failed if a listed
+file vanished, but a newly converted file that nobody added was silently
+unchecked, and that list needed updating 17 more times. Inverted to a
+PENDING list of known-dirty files: anything not listed is checked by
+default, and a listed file that becomes clean must be removed. The list
+can now only shrink, and forgetting to update it fails loudly either way."
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Token layers (Tasks 3–4), radius scale exploration (Task 3), component library (Tasks 5–12), token lint (Task 2), tab bar reskin (Task 13), first screen (Task 14). **Deferred to later plans by design:** the remaining 13 screen conversions (Plan 2) and the Figma variables and components (Plan 3). The spec's success criteria 3 and 4 are met across Plans 2 and 3, not here.
