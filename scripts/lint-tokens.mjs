@@ -20,7 +20,6 @@ export const PENDING = [
   "app/(auth)/update-password.tsx",
   "app/(tabs)/copilot.tsx",
   "app/(tabs)/messages.tsx",
-  "app/(tabs)/schedule.tsx",
   "app/claim-player.tsx",
   "app/club-management.tsx",
   "app/conversation/[id].tsx",
@@ -34,11 +33,9 @@ export const PENDING = [
   "app/modals/voice-evaluation.tsx",
   "app/pilot-metrics.tsx",
   "app/player/[id].tsx",
-  "components/AnnouncementsList.tsx",
   "components/DrillVideoModal.tsx",
   "components/LegalTermsContent.tsx",
   "components/ModalBackButton.tsx",
-  "components/SwipeableRow.tsx",
 ];
 
 // Top-level trees to scan, and the directory name to skip everywhere inside

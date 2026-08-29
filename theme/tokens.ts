@@ -31,6 +31,10 @@ export const color = {
     successSubtle: palette.green[50],
     warningSubtle: palette.orange[50],
     dangerSubtle: palette.red[50],
+    /** Solid fill for a destructive action surface (e.g. a swipe-to-delete
+     * panel) — everywhere else "danger" only needs the subtle tint behind
+     * red text, so this is the one spot that needs the strong color itself. */
+    danger: palette.red[600],
     /** Modal/sheet backdrop — slate[900] at 60%. */
     scrim: withAlpha(palette.slate[900], 0.6),
   },
