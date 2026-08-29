@@ -49,6 +49,8 @@ further each time.
   an accent. Tokens are structured so dark mode stays possible later.
 - **No hand-redesign of the ~14 uncovered screens.** They inherit the language
   through shared components only.
+- **No navigation restructuring.** The six registered tabs stay; the tab bar is
+  reskinned only. Decided 2026-08-29.
 - **No Figma screen rebuilds.** The 14 drawn screens stay as reference.
 
 ## Design language (extracted, not invented)
@@ -182,9 +184,12 @@ Mockups 02/03/04 are three role-and-state variants of one route. Mockups 10/12
 are two segments of one route. Twelve of fourteen map to nine existing files;
 none require a new route.
 
-**Open item:** mockup 04 shows a 4-tab parent bar (Home / Schedule / Messages /
-Evaluation) where `app/(tabs)/_layout.tsx` registers six tabs. Role-conditional
-tabs are a behavior change, not a reskin — flagged for the plan, not assumed.
+**Navigation is reskinned, not restructured.** Mockup 04 draws a 4-tab parent
+bar (Home / Schedule / Messages / Evaluation) where `app/(tabs)/_layout.tsx`
+registers six tabs. The existing tab structure stays exactly as it is — only
+the tab bar's appearance changes to match the mockups (icon set, active blue,
+label treatment, height, border). No role-conditional tabs, no added or removed
+routes. Decided 2026-08-29.
 
 ### Figma
 
