@@ -2934,6 +2934,112 @@ can now only shrink, and forgetting to update it fails loudly either way."
 
 ---
 
+## Plan 2 — convert the remaining 18 screens
+
+The component library is complete and the conventions are settled, so these
+tasks are leaner than the foundation ones. **Every task below shares the same
+contract**, stated once here rather than repeated:
+
+**Conventions** (reference implementations: `app/(tabs)/dashboard.tsx`,
+`app/(tabs)/profile.tsx`, `app/create-club.tsx`)
+- `Screen` wraps the page — it now supplies the page ground, safe-area padding,
+  and the capped content column. Do not add your own `maxWidth`.
+- `Card` groups content; **`Eyebrow` for card/section headers** (never a heading
+  role — `SectionHeader` was deleted for exactly this reason); `CardHeader` when
+  a card header needs a right-hand action.
+- `Text` with semantic roles, never raw sizes. `EmptyState` for empty lists,
+  `Avatar` for people, `Badge` for status, `ListRow` for tappable rows,
+  `SpotlightCard` (dark) only for genuine emphasis.
+
+**Hard rules for every task**
+- Presentation only. No auth call, RPC, route, hook, refresh callback, or piece
+  of state changes. Run the data-layer guard and paste it verbatim:
+  `git diff -- <file> | grep "^-" | grep -E "supabase\.|router\.|use[A-Z]|rpc\(" || echo "no data-layer lines removed"`
+- **Preserve FlatList/SectionList performance props byte-identical** —
+  `initialNumToRender`, `maxToRenderPerBatch`, `windowSize`,
+  `removeClippedSubviews`, `keyExtractor`. Nothing in the test suite, linter, or
+  typechecker covers them; a dropped prop is an invisible regression. Affected
+  here: `schedule`, `messages`, `copilot`, `manage-drills`, `conversation/[id]`,
+  `new-conversation`, `search-messages`.
+- Preserve role-conditional rendering exactly. Nothing becomes visible to a role
+  that could not see it before.
+- No raw design values. Verify with `node scripts/lint-tokens.mjs`.
+- **Remove each converted file from `PENDING` in `scripts/lint-tokens.mjs`.**
+  After Task 21 the linter is a ratchet: a listed file that becomes clean
+  *fails* until it is removed. That failure is the system working — do not
+  work around it.
+- `npm test` and `npm run verify` must pass before committing.
+- No test files unless the task says so; screen conversions are verified by
+  lint + typecheck + render.
+
+---
+
+### Task 22: Schedule (mockups 10 + 12)
+
+`app/(tabs)/schedule.tsx` — 19 raw values. **Two mockups**: 12 is the Events
+segment (month strip, day selector, event cards with attendee avatars and a
+"21 Going" badge), 10 is the Announcements segment (category filter chips,
+announcement cards with a coloured left accent bar, a floating "New
+Announcement" button). The existing `SegmentedControl` already switches them.
+
+Renders `AnnouncementsList` and `SwipeableRow` from `components/` — **both are
+unconverted and become a boundary the moment this screen converts.** Convert
+them too, or this screen will show dark-era rows on a light page exactly as the
+dashboard did. Check their other call sites first.
+
+### Task 23: Event detail and Player detail
+
+- `app/event/[id].tsx` — 29 raw values. No mockup. RSVP, attendance recording,
+  and payment marking live here; preserve every write path.
+- `app/player/[id].tsx` — 15 raw values. **Three mockups**: 02 (player profile
+  with stat tiles and a rating chart), 03 (AI plan review with publish
+  controls), 04 (parent progress view). These are role-and-state variants of
+  one route, not three routes. Per the 2026-08-29 decision, use the ten real
+  evaluation skills — do NOT invent the goals/assists/matches the mockups show.
+  `AICard` is staged for mockup 03's analysis card.
+
+Renders `DrillVideoModal`, also unconverted — same boundary rule as Task 22.
+
+### Task 24: Club management, drills, copilot, pilot metrics
+
+- `app/club-management.tsx` — 14 raw values, mockup 05 (setup progress, team
+  cards with assigned coaches, a quick-create form in a dashed container).
+- `app/manage-drills.tsx` — 29 raw values, mockup 07 (search field, category
+  filter chips, drill cards with video thumbnails). `FilterChipRow` is staged
+  for this.
+- `app/(tabs)/copilot.tsx` — 19 raw values, mockup 08 (empty state with prompt
+  suggestion cards, a fixed chat input). Preserve the streaming/response wiring.
+- `app/pilot-metrics.tsx` — 15 raw values, mockup 09 (director's analysis
+  spotlight card, stat tiles, a usage-mix donut).
+
+### Task 25: The six modals
+
+`create-event` (29, mockup 13), `create-announcement` (16, mockup 11),
+`voice-evaluation` (22), `evaluate-player` (14), `search-messages` (10),
+`new-conversation` (9). All render `ModalBackButton`, unconverted — convert it
+once, here.
+
+Mockups 11 and 13 share a shape worth honouring: a "what kind?" grid of
+selectable type cards, then an audience/target selector, then the form.
+
+### Task 26: The remainder
+
+`app/(tabs)/messages.tsx` (13), `app/conversation/[id].tsx` (13),
+`app/claim-player.tsx` (12), `app/(auth)/reset-password.tsx` (7),
+`app/(auth)/update-password.tsx` (5). No mockups — apply the language.
+
+The two auth screens still use the legacy `#0F4C81` navy, which is the last
+place a third brand blue survives; converting them retires it.
+
+### Task 27: Retire the PENDING list
+
+Once Tasks 22–26 land, `PENDING` should be empty. Delete it and the ratchet's
+pending branches, and have the linter simply scan `app/` and `components/`
+wholesale — the design system is then enforced everywhere by default. Wire
+nothing new; `verify` already runs it.
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Token layers (Tasks 3–4), radius scale exploration (Task 3), component library (Tasks 5–12), token lint (Task 2), tab bar reskin (Task 13), first screen (Task 14). **Deferred to later plans by design:** the remaining 13 screen conversions (Plan 2) and the Figma variables and components (Plan 3). The spec's success criteria 3 and 4 are met across Plans 2 and 3, not here.
