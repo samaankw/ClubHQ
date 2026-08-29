@@ -66,10 +66,14 @@ npm install --save-dev jest-expo@57.0.5 @testing-library/react-native@14.0.1 rea
 
 Create `jest.config.js`:
 
+Note: do NOT add `setupFilesAfterEnv`. RNTL 14.0.1 has no `extend-expect`
+subpath (it ships `matchers.js`), and Jest fails to start if you reference it.
+No test in this plan uses an RNTL-specific matcher — only built-in Jest
+matchers — so no setup file is needed.
+
 ```js
 module.exports = {
   preset: "jest-expo",
-  setupFilesAfterEnv: ["@testing-library/react-native/extend-expect"],
   transformIgnorePatterns: [
     "node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@sentry/react-native|native-base|react-native-svg))",
   ],
@@ -1658,10 +1662,15 @@ git commit -m "Add ProgressBar, Badge, Avatar, and Divider"
 
 - [ ] **Step 1: Write the failing test**
 
-Create `__tests__/ui/Layout.test.tsx`:
+Create `__tests__/ui/Layout.test.tsx`. The `jest.mock` line is required:
+`Screen` calls `useSafeAreaInsets`, which throws outside a `SafeAreaProvider`,
+and the library ships this mock for exactly this case.
 
 ```tsx
 import React from "react";
+jest.mock("react-native-safe-area-context", () =>
+  require("react-native-safe-area-context/jest/mock")
+);
 import { render, fireEvent } from "@testing-library/react-native";
 import { Screen } from "../../components/ui/Screen";
 import { SectionHeader } from "../../components/ui/SectionHeader";
@@ -2230,15 +2239,22 @@ pkill -f "expo start"
 
 Expected: the page renders without a crash. (The route requires auth, so the login screen rendering is the expected unauthenticated result — the check is that the bundle builds and mounts.)
 
-- [ ] **Step 6: Wire the linter into `verify`**
+- [ ] **Step 6: Confirm the script wiring is correct — do NOT add anything**
 
-The linter still fails on the ~29 unconverted screens, so it is **not** yet added to `verify`. Instead add a scoped script that guards what is done:
+Task 2 already added `"lint:tokens": "node scripts/lint-tokens.mjs"` to
+`package.json`. Do not add it a second time. This step is a verification only:
 
-```json
-"lint:tokens": "node scripts/lint-tokens.mjs"
+```bash
+node -e "const s=require('./package.json').scripts;
+  console.log('lint:tokens =', s['lint:tokens']);
+  console.log('verify      =', s.verify);"
 ```
 
-Leave `verify` unchanged. Wiring `lint:tokens` into `verify` is the final step of the *screens* plan, once every screen is converted. Add this note to the plan's tracking so it is not forgotten.
+Expected: `lint:tokens` is present exactly once, and `verify` is **unchanged**
+from its original value (`npm run verify:static && npm run typecheck && npx
+expo-doctor@latest`). The linter still fails on the ~29 unconverted screens, so
+it must stay out of `verify` until the screens plan converts them all. Make no
+edit to `package.json` in this task.
 
 - [ ] **Step 7: Commit**
 
