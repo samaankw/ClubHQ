@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, findNodeHandle, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { router, useFocusEffect } from "expo-router";
 import { format, addMonths, startOfMonth } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
@@ -8,7 +9,7 @@ import { PaymentStatus, Player, PlayerPayment, Profile, Team } from "@/types/db"
 import { shareText } from "@/lib/shareCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { confirmAsync, notify } from "@/lib/alertCompat";
-import { Screen, Card, Eyebrow, Text, Button, Badge, Avatar, Field, IconChip, Divider, EmptyState } from "@/components/ui";
+import { Screen, Card, CardHeader, Eyebrow, Text, Button, Badge, Avatar, Field, IconChip, Divider, EmptyState } from "@/components/ui";
 import { color, space, radius, borderWidth } from "@/theme";
 
 type TeamCoach = { team_id: string; coach_id: string };
@@ -20,15 +21,11 @@ export default function ClubManagement() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [staff, setStaff] = useState<Profile[]>([]);
   const [teamCoaches, setTeamCoaches] = useState<TeamCoach[]>([]);
-  const [teamName, setTeamName] = useState("");
-  const [ageGroup, setAgeGroup] = useState("");
-  const [season, setSeason] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [position, setPosition] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [teamNameError, setTeamNameError] = useState<string | undefined>();
   const [playerNameError, setPlayerNameError] = useState<string | undefined>();
   const [birthDateError, setBirthDateError] = useState<string | undefined>();
   const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(new Date()));
@@ -100,7 +97,14 @@ export default function ClubManagement() {
     setSelectedTeamId((current) => current && nextTeams.some((t) => t.id === current) ? current : nextTeams[0]?.id ?? null);
   }, [profile?.club_id, profile?.role]);
 
-  useEffect(() => { void load(); }, [load]);
+  // useFocusEffect (not a plain mount useEffect) so returning from the
+  // create-team modal — which lands back on this already-mounted screen —
+  // still reloads the team list and shows the new team.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   useEffect(() => {
     (async () => {
@@ -132,36 +136,6 @@ export default function ClubManagement() {
       </Screen>
     );
   }
-
-  const createTeam = async () => {
-    if (!profile.club_id || !teamName.trim()) {
-      setTeamNameError("Enter a team name first.");
-      return;
-    }
-    setTeamNameError(undefined);
-    setBusy(true);
-    // Assign the creating director to their own team straight away. A director
-    // who just made a team is its coach until they say otherwise — making them
-    // pick themselves out of a one-name list is ceremony, and leaving it unset
-    // shows "No coach assigned" on a team they personally created.
-    const { data: created, error } = await supabase
-      .from("teams")
-      .insert({ club_id: profile.club_id, name: teamName.trim(), age_group: ageGroup.trim() || null, season: season.trim() || null })
-      .select("id")
-      .single();
-    if (!error && created?.id) {
-      const { error: assignError } = await supabase.rpc("set_team_coach", {
-        p_team_id: created.id,
-        p_coach_id: profile.id,
-        p_assigned: true,
-      });
-      // Non-fatal: the team exists either way, and they can assign manually.
-      if (assignError) console.error("Couldn't self-assign as coach:", assignError.message);
-    }
-    setBusy(false);
-    if (error) return notify("Couldn't create team", error.message);
-    setTeamName(""); setAgeGroup(""); setSeason(""); await load();
-  };
 
   const addPlayer = async () => {
     if (!selectedTeamId || !playerName.trim()) {
@@ -265,10 +239,10 @@ export default function ClubManagement() {
       </Card>
 
       <View style={{ gap: space[3] }}>
-        <Eyebrow>Active Teams</Eyebrow>
+        <CardHeader title="Active Teams" action="+" onAction={() => router.push("/modals/create-team")} />
         {teams.length === 0 ? (
           <Card>
-            <Text tone="secondary">No active teams yet — create one below.</Text>
+            <Text tone="secondary">No active teams yet — tap + to create one.</Text>
           </Card>
         ) : (
           teams.map((team) => {
@@ -315,28 +289,6 @@ export default function ClubManagement() {
             );
           })
         )}
-      </View>
-
-      <View style={styles.dashedContainer}>
-        <Eyebrow>Create Team</Eyebrow>
-        <Field
-          placeholder="Team name, e.g. U10 Boys Red"
-          value={teamName}
-          onChangeText={(v) => {
-            setTeamName(v);
-            if (teamNameError) setTeamNameError(undefined);
-          }}
-          error={teamNameError}
-        />
-        <View style={styles.row}>
-          <View style={{ flex: 1 }}>
-            <Field placeholder="Age group" value={ageGroup} onChangeText={setAgeGroup} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Field placeholder="Season" value={season} onChangeText={setSeason} />
-          </View>
-        </View>
-        <Button label="Create Team" onPress={createTeam} disabled={busy} fullWidth />
       </View>
 
       {selectedTeam && (
@@ -491,14 +443,6 @@ const styles = StyleSheet.create({
   coachRow: { flexDirection: "row", alignItems: "center", gap: space[3], paddingVertical: space[2] },
   playerRow: { flexDirection: "row", alignItems: "center", gap: space[2], paddingVertical: space[2], flexWrap: "wrap" },
   monthNav: { flexDirection: "row", alignItems: "center", gap: space[2] },
-  dashedContainer: {
-    borderWidth: borderWidth.thin,
-    borderStyle: "dashed",
-    borderColor: color.border.default,
-    borderRadius: radius.card,
-    padding: space[4],
-    gap: space[3],
-  },
   infoCallout: {
     flexDirection: "row",
     gap: space[3],

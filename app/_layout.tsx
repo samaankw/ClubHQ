@@ -59,6 +59,7 @@ function RootNavigator() {
       <Stack.Screen name="modals/create-announcement" options={{ presentation: "modal", headerShown: true, title: "New Announcement" }} />
       <Stack.Screen name="modals/create-event" options={{ presentation: "modal", headerShown: true, title: "New Event" }} />
       <Stack.Screen name="modals/add-player" options={{ presentation: "modal", headerShown: true, title: "Add Player" }} />
+      <Stack.Screen name="modals/create-team" options={{ presentation: "modal", headerShown: true, title: "New Team" }} />
       <Stack.Screen name="modals/evaluate-player" options={{ presentation: "modal", headerShown: true, title: "Evaluate Player" }} />
       <Stack.Screen name="modals/voice-evaluation" options={{ presentation: "modal", headerShown: true, title: "Voice Evaluation" }} />
       <Stack.Screen name="modals/new-conversation" options={{ presentation: "modal", headerShown: true, title: "New Message" }} />
