@@ -1,13 +1,13 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { View, FlatList, Pressable, ScrollView, Modal, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { Player, Team } from "@/types/db";
 import { teamLabel } from "@/lib/teamLabel";
 import { Screen, Text, Eyebrow, Card, Button, Chip, Avatar, EmptyState } from "@/components/ui";
-import { color, space, layout } from "@/theme";
+import { color, space, layout, radius, elevation } from "@/theme";
 
 export default function Players() {
   const { profile } = useAuth();
@@ -23,6 +23,9 @@ export default function Players() {
 
   const isCoachOrDirector =
     profile?.role === "coach" || profile?.role === "director";
+  // players_insert_staff (RLS) only allows a director to insert — a coach
+  // or parent must never see a button the database would reject.
+  const canCreate = profile?.role === "director";
 
   const load = useCallback(async () => {
     if (!profile?.id) {
@@ -107,9 +110,14 @@ export default function Players() {
     }
   }, [profile?.id, profile?.role, profile?.club_id]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // useFocusEffect (not a plain mount useEffect) so returning from the
+  // add-player modal — which lands back on this already-mounted screen —
+  // still reloads the roster and shows the new player.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   const removePlayer = async () => {
     if (!playerToRemove) return;
@@ -149,152 +157,164 @@ export default function Players() {
 
   return (
     <Screen scroll={false}>
-      <FlatList
-        style={styles.list}
-        data={visiblePlayers}
-        keyExtractor={(player) => player.id}
-        onRefresh={load}
-        refreshing={loading}
-        initialNumToRender={12}
-        maxToRenderPerBatch={12}
-        windowSize={7}
-        contentContainerStyle={styles.listContent}
-        ListHeaderComponent={
-          isCoachOrDirector && teams.length > 0 ? (
-            <Card style={styles.filterCard}>
-              <Eyebrow>Team Filter</Eyebrow>
+      <View style={styles.listWrap}>
+        <FlatList
+          style={styles.list}
+          data={visiblePlayers}
+          keyExtractor={(player) => player.id}
+          onRefresh={load}
+          refreshing={loading}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={7}
+          contentContainerStyle={styles.listContent}
+          ListHeaderComponent={
+            isCoachOrDirector && teams.length > 0 ? (
+              <Card style={styles.filterCard}>
+                <Eyebrow>Team Filter</Eyebrow>
 
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.teamRow}
-              >
-                <Chip
-                  label="All Players"
-                  selected={selectedTeamId === null}
-                  onPress={() => setSelectedTeamId(null)}
-                />
-
-                {teams.map((team) => (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.teamRow}
+                >
                   <Chip
-                    key={team.id}
-                    label={teamLabel(team)}
-                    selected={selectedTeamId === team.id}
-                    onPress={() => setSelectedTeamId(team.id)}
+                    label="All Players"
+                    selected={selectedTeamId === null}
+                    onPress={() => setSelectedTeamId(null)}
                   />
-                ))}
-              </ScrollView>
 
-              {selectedTeamId ? (
-                <Button
-                  label="🎙️ Voice Evaluation for Selected Team"
-                  variant="secondary"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/modals/voice-evaluation",
-                      params: {
-                        teamId: selectedTeamId,
-                      },
-                    })
-                  }
+                  {teams.map((team) => (
+                    <Chip
+                      key={team.id}
+                      label={teamLabel(team)}
+                      selected={selectedTeamId === team.id}
+                      onPress={() => setSelectedTeamId(team.id)}
+                    />
+                  ))}
+                </ScrollView>
+
+                {selectedTeamId ? (
+                  <Button
+                    label="🎙️ Voice Evaluation for Selected Team"
+                    variant="secondary"
+                    onPress={() =>
+                      router.push({
+                        pathname: "/modals/voice-evaluation",
+                        params: {
+                          teamId: selectedTeamId,
+                        },
+                      })
+                    }
+                  />
+                ) : (
+                  <Text role="bodySm" tone="tertiary">
+                    Choose a team above to start a whole-team
+                    voice evaluation.
+                  </Text>
+                )}
+              </Card>
+            ) : null
+          }
+          ListEmptyComponent={
+            profile?.role === "parent" ? (
+              <View style={styles.linkPrompt}>
+                <EmptyState
+                  icon="link"
+                  title="No child linked yet"
+                  body="Joining the club doesn't automatically connect your child's record — your director gives you a separate one-time player code for that."
                 />
-              ) : (
-                <Text role="bodySm" tone="tertiary">
-                  Choose a team above to start a whole-team
-                  voice evaluation.
-                </Text>
-              )}
-            </Card>
-          ) : null
-        }
-        ListEmptyComponent={
-          profile?.role === "parent" ? (
-            <View style={styles.linkPrompt}>
-              <EmptyState
-                icon="link"
-                title="No child linked yet"
-                body="Joining the club doesn't automatically connect your child's record — your director gives you a separate one-time player code for that."
-              />
-              <Button label="Link a Player" onPress={() => router.push("/claim-player")} />
-            </View>
-          ) : profile?.role === "director" ? (
-            // Adding a player is director-gated in RLS (`players_insert_staff`),
-            // and the only add-player path in the app lives on Club Management
-            // — so only a director gets the button here.
-            <View style={styles.linkPrompt}>
+                <Button label="Link a Player" onPress={() => router.push("/claim-player")} />
+              </View>
+            ) : profile?.role === "director" ? (
+              // Adding a player is director-gated in RLS (`players_insert_staff`),
+              // and the only add-player path in the app lives on Club Management
+              // — so only a director gets the button here.
+              <View style={styles.linkPrompt}>
+                <EmptyState
+                  icon="people"
+                  title="No players yet"
+                  body="Start building your roster by adding your first player."
+                />
+                <Button label="Add Single Player" onPress={() => router.push("/club-management")} />
+              </View>
+            ) : (
               <EmptyState
                 icon="people"
                 title="No players yet"
-                body="Start building your roster by adding your first player."
+                body="Ask your director to add players to get the roster started."
               />
-              <Button label="Add Single Player" onPress={() => router.push("/club-management")} />
-            </View>
-          ) : (
-            <EmptyState
-              icon="people"
-              title="No players yet"
-              body="Ask your director to add players to get the roster started."
-            />
-          )
-        }
-        renderItem={({ item }) => (
-          <Card style={styles.playerCard}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={item.full_name}
-              style={styles.playerMain}
-              onPress={() =>
-                router.push(`/player/${item.id}` as never)
-              }
-            >
-              <Avatar name={item.full_name} uri={item.photo_url} />
+            )
+          }
+          renderItem={({ item }) => (
+            <Card style={styles.playerCard}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={item.full_name}
+                style={styles.playerMain}
+                onPress={() =>
+                  router.push(`/player/${item.id}` as never)
+                }
+              >
+                <Avatar name={item.full_name} uri={item.photo_url} />
 
-              <View style={styles.playerInfo}>
-                <Text role="h3">
-                  {item.full_name}
-                </Text>
-
-                {item.position ? (
-                  <Text role="bodySm" tone="secondary">
-                    {item.position}
+                <View style={styles.playerInfo}>
+                  <Text role="h3">
+                    {item.full_name}
                   </Text>
-                ) : null}
-              </View>
 
-              <Ionicons name="chevron-forward" size={18} color={color.icon.muted} />
-            </Pressable>
+                  {item.position ? (
+                    <Text role="bodySm" tone="secondary">
+                      {item.position}
+                    </Text>
+                  ) : null}
+                </View>
 
-            {isCoachOrDirector && (
-              <View style={styles.actions}>
-                <Button
-                  label="Evaluate"
-                  variant="secondary"
-                  size="sm"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/modals/evaluate-player",
-                      params: {
-                        playerId: item.id,
-                        playerName: item.full_name,
-                      },
-                    })
-                  }
-                />
+                <Ionicons name="chevron-forward" size={18} color={color.icon.muted} />
+              </Pressable>
 
-                <Button
-                  label="Remove"
-                  variant="danger"
-                  size="sm"
-                  onPress={() => {
-                    setRemoveError("");
-                    setPlayerToRemove(item);
-                  }}
-                />
-              </View>
-            )}
-          </Card>
+              {isCoachOrDirector && (
+                <View style={styles.actions}>
+                  <Button
+                    label="Evaluate"
+                    variant="secondary"
+                    size="sm"
+                    onPress={() =>
+                      router.push({
+                        pathname: "/modals/evaluate-player",
+                        params: {
+                          playerId: item.id,
+                          playerName: item.full_name,
+                        },
+                      })
+                    }
+                  />
+
+                  <Button
+                    label="Remove"
+                    variant="danger"
+                    size="sm"
+                    onPress={() => {
+                      setRemoveError("");
+                      setPlayerToRemove(item);
+                    }}
+                  />
+                </View>
+              )}
+            </Card>
+          )}
+        />
+        {canCreate && (
+          <Pressable
+            style={styles.fab}
+            onPress={() => router.push("/modals/add-player")}
+            accessibilityRole="button"
+            accessibilityLabel="Add player"
+          >
+            <Ionicons name="add" size={28} color={color.icon.inverse} />
+          </Pressable>
         )}
-      />
+      </View>
 
       <Modal
         visible={playerToRemove !== null}
@@ -357,6 +377,10 @@ export default function Players() {
 }
 
 const styles = StyleSheet.create({
+  listWrap: {
+    flex: 1,
+  },
+
   list: {
     flex: 1,
   },
@@ -364,6 +388,19 @@ const styles = StyleSheet.create({
   listContent: {
     padding: space[4],
     gap: space[4],
+  },
+
+  fab: {
+    position: "absolute",
+    right: space[5],
+    bottom: space[6],
+    width: 56,
+    height: 56,
+    borderRadius: radius.full,
+    backgroundColor: color.bg.brand,
+    alignItems: "center",
+    justifyContent: "center",
+    ...elevation.raised,
   },
 
   filterCard: {
