@@ -22,10 +22,8 @@ export function Field({ label, style, multiline, error, id, testID, ...rest }: F
         placeholderTextColor={color.text.tertiary}
         multiline={multiline}
         style={[styles.input, multiline && styles.multiline, error && styles.inputError, style]}
-        accessibilityState={error ? { invalid: true } : undefined}
         aria-invalid={error ? true : undefined}
         aria-errormessage={error ? errorId : undefined}
-        accessibilityErrorMessage={error}
         {...rest}
       />
       {error ? (

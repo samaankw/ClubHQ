@@ -13,12 +13,15 @@ export default function CreateOrJoinClub() {
   const [clubName, setClubName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [working, setWorking] = useState(false);
+  const [nameError, setNameError] = useState<string | undefined>();
+  const [codeError, setCodeError] = useState<string | undefined>();
 
   const createClub = async () => {
     if (!clubName.trim()) {
-      notify("Missing name", "Give your club a name.");
+      setNameError("Give your club a name.");
       return;
     }
+    setNameError(undefined);
     setWorking(true);
     // Runs server-side (SECURITY DEFINER) — this is the only way an account
     // becomes a director. Nothing about role is trusted from the client.
@@ -34,9 +37,10 @@ export default function CreateOrJoinClub() {
 
   const joinClub = async () => {
     if (!joinCode.trim()) {
-      notify("Missing code", "Enter the invite code your director shared with you.");
+      setCodeError("Enter the invite code your director shared with you.");
       return;
     }
+    setCodeError(undefined);
     setWorking(true);
     const { error } = await supabase.rpc("join_club", { code: joinCode.trim().toLowerCase() });
     setWorking(false);
@@ -75,7 +79,15 @@ export default function CreateOrJoinClub() {
               <Text role="bodySm" tone="secondary" style={styles.center}>
                 Creating a club makes you its director.
               </Text>
-              <Field placeholder="Club name" value={clubName} onChangeText={setClubName} />
+              <Field
+                placeholder="Club name"
+                value={clubName}
+                onChangeText={(v) => {
+                  setClubName(v);
+                  if (nameError) setNameError(undefined);
+                }}
+                error={nameError}
+              />
               <View style={styles.glow}>
                 <Button
                   label={working ? "Creating…" : "Create Club"}
@@ -97,7 +109,16 @@ export default function CreateOrJoinClub() {
                   deliberate second step, not a mistake.
                 </Text>
               )}
-              <Field placeholder="Invite code" value={joinCode} onChangeText={setJoinCode} autoCapitalize="none" />
+              <Field
+                placeholder="Invite code"
+                value={joinCode}
+                onChangeText={(v) => {
+                  setJoinCode(v);
+                  if (codeError) setCodeError(undefined);
+                }}
+                autoCapitalize="none"
+                error={codeError}
+              />
               <View style={styles.glow}>
                 <Button label={working ? "Joining…" : "Join Club"} onPress={joinClub} disabled={working} size="lg" fullWidth />
               </View>

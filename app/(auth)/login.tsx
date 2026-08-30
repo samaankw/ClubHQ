@@ -10,12 +10,15 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [emailError, setEmailError] = useState<string | undefined>();
+  const [passwordError, setPasswordError] = useState<string | undefined>();
 
   const handleLogin = async () => {
-    if (!email.trim() || !password) {
-      notify("Missing info", "Enter your email and password.");
-      return;
-    }
+    const nextEmailError = !email.trim() ? "Enter your email." : undefined;
+    const nextPasswordError = !password ? "Enter your password." : undefined;
+    setEmailError(nextEmailError);
+    setPasswordError(nextPasswordError);
+    if (nextEmailError || nextPasswordError) return;
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
     setLoading(false);
@@ -41,9 +44,22 @@ export default function Login() {
           autoCapitalize="none"
           keyboardType="email-address"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(v) => {
+            setEmail(v);
+            if (emailError) setEmailError(undefined);
+          }}
+          error={emailError}
         />
-        <Field placeholder="Password" secureTextEntry value={password} onChangeText={setPassword} />
+        <Field
+          placeholder="Password"
+          secureTextEntry
+          value={password}
+          onChangeText={(v) => {
+            setPassword(v);
+            if (passwordError) setPasswordError(undefined);
+          }}
+          error={passwordError}
+        />
         <Button label={loading ? "Signing in…" : "Sign In"} onPress={handleLogin} disabled={loading} fullWidth />
       </View>
 

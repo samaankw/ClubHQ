@@ -62,6 +62,8 @@ export default function ManageDrills() {
   const [watchingDrill, setWatchingDrill] = useState<Drill | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
+  const [titleError, setTitleError] = useState<string | undefined>();
+  const [descriptionError, setDescriptionError] = useState<string | undefined>();
 
   const canManageDrills = profile?.role === "coach" || profile?.role === "director";
 
@@ -74,6 +76,8 @@ export default function ManageDrills() {
     setTitle("");
     setDescription("");
     setVideoUrl("");
+    setTitleError(undefined);
+    setDescriptionError(undefined);
   };
 
   const startEdit = (drill: Drill) => {
@@ -154,7 +158,8 @@ export default function ManageDrills() {
 
   const submit = async () => {
     if (!title.trim() || !description.trim() || !profile?.club_id) {
-      notify("Missing info", "Add at least a title and description.");
+      setTitleError(!title.trim() ? "Add a drill title." : undefined);
+      setDescriptionError(!description.trim() ? "Add instructions a parent/player can follow." : undefined);
       return;
     }
     setSubmitting(true);
@@ -225,12 +230,24 @@ export default function ManageDrills() {
                   <Chip key={s.key} label={s.label} selected={skill === s.key} onPress={() => setSkill(s.key)} />
                 ))}
               </View>
-              <Field placeholder="Drill title" value={title} onChangeText={setTitle} />
+              <Field
+                placeholder="Drill title"
+                value={title}
+                onChangeText={(v) => {
+                  setTitle(v);
+                  if (titleError) setTitleError(undefined);
+                }}
+                error={titleError}
+              />
               <Field
                 placeholder="Instructions a parent/player can follow"
                 value={description}
-                onChangeText={setDescription}
+                onChangeText={(v) => {
+                  setDescription(v);
+                  if (descriptionError) setDescriptionError(undefined);
+                }}
                 multiline
+                error={descriptionError}
               />
               {videoUrl ? (
                 <Button label="Video uploaded ✓ — replace it" variant="secondary" fullWidth onPress={pickAndUploadVideo} disabled={uploadingVideo} />
