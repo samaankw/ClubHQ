@@ -87,7 +87,24 @@ export default function ClubManagement() {
   const createTeam = async () => {
     if (!profile.club_id || !teamName.trim()) return notify("Team name required", "Enter a team name first.");
     setBusy(true);
-    const { error } = await supabase.from("teams").insert({ club_id: profile.club_id, name: teamName.trim(), age_group: ageGroup.trim() || null, season: season.trim() || null });
+    // Assign the creating director to their own team straight away. A director
+    // who just made a team is its coach until they say otherwise — making them
+    // pick themselves out of a one-name list is ceremony, and leaving it unset
+    // shows "No coach assigned" on a team they personally created.
+    const { data: created, error } = await supabase
+      .from("teams")
+      .insert({ club_id: profile.club_id, name: teamName.trim(), age_group: ageGroup.trim() || null, season: season.trim() || null })
+      .select("id")
+      .single();
+    if (!error && created?.id) {
+      const { error: assignError } = await supabase.rpc("set_team_coach", {
+        p_team_id: created.id,
+        p_coach_id: profile.id,
+        p_assigned: true,
+      });
+      // Non-fatal: the team exists either way, and they can assign manually.
+      if (assignError) console.error("Couldn't self-assign as coach:", assignError.message);
+    }
     setBusy(false);
     if (error) return notify("Couldn't create team", error.message);
     setTeamName(""); setAgeGroup(""); setSeason(""); await load();
@@ -243,8 +260,20 @@ export default function ClubManagement() {
       {selectedTeam && (
         <>
           <Card style={{ gap: space[3] }}>
-            <CardHeader title={`Assigned Coaches — ${teamLabel(selectedTeam)}`} action="Archive team" onAction={archiveTeam} />
-            {staff.map((coach) => {
+            <CardHeader
+              title={
+                staff.length > 1
+                  ? `Assigned Coaches — ${teamLabel(selectedTeam)}`
+                  : teamLabel(selectedTeam)
+              }
+              action="Archive team"
+              onAction={archiveTeam}
+            />
+            {/* A one-person club has nobody to assign, so the picker is pure
+                ceremony — the director already coaches every team they make.
+                It appears on its own once a second coach joins the club. */}
+            {staff.length > 1 &&
+              staff.map((coach) => {
               const assigned = teamCoaches.some((tc) => tc.team_id === selectedTeam.id && tc.coach_id === coach.id);
               return (
                 <Pressable key={coach.id} style={styles.coachRow} onPress={() => toggleCoach(coach.id)}>
