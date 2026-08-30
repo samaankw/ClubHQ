@@ -3432,6 +3432,70 @@ Archiving info note
 
 ---
 
+### Task 32: Add players from the Players tab
+
+Today a player can be created in exactly one place: a form buried inside
+`app/club-management.tsx`. From the Players tab — the screen literally named
+after them — there is no way to add one. A director has to go Profile → Club
+Management → scroll → form.
+
+The Schedule tab already solves the same problem with a floating **+** that opens
+`/modals/create-event`. Players should work the same way.
+
+**Files:**
+- Create: `app/modals/add-player.tsx`
+- Modify: `app/(tabs)/players.tsx`
+
+#### 1. `app/modals/add-player.tsx`
+
+A focused create form: **team picker** (required — a player belongs to a team),
+**full name** (required), **position** (optional), **birth date** (optional,
+`YYYY-MM-DD`).
+
+Reuse the existing insert exactly as `club-management` performs it:
+
+```ts
+supabase.from("players").insert({
+  team_id, full_name: name.trim(), position: position.trim() || null, birth_date: birthDate || null,
+})
+```
+
+Validation is **inline**, matching Task 30's pattern — per-field errors on
+`Field`, no blocking dialogs, submit button never disabled by validity. Keep
+`club-management`'s birth-date rule byte-identical: `/^\d{4}-\d{2}-\d{2}$/`,
+optional when blank.
+
+Server failures still use `notify()` — those are not field errors.
+
+If the club has exactly one team, preselect it. If it has none, show an
+`EmptyState` explaining a team is needed first, with a button to Club
+Management — the same guide-them-forward pattern as the other empty states.
+
+Register it in `app/_layout.tsx` alongside the other modals, matching their
+presentation.
+
+#### 2. The Players tab
+
+Add a floating **+** identical to Schedule's — `app/(tabs)/schedule.tsx:128-136`
+and `styles.fab` are the reference. Same size, same position, same
+`accessibilityLabel` shape ("Add player"). Route to `/modals/add-player`.
+
+**Gate it to directors.** `players_insert_staff` requires `role = 'director'`,
+so a coach or parent must not see a button the database will reject. Schedule
+gates its FAB the same way via `canCreate` — follow that.
+
+On return from the modal, the roster must refresh so the new player appears.
+
+#### Hard rules
+
+- **Do not touch `app/club-management.tsx`.** Another task is restructuring it
+  concurrently. Consolidating its inline add-player form to reuse this modal is
+  a deliberate follow-up, not part of this task.
+- No schema change, no new RPC — the same insert against the same table.
+- No raw design values. `npm test` and `npm run verify` must pass.
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Token layers (Tasks 3–4), radius scale exploration (Task 3), component library (Tasks 5–12), token lint (Task 2), tab bar reskin (Task 13), first screen (Task 14). **Deferred to later plans by design:** the remaining 13 screen conversions (Plan 2) and the Figma variables and components (Plan 3). The spec's success criteria 3 and 4 are met across Plans 2 and 3, not here.
