@@ -3252,6 +3252,111 @@ yet", the explanatory line, and a **Go to Club Operations →** button routing t
 
 ---
 
+### Task 30: Inline form validation
+
+Every form in the app validates on submit and reports failures through a
+blocking modal — `notify("Missing info", "Please add a title, date, and a
+time.")`. The user fills a long form, presses the button, and gets a dialog that
+says something is wrong without showing *where*. On web that dialog is browser
+chrome; on native it is a system alert. Neither belongs in a form.
+
+There are **23 validation sites** across 10 files. Convert them all.
+
+**Important distinction:** there are also **73 `notify()` calls that are NOT
+validation** — `"Couldn't create team"`, `"Upload failed"`, `"Login failed"`.
+Those report a failed network or RPC call, are not tied to any one field, and
+**must stay as alerts.** Only convert the 23 listed below.
+
+**Files:**
+- Modify: `theme/tokens.ts` (one new token), `components/ui/Field.tsx`,
+  `__tests__/ui/Field.test.tsx`
+- Modify the 10 form files listed in the checklist
+
+#### 1. `color.border.danger`
+
+`color.border` has `subtle`, `default`, `brand` — no error state. Add:
+
+```ts
+    danger: palette.red[600],
+```
+
+#### 2. `Field` gains an error state
+
+```tsx
+export interface FieldProps extends TextInputProps {
+  label?: string;
+  /** Validation message. Renders the input in an error state with the text beneath. */
+  error?: string;
+}
+```
+
+When `error` is set: border becomes `color.border.danger`, and the message
+renders beneath in `<Text role="caption" tone="danger">`. Set
+`accessibilityInvalid` and point `aria-errormessage`/`accessibilityHint` at the
+message so it is announced, not merely coloured — colour alone is not an
+accessible error signal.
+
+Tests (RNTL 14 is async): no error → normal border, no message; with error →
+danger border and the message rendered; the message is associated with the
+input for accessibility.
+
+#### 3. The interaction rule
+
+- **Validate on submit, not on keystroke.** Nagging someone mid-typing is
+  hostile.
+- After a failed submit, **clear each field's error as the user fixes it**, so
+  the form becomes progressively correct rather than staying red.
+- **Do not disable the submit button.** A disabled button with no explanation
+  is worse than a button that tells you what is wrong — and it is a known
+  accessibility problem. Keep it enabled; validate on press.
+- Where validation applies to something that is not a `Field` (the signup terms
+  checkbox, `claim-player`'s consent, an audience/player picker), render
+  `<Text role="caption" tone="danger">` directly beneath that control.
+- **Scroll the first error into view** on failed submit where the form is long
+  enough to hide it — `create-event` and `create-announcement` especially.
+
+#### 4. The checklist — all 23 sites
+
+`app/modals/create-event.tsx` (7): missing title/date/time; invalid time;
+invalid date; invalid repeat count; team required; player required; no one
+attending.
+
+`app/modals/create-announcement.tsx` (3): missing title/message; group
+required; no one selected.
+
+`app/club-management.tsx` (3): team name required; missing team/player name;
+birth-date format.
+
+`app/claim-player.tsx` (3): code required; consent required; parent account
+required. **Note:** "parent account required" is a role error, not a field
+error — it belongs as a message on the screen, not under an input. Its consent
+copy is legally load-bearing and must not be reworded.
+
+`app/create-club.tsx` (2): missing name; missing code.
+
+`app/(auth)/update-password.tsx` (2): password too short; passwords don't match.
+
+`app/(auth)/login.tsx` (1): missing email/password — split into per-field errors.
+
+`app/(auth)/signup.tsx` (1): "Check your details" covers name, email and
+password length at once — split into three per-field errors. **The terms gate
+stays exactly as it is behaviourally**; only its presentation changes to an
+inline message.
+
+`app/manage-drills.tsx` (1): missing title/description.
+
+#### Hard rules
+
+- **No data-layer changes.** Every auth call, RPC, route, and the submit logic
+  itself stay as they are — only the *reporting* of validation failure changes.
+  The conditions being checked must remain identical: same fields, same regexes,
+  same bounds. Verify:
+  `git diff -- app | grep "^-" | grep -E "supabase\.|rpc\(|router\." || echo "clean"`
+- Keep all 73 server-error `notify()` calls.
+- No raw design values. `npm test` and `npm run verify` must pass.
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Token layers (Tasks 3–4), radius scale exploration (Task 3), component library (Tasks 5–12), token lint (Task 2), tab bar reskin (Task 13), first screen (Task 14). **Deferred to later plans by design:** the remaining 13 screen conversions (Plan 2) and the Figma variables and components (Plan 3). The spec's success criteria 3 and 4 are met across Plans 2 and 3, not here.
