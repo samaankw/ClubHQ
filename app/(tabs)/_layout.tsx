@@ -35,9 +35,17 @@ export default function TabsLayout() {
           // device's own bottom safe-area inset (home-indicator strip) so
           // labels never sit inside that strip. A fixed height here would
           // override react-navigation's own inset-aware sizing.
-          height: space[9] + space[4] + insets.bottom,
+          // Vertical budget, measured rather than guessed: a 24px icon, the
+          // ~4px gap react-navigation puts between icon and label, and a 14px
+          // label line = 42px of content. The previous 64px height with 8/12
+          // padding left only 44px, which clipped labels at normal font scale.
+          //
+          // 72 base with 8/8 padding leaves 56px of content — 14px of slack,
+          // enough to survive ~1.5x OS text scaling. The bottom safe-area inset
+          // is added on top so labels never sit in the home-indicator strip.
+          height: space[8] + space[7] + insets.bottom,
           paddingTop: space[2],
-          paddingBottom: space[3] + insets.bottom,
+          paddingBottom: space[2] + insets.bottom,
         },
         tabBarLabelStyle: {
           fontSize: type.caption.fontSize,
