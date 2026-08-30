@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Platform, Pressable, StyleSheet, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, findNodeHandle, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { format, addMonths, startOfMonth } from "date-fns";
 import { supabase } from "@/lib/supabase";
@@ -8,10 +8,11 @@ import { PaymentStatus, Player, PlayerPayment, Profile, Team } from "@/types/db"
 import { shareText } from "@/lib/shareCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { confirmAsync, notify } from "@/lib/alertCompat";
-import { Screen, Card, CardHeader, Eyebrow, Text, Button, Badge, Avatar, Field, IconChip, Divider, EmptyState } from "@/components/ui";
+import { Screen, Card, Eyebrow, Text, Button, Badge, Avatar, Field, IconChip, Divider, EmptyState } from "@/components/ui";
 import { color, space, radius, borderWidth } from "@/theme";
 
 type TeamCoach = { team_id: string; coach_id: string };
+type ScrollTarget = "addPlayer" | "roster";
 
 export default function ClubManagement() {
   const { profile } = useAuth();
@@ -33,6 +34,51 @@ export default function ClubManagement() {
   const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(new Date()));
   const [payments, setPayments] = useState<PlayerPayment[]>([]);
   const period = format(selectedMonth, "yyyy-MM");
+
+  // Scroll-into-view for the team card's Add Player / Invite Parents buttons
+  // (Task 31). Tapping either always selects the team, which is what these
+  // buttons previously did and nothing else — a no-op when that team was
+  // already selected. `pendingScroll` records which card to reveal; the
+  // effect below waits two animation frames after the state update commits
+  // so the target card (which may only just be mounting) has a settled
+  // native layout before we measure it. Scrolling on the same tick would
+  // race that layout and can land on the wrong offset.
+  const scrollRef = useRef<ScrollView>(null);
+  const addPlayerCardRef = useRef<View>(null);
+  const rosterCardRef = useRef<View>(null);
+  const [pendingScroll, setPendingScroll] = useState<ScrollTarget | null>(null);
+
+  const scrollToCard = useCallback((targetRef: React.RefObject<View | null>) => {
+    const scrollNode = scrollRef.current;
+    const target = targetRef.current;
+    const scrollHandle = scrollNode && findNodeHandle(scrollNode);
+    if (!scrollNode || !target || !scrollHandle) return;
+    target.measureLayout(
+      scrollHandle,
+      (_left, top) => scrollNode.scrollTo({ y: Math.max(top - space[4], 0), animated: true }),
+      () => {}
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!pendingScroll) return;
+    const target = pendingScroll === "addPlayer" ? addPlayerCardRef : rosterCardRef;
+    setPendingScroll(null);
+    const raf1 = requestAnimationFrame(() => {
+      requestAnimationFrame(() => scrollToCard(target));
+    });
+    return () => cancelAnimationFrame(raf1);
+  }, [pendingScroll, scrollToCard]);
+
+  const focusAddPlayer = (teamId: string) => {
+    setSelectedTeamId(teamId);
+    setPendingScroll("addPlayer");
+  };
+
+  const focusRoster = (teamId: string) => {
+    setSelectedTeamId(teamId);
+    setPendingScroll("roster");
+  };
 
   const load = useCallback(async () => {
     if (!profile?.club_id || profile.role !== "director") return;
@@ -191,7 +237,7 @@ export default function ClubManagement() {
   };
 
   return (
-    <Screen>
+    <Screen ref={scrollRef}>
       <Text role="h1">Run the club without opening Supabase</Text>
       <Text tone="secondary">Create teams, build rosters, assign coaches, and generate one-time parent link codes.</Text>
 
@@ -259,10 +305,10 @@ export default function ClubManagement() {
 
                   <View style={styles.row}>
                     <View style={{ flex: 1 }}>
-                      <Button label="Add Player" variant="secondary" size="sm" fullWidth onPress={() => setSelectedTeamId(team.id)} />
+                      <Button label="Add Player" variant="secondary" size="sm" fullWidth onPress={() => focusAddPlayer(team.id)} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Button label="Invite Parents" variant="ghost" size="sm" fullWidth onPress={() => setSelectedTeamId(team.id)} />
+                      <Button label="Invite Parents" variant="ghost" size="sm" fullWidth onPress={() => focusRoster(team.id)} />
                     </View>
                   </View>
                 </Card>
@@ -272,118 +318,8 @@ export default function ClubManagement() {
         )}
       </View>
 
-      {selectedTeam && (
-        <>
-          <Card style={{ gap: space[3] }}>
-            <CardHeader
-              title={
-                staff.length > 1
-                  ? `Assigned Coaches — ${teamLabel(selectedTeam)}`
-                  : teamLabel(selectedTeam)
-              }
-              action="Archive team"
-              onAction={archiveTeam}
-            />
-            {/* A one-person club has nobody to assign, so the picker is pure
-                ceremony — the director already coaches every team they make.
-                It appears on its own once a second coach joins the club. */}
-            {staff.length > 1 &&
-              staff.map((coach) => {
-              const assigned = teamCoaches.some((tc) => tc.team_id === selectedTeam.id && tc.coach_id === coach.id);
-              return (
-                <Pressable key={coach.id} style={styles.coachRow} onPress={() => toggleCoach(coach.id)}>
-                  <Avatar uri={coach.avatar_url} name={coach.full_name} size={32} />
-                  <Text style={{ flex: 1 }}>{coach.full_name} · {coach.role}</Text>
-                  <Ionicons
-                    name={assigned ? "checkmark-circle" : "ellipse-outline"}
-                    size={20}
-                    color={assigned ? color.icon.brand : color.icon.muted}
-                  />
-                </Pressable>
-              );
-            })}
-          </Card>
-
-          <Card style={{ gap: space[3] }}>
-            <Eyebrow>Add Player to {teamLabel(selectedTeam)}</Eyebrow>
-            <Field
-              placeholder="Player full name"
-              value={playerName}
-              onChangeText={(v) => {
-                setPlayerName(v);
-                if (playerNameError) setPlayerNameError(undefined);
-              }}
-              error={playerNameError}
-            />
-            <View style={styles.row}>
-              <View style={{ flex: 1 }}>
-                <Field placeholder="Position" value={position} onChangeText={setPosition} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Field
-                  placeholder="Birth date YYYY-MM-DD"
-                  value={birthDate}
-                  onChangeText={(v) => {
-                    setBirthDate(v);
-                    if (birthDateError) setBirthDateError(undefined);
-                  }}
-                  error={birthDateError}
-                />
-              </View>
-            </View>
-            <Button label="Add Player" onPress={addPlayer} disabled={busy} fullWidth />
-          </Card>
-
-          <Card style={{ gap: space[3] }}>
-            <View style={styles.headerRow}>
-              <Eyebrow>Roster ({selectedPlayers.length})</Eyebrow>
-              <View style={styles.monthNav}>
-                <Pressable onPress={() => setSelectedMonth((m) => addMonths(m, -1))} hitSlop={8}>
-                  <Ionicons name="chevron-back" size={18} color={color.icon.brand} />
-                </Pressable>
-                <Text role="label">{format(selectedMonth, "MMM yyyy")}</Text>
-                <Pressable onPress={() => setSelectedMonth((m) => addMonths(m, 1))} hitSlop={8}>
-                  <Ionicons name="chevron-forward" size={18} color={color.icon.brand} />
-                </Pressable>
-              </View>
-            </View>
-            <Text tone="secondary" role="bodySm">
-              Tap Paid/Unpaid to record training fees for {format(selectedMonth, "MMMM")} — no money moves through the app.
-            </Text>
-            {selectedPlayers.length === 0 ? (
-              <EmptyState title="No players yet" body="Add players to this team to start building the roster." />
-            ) : (
-              selectedPlayers.map((player, i) => {
-                const status: PaymentStatus = payments.find((p) => p.player_id === player.id)?.status ?? "unpaid";
-                const isPaid = status === "paid";
-                return (
-                  <React.Fragment key={player.id}>
-                    {i > 0 && <Divider />}
-                    <View style={styles.playerRow}>
-                      <View style={{ flex: 1, gap: space[1] }}>
-                        <Text role="h3">{player.full_name}</Text>
-                        <Text tone="secondary" role="bodySm">
-                          {player.position || "Position not set"}{player.parent_id ? " · Parent linked" : " · Parent not linked"}
-                        </Text>
-                      </View>
-                      <Pressable onPress={() => togglePayment(player.id)}>
-                        <Badge label={isPaid ? "Paid" : "Unpaid"} tone={isPaid ? "success" : "danger"} />
-                      </Pressable>
-                      <Button label="Parent code" variant="secondary" size="sm" onPress={() => createParentCode(player)} />
-                      <Pressable onPress={() => archivePlayer(player)} hitSlop={8}>
-                        <Text role="caption" tone="danger">Archive</Text>
-                      </Pressable>
-                    </View>
-                  </React.Fragment>
-                );
-              })
-            )}
-          </Card>
-        </>
-      )}
-
       <View style={styles.dashedContainer}>
-        <Eyebrow>Quick Create Team</Eyebrow>
+        <Eyebrow>Create Team</Eyebrow>
         <Field
           placeholder="Team name, e.g. U10 Boys Red"
           value={teamName}
@@ -403,6 +339,135 @@ export default function ClubManagement() {
         </View>
         <Button label="Create Team" onPress={createTeam} disabled={busy} fullWidth />
       </View>
+
+      {selectedTeam && (
+        <>
+          {/* A one-person club has nobody to assign, so the picker is pure
+              ceremony — the director already coaches every team they make.
+              The whole card appears only once a second coach joins the club;
+              otherwise there is nothing to show, so nothing renders. */}
+          {staff.length > 1 && (
+            <Card style={{ gap: space[3] }}>
+              <Eyebrow>Assigned Coaches — {teamLabel(selectedTeam)}</Eyebrow>
+              {staff.map((coach) => {
+                const assigned = teamCoaches.some((tc) => tc.team_id === selectedTeam.id && tc.coach_id === coach.id);
+                return (
+                  <Pressable key={coach.id} style={styles.coachRow} onPress={() => toggleCoach(coach.id)}>
+                    <Avatar uri={coach.avatar_url} name={coach.full_name} size={32} />
+                    <Text style={{ flex: 1 }}>{coach.full_name} · {coach.role}</Text>
+                    <Ionicons
+                      name={assigned ? "checkmark-circle" : "ellipse-outline"}
+                      size={20}
+                      color={assigned ? color.icon.brand : color.icon.muted}
+                    />
+                  </Pressable>
+                );
+              })}
+            </Card>
+          )}
+
+          <View ref={addPlayerCardRef} collapsable={false}>
+            <Card style={{ gap: space[3] }}>
+              <Eyebrow>Add Player to {teamLabel(selectedTeam)}</Eyebrow>
+              <Field
+                placeholder="Player full name"
+                value={playerName}
+                onChangeText={(v) => {
+                  setPlayerName(v);
+                  if (playerNameError) setPlayerNameError(undefined);
+                }}
+                error={playerNameError}
+              />
+              <View style={styles.row}>
+                <View style={{ flex: 1 }}>
+                  <Field placeholder="Position" value={position} onChangeText={setPosition} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Field
+                    placeholder="Birth date YYYY-MM-DD"
+                    value={birthDate}
+                    onChangeText={(v) => {
+                      setBirthDate(v);
+                      if (birthDateError) setBirthDateError(undefined);
+                    }}
+                    error={birthDateError}
+                  />
+                </View>
+              </View>
+              <Button label="Add Player" onPress={addPlayer} disabled={busy} fullWidth />
+            </Card>
+          </View>
+
+          <View ref={rosterCardRef} collapsable={false}>
+            <Card style={{ gap: space[3] }}>
+              <Eyebrow>Roster ({selectedPlayers.length})</Eyebrow>
+              {selectedPlayers.length === 0 ? (
+                <EmptyState title="No players yet" body="Add players to this team to start building the roster." />
+              ) : (
+                selectedPlayers.map((player, i) => (
+                  <React.Fragment key={player.id}>
+                    {i > 0 && <Divider />}
+                    <View style={styles.playerRow}>
+                      <View style={{ flex: 1, gap: space[1] }}>
+                        <Text role="h3">{player.full_name}</Text>
+                        <Text tone="secondary" role="bodySm">
+                          {player.position || "Position not set"}{player.parent_id ? " · Parent linked" : " · Parent not linked"}
+                        </Text>
+                      </View>
+                      <Button label="Parent code" variant="secondary" size="sm" onPress={() => createParentCode(player)} />
+                      <Pressable onPress={() => archivePlayer(player)} hitSlop={8}>
+                        <Text role="caption" tone="danger">Archive</Text>
+                      </Pressable>
+                    </View>
+                  </React.Fragment>
+                ))
+              )}
+            </Card>
+          </View>
+
+          <Card style={{ gap: space[3] }}>
+            <View style={styles.headerRow}>
+              <Eyebrow>Training Fees</Eyebrow>
+              <View style={styles.monthNav}>
+                <Pressable onPress={() => setSelectedMonth((m) => addMonths(m, -1))} hitSlop={8}>
+                  <Ionicons name="chevron-back" size={18} color={color.icon.brand} />
+                </Pressable>
+                <Text role="label">{format(selectedMonth, "MMM yyyy")}</Text>
+                <Pressable onPress={() => setSelectedMonth((m) => addMonths(m, 1))} hitSlop={8}>
+                  <Ionicons name="chevron-forward" size={18} color={color.icon.brand} />
+                </Pressable>
+              </View>
+            </View>
+            <Text tone="secondary" role="bodySm">
+              Tap Paid/Unpaid to record training fees for {format(selectedMonth, "MMMM")} — no money moves through the app.
+            </Text>
+            {selectedPlayers.length === 0 ? (
+              <EmptyState title="No players yet" body="Add players to this team to start tracking training fees." />
+            ) : (
+              selectedPlayers.map((player, i) => {
+                const status: PaymentStatus = payments.find((p) => p.player_id === player.id)?.status ?? "unpaid";
+                const isPaid = status === "paid";
+                return (
+                  <React.Fragment key={player.id}>
+                    {i > 0 && <Divider />}
+                    <View style={styles.playerRow}>
+                      <Text style={{ flex: 1 }}>{player.full_name}</Text>
+                      <Pressable onPress={() => togglePayment(player.id)}>
+                        <Badge label={isPaid ? "Paid" : "Unpaid"} tone={isPaid ? "success" : "danger"} />
+                      </Pressable>
+                    </View>
+                  </React.Fragment>
+                );
+              })
+            )}
+          </Card>
+
+          <Card style={{ gap: space[3] }}>
+            <Eyebrow tone="danger">Archive Team</Eyebrow>
+            <Button label="Archive team" variant="danger" fullWidth onPress={archiveTeam} />
+          </Card>
+        </>
+      )}
 
       <View style={styles.infoCallout}>
         <IconChip name="information-circle" tone="brand" />
