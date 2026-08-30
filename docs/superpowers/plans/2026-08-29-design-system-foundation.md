@@ -3143,6 +3143,115 @@ would be wrong for a club in Marietta; the club's own history is always right.)
 
 ---
 
+### Task 29: Guide a new coach through setup
+
+A coach who has just created a club lands on a dashboard with nothing on it and
+no indication of what to do. There is genuinely nothing useful they *can* do
+until a team exists — so the home screen should guide them to that instead of
+showing empty stats.
+
+Three mockups: `14 - Onboarding.png`, `15.png`, `16.png`.
+
+**Everything here derives from existing tables. No schema change, no migration.**
+
+**Files:**
+- Create: `components/ui/SetupChecklist.tsx`, `__tests__/ui/SetupChecklist.test.tsx`
+- Modify: `lib/hooks.ts`, `components/ui/index.ts`, `app/(tabs)/dashboard.tsx`,
+  `app/(tabs)/players.tsx`, `app/modals/new-conversation.tsx`
+
+#### 1. `useSetupProgress` in `lib/hooks.ts`
+
+```ts
+export interface SetupStep {
+  key: "club" | "team" | "players" | "practice";
+  title: string;
+  /** Shown under the title once complete, e.g. the club's name. */
+  detail?: string;
+  done: boolean;
+  /** Where tapping it should go. */
+  href: string;
+}
+export function useSetupProgress(): {
+  steps: SetupStep[];
+  completed: number;
+  total: number;
+  allDone: boolean;
+  loading: boolean;
+}
+```
+
+Derivation, all reads:
+- **club** — `profile.club_id` is set. `detail` = the club's name + " established".
+- **team** — at least one non-archived row in `teams` for the club → `/club-management`
+- **players** — at least one non-archived row in `players` on the club's teams → `/(tabs)/players`
+- **practice** — at least one row in `events` for the club → `/modals/create-event`
+
+Use `count: "exact", head: true` so these are cheap count queries, not full selects.
+
+#### 2. `SetupChecklist`
+
+```tsx
+export interface SetupChecklistProps {
+  steps: SetupStep[];
+  completed: number;
+  total: number;
+  onStepPress: (step: SetupStep) => void;
+}
+```
+
+Per mockup 14: a `Card` headed by `<Eyebrow tone="brand">Getting Started</Eyebrow>`
+with "N/M Complete" right-aligned (use `CardHeader`). Then one row per step:
+
+- **complete** — a filled green circle with a white check, title, and `detail` beneath in `tone="tertiary"`
+- **the next incomplete step** — a tinted `IconChip`, the title, and
+  `Recommended next step` beneath in `tone="brand"`, plus a chevron. Pressable.
+- **later steps** — the same but at `opacity.disabled`, no chevron, **not pressable**
+
+Only the first incomplete step is actionable. That is the whole point: one next
+action, not four competing ones.
+
+Tests (RNTL 14 is async): renders a row per step; the completed row shows its
+detail; only the first incomplete step is pressable and fires `onStepPress`;
+a later incomplete step does not fire; the header shows "1/4 Complete".
+
+#### 3. Dashboard
+
+Show `SetupChecklist` directly under the club hero **while `!allDone`**, and
+hide it entirely once setup is complete — it is onboarding, not furniture.
+
+Per mockup 14, dim the "Club Status" and "Players" stat tiles to
+`opacity.disabled` while their value is 0, so an empty club reads as
+not-yet-set-up rather than broken.
+
+#### 4. Players empty state (mockup 16)
+
+Replace the bare `<EmptyState title="No players yet." />` with the mockup's
+version: icon, "No players yet", the explanatory line, and an **Add Single
+Player** primary button.
+
+**Do not add "Import Roster"** — no CSV import exists, and this project does not
+ship controls that do nothing. Decided 2026-08-29. Record it in
+`docs/mockup-gaps.md` as a scoped follow-up instead.
+
+#### 5. New Message empty state (mockup 15)
+
+`app/modals/new-conversation.tsx` currently renders a bare line of grey text
+when a club has no teams. Replace with the mockup's state: icon, "No teams found
+yet", the explanatory line, and a **Go to Club Operations →** button routing to
+`/club-management` — the same guide-them-forward idea as the checklist.
+
+#### Hard rules
+
+- Presentation and read-only queries only. No writes, no schema change, no new
+  RPC. The existing conversation-creation and player-add paths are untouched.
+- Respect roles: the checklist is for staff who can act on it. A **parent**
+  must never see "Setup your first team" — they cannot create teams. Show the
+  checklist only when `profile.role` is `director` (team/player creation is
+  director-gated in RLS). Verify against the policies before assuming.
+- No raw design values. `npm test` and `npm run verify` must pass.
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Token layers (Tasks 3–4), radius scale exploration (Task 3), component library (Tasks 5–12), token lint (Task 2), tab bar reskin (Task 13), first screen (Task 14). **Deferred to later plans by design:** the remaining 13 screen conversions (Plan 2) and the Figma variables and components (Plan 3). The spec's success criteria 3 and 4 are met across Plans 2 and 3, not here.
