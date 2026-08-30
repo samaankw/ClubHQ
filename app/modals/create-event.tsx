@@ -130,6 +130,14 @@ export default function CreateEvent() {
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [repeatWeeksStr, setRepeatWeeksStr] = useState("8");
   const [submitting, setSubmitting] = useState(false);
+  const [titleError, setTitleError] = useState<string | undefined>();
+  const [dateError, setDateError] = useState<string | undefined>();
+  const [timeError, setTimeError] = useState<string | undefined>();
+  const [teamError, setTeamError] = useState<string | undefined>();
+  const [attendingError, setAttendingError] = useState<string | undefined>();
+  const [playerError, setPlayerError] = useState<string | undefined>();
+  const [repeatError, setRepeatError] = useState<string | undefined>();
+  const scrollRef = useRef<ScrollView>(null);
 
   const togglePlayer = (id: string) => {
     setSelectedPlayerIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
@@ -256,20 +264,51 @@ export default function CreateEvent() {
   }, [audienceMode, teams]);
 
   const handleSubmit = async () => {
-    if (!title.trim() || !dateStr || !hourStr || !minuteStr) return notify("Missing info", "Please add a title, date, and a time.");
+    if (!title.trim() || !dateStr || !hourStr || !minuteStr) {
+      setTitleError(!title.trim() ? "Add a title." : undefined);
+      setDateError(!dateStr ? "Pick a date." : undefined);
+      setTimeError(!hourStr || !minuteStr ? "Pick a time." : undefined);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    setTitleError(undefined);
+    setDateError(undefined);
     if (!profile?.club_id) return notify("No club found", "Your profile isn't linked to a club yet.");
-    if (audienceMode === "team" && !teamId) return notify("Team required", "Pick a training group for this event.");
-    if (audienceMode === "team" && teamRoster.length > 0 && !attendingIds.length) return notify("No one attending", "Pick at least one player training that day, or switch groups.");
-    if (audienceMode === "player" && !selectedPlayerIds.length) return notify("Player required", "Pick who this session is for.");
+    if (audienceMode === "team" && !teamId) {
+      setTeamError("Pick a training group for this event.");
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    setTeamError(undefined);
+    if (audienceMode === "team" && teamRoster.length > 0 && !attendingIds.length) {
+      setAttendingError("Pick at least one player training that day, or switch groups.");
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    setAttendingError(undefined);
+    if (audienceMode === "player" && !selectedPlayerIds.length) {
+      setPlayerError("Pick who this session is for.");
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    setPlayerError(undefined);
 
     const hour12 = parseInt(hourStr, 10);
     const minute = parseInt(minuteStr, 10);
     if (isNaN(hour12) || hour12 < 1 || hour12 > 12 || isNaN(minute) || minute < 0 || minute > 59) {
-      return notify("Invalid time", "Hour must be 1–12 and minutes 0–59.");
+      setTimeError("Hour must be 1–12 and minutes 0–59.");
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
     }
+    setTimeError(undefined);
     const hour24 = (hour12 % 12) + (meridiem === "PM" ? 12 : 0);
     const startsAt = new Date(`${dateStr}T${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`);
-    if (isNaN(startsAt.getTime())) return notify("Invalid date", "Use YYYY-MM-DD for the date.");
+    if (isNaN(startsAt.getTime())) {
+      setDateError("Use YYYY-MM-DD for the date.");
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    setDateError(undefined);
 
     // Only attach an explicit player list when it's a *subset* of the group
     // (someone's out that day) or a private session — a full group roster
@@ -279,8 +318,11 @@ export default function CreateEvent() {
 
     const occurrenceCount = !isEditing && repeatWeekly ? parseInt(repeatWeeksStr, 10) : 1;
     if (!isEditing && repeatWeekly && (isNaN(occurrenceCount) || occurrenceCount < 2 || occurrenceCount > 52)) {
-      return notify("Invalid repeat count", "Enter a number of weeks between 2 and 52.");
+      setRepeatError("Enter a number of weeks between 2 and 52.");
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
     }
+    setRepeatError(undefined);
 
     setSubmitting(true);
     // Player-targeted sessions (one or more specific players, possibly
@@ -374,7 +416,7 @@ export default function CreateEvent() {
   const showCustomTime = timeChip === CUSTOM_TIME;
 
   return (
-    <Screen>
+    <Screen ref={scrollRef}>
       <Stack.Screen
         options={{
           title: isEditing ? "Edit Event" : "New Event",
@@ -406,10 +448,23 @@ export default function CreateEvent() {
         <View style={styles.section}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
             {teams.map((team) => (
-              <Chip key={team.id} label={teamLabel(team)} selected={teamId === team.id} onPress={() => setTeamId(team.id)} />
+              <Chip
+                key={team.id}
+                label={teamLabel(team)}
+                selected={teamId === team.id}
+                onPress={() => {
+                  setTeamId(team.id);
+                  if (teamError) setTeamError(undefined);
+                }}
+              />
             ))}
           </ScrollView>
           {!teams.length && <Text tone="secondary">No training groups assigned yet.</Text>}
+          {teamError ? (
+            <Text role="caption" tone="danger">
+              {teamError}
+            </Text>
+          ) : null}
         </View>
       )}
 
@@ -421,8 +476,21 @@ export default function CreateEvent() {
             onAction={() => setAttendingIds(attendingIds.length === teamRoster.length ? [] : teamRoster.map((p) => p.id))}
           />
           {teamRoster.map((p) => (
-            <CheckRow key={p.id} label={p.full_name} checked={attendingIds.includes(p.id)} onPress={() => toggleAttending(p.id)} />
+            <CheckRow
+              key={p.id}
+              label={p.full_name}
+              checked={attendingIds.includes(p.id)}
+              onPress={() => {
+                toggleAttending(p.id);
+                if (attendingError) setAttendingError(undefined);
+              }}
+            />
           ))}
+          {attendingError ? (
+            <Text role="caption" tone="danger">
+              {attendingError}
+            </Text>
+          ) : null}
         </Card>
       )}
 
@@ -435,15 +503,31 @@ export default function CreateEvent() {
               label={p.full_name}
               meta={p.teams?.age_group ?? undefined}
               checked={selectedPlayerIds.includes(p.id)}
-              onPress={() => togglePlayer(p.id)}
+              onPress={() => {
+                togglePlayer(p.id);
+                if (playerError) setPlayerError(undefined);
+              }}
             />
           ))}
           {!players.length && <Text tone="secondary">No players found on your teams yet.</Text>}
+          {playerError ? (
+            <Text role="caption" tone="danger">
+              {playerError}
+            </Text>
+          ) : null}
         </Card>
       )}
 
       <View style={styles.section}>
-        <Field placeholder="Title (e.g. U10 vs Northside FC)" value={title} onChangeText={setTitle} />
+        <Field
+          placeholder="Title (e.g. U10 vs Northside FC)"
+          value={title}
+          onChangeText={(v) => {
+            setTitle(v);
+            if (titleError) setTitleError(undefined);
+          }}
+          error={titleError}
+        />
 
         {!!recentLocations.length && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
@@ -464,15 +548,41 @@ export default function CreateEvent() {
         <Eyebrow>Date</Eyebrow>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
           {quickDates.map((q) => (
-            <Chip key={q.label} label={q.label} selected={dateStr === q.value} onPress={() => setDateStr(q.value)} />
+            <Chip
+              key={q.label}
+              label={q.label}
+              selected={dateStr === q.value}
+              onPress={() => {
+                setDateStr(q.value);
+                if (dateError) setDateError(undefined);
+              }}
+            />
           ))}
         </ScrollView>
-        <Calendar value={selectedDate} onChange={(d) => setDateStr(format(d, "yyyy-MM-dd"))} />
+        <Calendar
+          value={selectedDate}
+          onChange={(d) => {
+            setDateStr(format(d, "yyyy-MM-dd"));
+            if (dateError) setDateError(undefined);
+          }}
+        />
+        {dateError ? (
+          <Text role="caption" tone="danger">
+            {dateError}
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.section}>
         <Eyebrow>Time</Eyebrow>
-        <FilterChipRow options={TIME_OPTIONS} value={timeChip} onChange={handleTimePick} />
+        <FilterChipRow
+          options={TIME_OPTIONS}
+          value={timeChip}
+          onChange={(label) => {
+            handleTimePick(label);
+            if (timeError) setTimeError(undefined);
+          }}
+        />
         {showCustomTime && (
           <View style={styles.iconFieldRow}>
             <IconChip name="time-outline" />
@@ -481,7 +591,10 @@ export default function CreateEvent() {
                 style={styles.timeInput}
                 placeholder="3"
                 value={hourStr}
-                onChangeText={setHourStr}
+                onChangeText={(v) => {
+                  setHourStr(v);
+                  if (timeError) setTimeError(undefined);
+                }}
                 keyboardType="number-pad"
                 maxLength={2}
               />
@@ -490,7 +603,10 @@ export default function CreateEvent() {
                 style={styles.timeInput}
                 placeholder="00"
                 value={minuteStr}
-                onChangeText={setMinuteStr}
+                onChangeText={(v) => {
+                  setMinuteStr(v);
+                  if (timeError) setTimeError(undefined);
+                }}
                 keyboardType="number-pad"
                 maxLength={2}
               />
@@ -499,6 +615,11 @@ export default function CreateEvent() {
             </View>
           </View>
         )}
+        {timeError ? (
+          <Text role="caption" tone="danger">
+            {timeError}
+          </Text>
+        ) : null}
       </View>
 
       {!isEditing && (
@@ -510,13 +631,21 @@ export default function CreateEvent() {
               <Field
                 style={styles.repeatWeeksInput}
                 value={repeatWeeksStr}
-                onChangeText={setRepeatWeeksStr}
+                onChangeText={(v) => {
+                  setRepeatWeeksStr(v);
+                  if (repeatError) setRepeatError(undefined);
+                }}
                 keyboardType="number-pad"
                 maxLength={2}
               />
               <Text tone="secondary">weeks</Text>
             </View>
           )}
+          {repeatError ? (
+            <Text role="caption" tone="danger">
+              {repeatError}
+            </Text>
+          ) : null}
         </Card>
       )}
 

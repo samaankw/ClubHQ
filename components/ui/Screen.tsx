@@ -20,7 +20,13 @@ export interface ScreenProps extends ViewProps {
  * The cap lives here rather than in each screen so every page gets it by
  * construction — a screen has to opt out deliberately, not remember to opt in.
  */
-export function Screen({ scroll = true, style, children, ...rest }: ScreenProps) {
+// Forwards the ref to the underlying ScrollView (when `scroll` is true) so a
+// long form can scroll a validation error back into view on failed submit —
+// e.g. `scrollRef.current?.scrollTo({ y: 0, animated: true })`.
+export const Screen = React.forwardRef<ScrollView, ScreenProps>(function Screen(
+  { scroll = true, style, children, ...rest },
+  ref
+) {
   const insets = useSafeAreaInsets();
   const pad = { paddingBottom: insets.bottom + space[4] };
 
@@ -35,12 +41,12 @@ export function Screen({ scroll = true, style, children, ...rest }: ScreenProps)
   }
   return (
     <View style={[styles.page, style]} {...rest}>
-      <ScrollView contentContainerStyle={[styles.grow, pad]}>
+      <ScrollView ref={ref} contentContainerStyle={[styles.grow, pad]}>
         <View style={styles.column}>{children}</View>
       </ScrollView>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: color.bg.page },

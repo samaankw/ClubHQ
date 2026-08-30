@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, Pressable, StyleSheet, ScrollView } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Stack, useLocalSearchParams } from "expo-router";
@@ -75,6 +75,11 @@ export default function CreateAnnouncement() {
   const [players, setPlayers] = useState<PlayerOption[]>([]);
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [titleError, setTitleError] = useState<string | undefined>();
+  const [bodyError, setBodyError] = useState<string | undefined>();
+  const [groupError, setGroupError] = useState<string | undefined>();
+  const [audienceError, setAudienceError] = useState<string | undefined>();
+  const scrollRef = useRef<ScrollView>(null);
 
   // Editing only changes the message itself (category/title/body/pin) — not
   // who it was sent to. Re-targeting after the fact would mean some
@@ -138,7 +143,14 @@ export default function CreateAnnouncement() {
   };
 
   const handleSubmit = async () => {
-    if (!title.trim() || !body.trim()) return notify("Missing info", "Please add a title and message.");
+    if (!title.trim() || !body.trim()) {
+      setTitleError(!title.trim() ? "Add a title." : undefined);
+      setBodyError(!body.trim() ? "Add a message." : undefined);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    setTitleError(undefined);
+    setBodyError(undefined);
     if (!profile?.club_id) return notify("No club found", "Your profile isn't linked to a club yet.");
 
     if (isEditing) {
@@ -153,10 +165,18 @@ export default function CreateAnnouncement() {
       return;
     }
 
-    if (targetType === "team" && !teamId) return notify("Group required", "Pick a training group to post to.");
-    if ((targetType === "players" || targetType === "parents") && !selectedPlayerIds.length) {
-      return notify("No one selected", "Pick at least one player.");
+    if (targetType === "team" && !teamId) {
+      setGroupError("Pick a training group to post to.");
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
     }
+    setGroupError(undefined);
+    if ((targetType === "players" || targetType === "parents") && !selectedPlayerIds.length) {
+      setAudienceError("Pick at least one player.");
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    setAudienceError(undefined);
 
     setSubmitting(true);
     const { data, error } = await supabase
@@ -202,7 +222,7 @@ export default function CreateAnnouncement() {
   };
 
   return (
-    <Screen>
+    <Screen ref={scrollRef}>
       <Stack.Screen
         options={{
           title: isEditing ? "Edit Announcement" : "New Announcement",
@@ -248,21 +268,49 @@ export default function CreateAnnouncement() {
             </ScrollView>
 
             {targetType === "team" && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-                {teams.map((team) => (
-                  <Chip key={team.id} label={teamLabel(team)} selected={teamId === team.id} onPress={() => setTeamId(team.id)} />
-                ))}
-              </ScrollView>
+              <>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                  {teams.map((team) => (
+                    <Chip
+                      key={team.id}
+                      label={teamLabel(team)}
+                      selected={teamId === team.id}
+                      onPress={() => {
+                        setTeamId(team.id);
+                        if (groupError) setGroupError(undefined);
+                      }}
+                    />
+                  ))}
+                </ScrollView>
+                {groupError ? (
+                  <Text role="caption" tone="danger">
+                    {groupError}
+                  </Text>
+                ) : null}
+              </>
             )}
 
             {(targetType === "players" || targetType === "parents") && (
               <View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
                   {players.map((p) => (
-                    <Chip key={p.id} label={p.full_name} selected={selectedPlayerIds.includes(p.id)} onPress={() => togglePlayer(p.id)} />
+                    <Chip
+                      key={p.id}
+                      label={p.full_name}
+                      selected={selectedPlayerIds.includes(p.id)}
+                      onPress={() => {
+                        togglePlayer(p.id);
+                        if (audienceError) setAudienceError(undefined);
+                      }}
+                    />
                   ))}
                 </ScrollView>
                 {!players.length && <Text tone="secondary">No players found yet.</Text>}
+                {audienceError ? (
+                  <Text role="caption" tone="danger">
+                    {audienceError}
+                  </Text>
+                ) : null}
               </View>
             )}
           </>
@@ -270,7 +318,15 @@ export default function CreateAnnouncement() {
       </View>
 
       <View style={styles.section}>
-        <Field placeholder="Title" value={title} onChangeText={setTitle} />
+        <Field
+          placeholder="Title"
+          value={title}
+          onChangeText={(v) => {
+            setTitle(v);
+            if (titleError) setTitleError(undefined);
+          }}
+          error={titleError}
+        />
 
         <View>
           <View style={styles.fieldLabelRow}>
@@ -283,9 +339,13 @@ export default function CreateAnnouncement() {
           <Field
             placeholder="Keep it short — 1 to 3 sentences is plenty…"
             value={body}
-            onChangeText={setBody}
+            onChangeText={(v) => {
+              setBody(v);
+              if (bodyError) setBodyError(undefined);
+            }}
             multiline
             numberOfLines={6}
+            error={bodyError}
           />
         </View>
 
