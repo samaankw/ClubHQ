@@ -160,7 +160,31 @@ export default function Dashboard() {
           </View>
         )}
 
-        <CoachesSection />
+        {/* Parent-facing: "Meet the Coaches" introduces staff to families. A
+            coach or director looking at their own dashboard does not need an
+            introduction to themselves. */}
+        {profile?.role === "parent" && <CoachesSection />}
+
+        <Card style={{ gap: space[2] }}>
+          <Eyebrow>Announcements</Eyebrow>
+          {annLoading ? (
+            <Text tone="secondary">Loading…</Text>
+          ) : announcements.length === 0 ? (
+            <Text tone="secondary">No announcements yet.</Text>
+          ) : (
+            announcements.map((a, i) => (
+              <React.Fragment key={a.id}>
+                {i > 0 && <Divider />}
+                <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], paddingVertical: space[2] }}>
+                  {a.pinned ? <IconChip name="pin" tone="brand" size={14} /> : null}
+                  <Text role="h3" style={{ flex: 1 }}>
+                    {a.title}
+                  </Text>
+                </View>
+              </React.Fragment>
+            ))
+          )}
+        </Card>
 
         <Card padded={false} style={{ paddingVertical: space[2] }}>
           <View style={{ paddingHorizontal: space[4], paddingTop: space[2] }}>
@@ -206,26 +230,6 @@ export default function Dashboard() {
 
         {profile?.role === "parent" && <PlayerDevelopmentCard />}
 
-        <Card style={{ gap: space[2] }}>
-          <Eyebrow>Announcements</Eyebrow>
-          {annLoading ? (
-            <Text tone="secondary">Loading…</Text>
-          ) : announcements.length === 0 ? (
-            <Text tone="secondary">No announcements yet.</Text>
-          ) : (
-            announcements.map((a, i) => (
-              <React.Fragment key={a.id}>
-                {i > 0 && <Divider />}
-                <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], paddingVertical: space[2] }}>
-                  {a.pinned ? <IconChip name="pin" tone="brand" size={14} /> : null}
-                  <Text role="h3" style={{ flex: 1 }}>
-                    {a.title}
-                  </Text>
-                </View>
-              </React.Fragment>
-            ))
-          )}
-        </Card>
       </ScrollView>
     </Screen>
   );
