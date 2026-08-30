@@ -3496,6 +3496,75 @@ On return from the modal, the roster must refresh so the new player appears.
 
 ---
 
+### Task 33: Move team creation into a modal
+
+Club Management still creates teams through an inline form sitting between the
+team list and the selected team's roster. It is the last creation flow in the
+app that is not a modal, and it puts "make a new team" in the middle of "manage
+this team".
+
+After this, all three creation flows match:
+
+```
+Schedule    →  +  →  /modals/create-event
+Players     →  +  →  /modals/add-player
+Club Mgmt   →  +  →  /modals/create-team     ← this task
+```
+
+**Files:**
+- Create: `app/modals/create-team.tsx`
+- Modify: `app/club-management.tsx`, `app/_layout.tsx`
+
+#### 1. `app/modals/create-team.tsx`
+
+Fields, matching the current inline form exactly: **team name** (required),
+**age group** (optional), **season** (optional).
+
+Reuse the existing behaviour verbatim, including the self-assignment added
+earlier — a director who creates a team is its coach until they say otherwise:
+
+```ts
+const { data: created, error } = await supabase
+  .from("teams")
+  .insert({ club_id, name: name.trim(), age_group: ageGroup.trim() || null, season: season.trim() || null })
+  .select("id")
+  .single();
+// then, non-fatally:
+await supabase.rpc("set_team_coach", { p_team_id: created.id, p_coach_id: profile.id, p_assigned: true });
+```
+
+The self-assignment stays **non-fatal**: if the RPC fails the team still exists
+and can be assigned by hand. A convenience must not be able to block the
+operation it decorates.
+
+Validation is inline per Task 30 — per-field `error` on `Field`, no blocking
+dialogs, submit never disabled by validity. Server failures keep `notify()`.
+
+Register it in `app/_layout.tsx` beside the other modals, matching their
+presentation.
+
+#### 2. Club Management
+
+- Delete the inline "Create Team" card and its `teamName` / `ageGroup` /
+  `season` state and handler — they move wholesale into the modal.
+- Put a **+** in the **Active Teams** header via `CardHeader`'s action slot (or
+  an equivalent affordance), routing to `/modals/create-team`. This list is a
+  section header rather than a full-screen list, so a header action fits better
+  than a floating button — Schedule and Players own the two FABs.
+- The team list must refresh on return so the new team appears. `players.tsx`
+  used `useFocusEffect` for exactly this after Task 32; follow that.
+- Keep the scroll-into-view behaviour for Add Player / Invite Parents intact.
+
+#### Hard rules
+
+- **No data-layer changes** beyond moving the same insert and the same
+  `set_team_coach` call into the modal. Verify:
+  `git diff -- app/club-management.tsx | grep "^-" | grep -E "supabase\.|rpc\(|router\.|confirmAsync"` — the removed lines should be exactly the create-team insert and its RPC, now living in the modal, and nothing else.
+- Director-gated, matching `teams_write_staff` which requires `role = 'director'`.
+- No raw design values. `npm test` and `npm run verify` must pass.
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Token layers (Tasks 3–4), radius scale exploration (Task 3), component library (Tasks 5–12), token lint (Task 2), tab bar reskin (Task 13), first screen (Task 14). **Deferred to later plans by design:** the remaining 13 screen conversions (Plan 2) and the Figma variables and components (Plan 3). The spec's success criteria 3 and 4 are met across Plans 2 and 3, not here.
