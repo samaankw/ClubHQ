@@ -1,15 +1,16 @@
 import React, { useEffect, useRef, useState } from "react";
 import { View, Pressable, StyleSheet, ScrollView } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
-import { format } from "date-fns";
+import { addDays, format, nextSaturday, parse } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { useRecentLocations } from "@/lib/hooks";
 import { ClubEvent, EventType, Team } from "@/types/db";
 import { notify } from "@/lib/alertCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { goBackOr } from "@/lib/navigation";
 import ModalBackButton from "@/components/ModalBackButton";
-import { Screen, Card, Text, Eyebrow, Field, Button, Chip, IconChip, Toggle, CardHeader } from "@/components/ui";
+import { Screen, Card, Text, Eyebrow, Field, Button, Chip, IconChip, Toggle, CardHeader, Calendar, FilterChipRow } from "@/components/ui";
 import type { IconName } from "@/components/ui";
 import { color, space, radius, borderWidth } from "@/theme";
 
@@ -37,6 +38,26 @@ const TYPES: { key: EventType; label: string }[] = [
 ];
 
 type AudienceMode = "club" | "team" | "player";
+
+// Coaches overwhelmingly schedule practices at a round time — these six cover
+// the common evening slots. "Custom" reveals the original hour/minute/AM-PM
+// fields for anything else, so there's still exactly one way to end up with
+// an arbitrary time.
+const TIME_PRESETS: { label: string; hour: string; minute: string; meridiem: "AM" | "PM" }[] = [
+  { label: "4:00 PM", hour: "4", minute: "00", meridiem: "PM" },
+  { label: "4:30 PM", hour: "4", minute: "30", meridiem: "PM" },
+  { label: "5:00 PM", hour: "5", minute: "00", meridiem: "PM" },
+  { label: "5:30 PM", hour: "5", minute: "30", meridiem: "PM" },
+  { label: "6:00 PM", hour: "6", minute: "00", meridiem: "PM" },
+  { label: "6:30 PM", hour: "6", minute: "30", meridiem: "PM" },
+];
+const CUSTOM_TIME = "Custom";
+const TIME_OPTIONS = [...TIME_PRESETS.map((p) => p.label), CUSTOM_TIME];
+
+/** The preset whose hour/minute/meridiem match the current field values, if any. */
+function matchingPreset(hour: string, minute: string, meridiem: "AM" | "PM") {
+  return TIME_PRESETS.find((p) => p.hour === hour && p.minute === minute && p.meridiem === meridiem);
+}
 
 function TypeCard({ icon, label, selected, onPress }: { icon: IconName; label: string; selected: boolean; onPress: () => void }) {
   return (
@@ -88,7 +109,14 @@ export default function CreateEvent() {
   const [hourStr, setHourStr] = useState("");
   const [minuteStr, setMinuteStr] = useState("");
   const [meridiem, setMeridiem] = useState<"AM" | "PM">("AM");
+  // Which time chip reads as selected — one of TIME_PRESETS' labels, or
+  // CUSTOM_TIME, or "" before the coach has touched a time at all. This is
+  // purely a UI selection: hourStr/minuteStr/meridiem above stay the single
+  // source of truth that feeds starts_at on submit, whether they were set by
+  // tapping a chip or by typing into the custom fields.
+  const [timeChip, setTimeChip] = useState("");
   const [notes, setNotes] = useState("");
+  const { locations: recentLocations } = useRecentLocations();
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamId, setTeamId] = useState<string | null>(null);
   const [audienceMode, setAudienceMode] = useState<AudienceMode>(profile?.role === "director" ? "club" : "team");
@@ -111,6 +139,19 @@ export default function CreateEvent() {
     setAttendingIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
   };
 
+  // Tapping a preset chip sets exactly the same hourStr/minuteStr/meridiem
+  // state the custom fields would — there is one path into starts_at, chips
+  // just fill it in faster. "Custom" leaves whatever is already there and
+  // reveals the fields so the coach can type something else.
+  const handleTimePick = (label: string) => {
+    setTimeChip(label);
+    const preset = TIME_PRESETS.find((p) => p.label === label);
+    if (!preset) return;
+    setHourStr(preset.hour);
+    setMinuteStr(preset.minute);
+    setMeridiem(preset.meridiem);
+  };
+
   useEffect(() => {
     if (!eventId) return;
     (async () => {
@@ -128,10 +169,17 @@ export default function CreateEvent() {
       setTitle(ev.title);
       setLocation(ev.location ?? "");
       const startsAt = new Date(ev.starts_at);
+      const loadedHour = format(startsAt, "h");
+      const loadedMinute = format(startsAt, "mm");
+      const loadedMeridiem = format(startsAt, "a") as "AM" | "PM";
       setDateStr(format(startsAt, "yyyy-MM-dd"));
-      setHourStr(format(startsAt, "h"));
-      setMinuteStr(format(startsAt, "mm"));
-      setMeridiem(format(startsAt, "a") as "AM" | "PM");
+      setHourStr(loadedHour);
+      setMinuteStr(loadedMinute);
+      setMeridiem(loadedMeridiem);
+      // A prefilled time that isn't one of the chips must fall back to the
+      // custom fields rather than being silently rounded to the nearest one.
+      const preset = matchingPreset(loadedHour, loadedMinute, loadedMeridiem);
+      setTimeChip(preset ? preset.label : CUSTOM_TIME);
       setNotes(ev.notes ?? "");
 
       const targetIds = (ev.event_players ?? []).map((t) => t.players.id);
@@ -208,7 +256,7 @@ export default function CreateEvent() {
   }, [audienceMode, teams]);
 
   const handleSubmit = async () => {
-    if (!title.trim() || !dateStr || !hourStr || !minuteStr) return notify("Missing info", "Please add a title, date (YYYY-MM-DD), and a time.");
+    if (!title.trim() || !dateStr || !hourStr || !minuteStr) return notify("Missing info", "Please add a title, date, and a time.");
     if (!profile?.club_id) return notify("No club found", "Your profile isn't linked to a club yet.");
     if (audienceMode === "team" && !teamId) return notify("Team required", "Pick a training group for this event.");
     if (audienceMode === "team" && teamRoster.length > 0 && !attendingIds.length) return notify("No one attending", "Pick at least one player training that day, or switch groups.");
@@ -313,6 +361,18 @@ export default function CreateEvent() {
     goBackOr("/(tabs)/schedule?section=events");
   };
 
+  // date-fns' nextSaturday returns the Saturday *after* the given date, so
+  // when today is already Saturday this correctly lands 7 days out — "the
+  // coming Saturday", never today.
+  const today = new Date();
+  const quickDates = [
+    { label: "Today", value: format(today, "yyyy-MM-dd") },
+    { label: "Tomorrow", value: format(addDays(today, 1), "yyyy-MM-dd") },
+    { label: "This Saturday", value: format(nextSaturday(today), "yyyy-MM-dd") },
+  ];
+  const selectedDate = dateStr ? parse(dateStr, "yyyy-MM-dd", new Date()) : null;
+  const showCustomTime = timeChip === CUSTOM_TIME;
+
   return (
     <Screen>
       <Stack.Screen
@@ -384,39 +444,61 @@ export default function CreateEvent() {
 
       <View style={styles.section}>
         <Field placeholder="Title (e.g. U10 vs Northside FC)" value={title} onChangeText={setTitle} />
+
+        {!!recentLocations.length && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {recentLocations.map((loc) => (
+              <Chip
+                key={loc}
+                label={loc}
+                selected={location.trim().toLowerCase() === loc.toLowerCase()}
+                onPress={() => setLocation(loc)}
+              />
+            ))}
+          </ScrollView>
+        )}
         <Field placeholder="Location" value={location} onChangeText={setLocation} />
+      </View>
 
-        <View style={styles.iconFieldRow}>
-          <IconChip name="calendar-outline" />
-          <View style={styles.iconFieldInput}>
-            <Field placeholder="Date (YYYY-MM-DD)" value={dateStr} onChangeText={setDateStr} />
-          </View>
-        </View>
+      <View style={styles.section}>
+        <Eyebrow>Date</Eyebrow>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {quickDates.map((q) => (
+            <Chip key={q.label} label={q.label} selected={dateStr === q.value} onPress={() => setDateStr(q.value)} />
+          ))}
+        </ScrollView>
+        <Calendar value={selectedDate} onChange={(d) => setDateStr(format(d, "yyyy-MM-dd"))} />
+      </View>
 
-        <View style={styles.iconFieldRow}>
-          <IconChip name="time-outline" />
-          <View style={styles.timeRow}>
-            <Field
-              style={styles.timeInput}
-              placeholder="3"
-              value={hourStr}
-              onChangeText={setHourStr}
-              keyboardType="number-pad"
-              maxLength={2}
-            />
-            <Text role="h2">:</Text>
-            <Field
-              style={styles.timeInput}
-              placeholder="00"
-              value={minuteStr}
-              onChangeText={setMinuteStr}
-              keyboardType="number-pad"
-              maxLength={2}
-            />
-            <Chip label="AM" selected={meridiem === "AM"} onPress={() => setMeridiem("AM")} />
-            <Chip label="PM" selected={meridiem === "PM"} onPress={() => setMeridiem("PM")} />
+      <View style={styles.section}>
+        <Eyebrow>Time</Eyebrow>
+        <FilterChipRow options={TIME_OPTIONS} value={timeChip} onChange={handleTimePick} />
+        {showCustomTime && (
+          <View style={styles.iconFieldRow}>
+            <IconChip name="time-outline" />
+            <View style={styles.timeRow}>
+              <Field
+                style={styles.timeInput}
+                placeholder="3"
+                value={hourStr}
+                onChangeText={setHourStr}
+                keyboardType="number-pad"
+                maxLength={2}
+              />
+              <Text role="h2">:</Text>
+              <Field
+                style={styles.timeInput}
+                placeholder="00"
+                value={minuteStr}
+                onChangeText={setMinuteStr}
+                keyboardType="number-pad"
+                maxLength={2}
+              />
+              <Chip label="AM" selected={meridiem === "AM"} onPress={() => setMeridiem("AM")} />
+              <Chip label="PM" selected={meridiem === "PM"} onPress={() => setMeridiem("PM")} />
+            </View>
           </View>
-        </View>
+        )}
       </View>
 
       {!isEditing && (
@@ -483,7 +565,6 @@ const styles = StyleSheet.create({
   },
   checkboxOn: { backgroundColor: color.bg.brand },
   iconFieldRow: { flexDirection: "row", alignItems: "center", gap: space[3] },
-  iconFieldInput: { flex: 1 },
   timeRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: space[2] },
   timeInput: { width: 56, textAlign: "center" },
   repeatWeeksRow: { flexDirection: "row", alignItems: "center", gap: space[2] },

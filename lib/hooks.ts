@@ -234,6 +234,55 @@ export function useMyPlayers() {
   return { players, loading, refresh: load };
 }
 
+/**
+ * Distinct venues this club has used before, most-recent first — powers the
+ * location suggestion chips on the event form. A read of existing `events`
+ * rows only: no schema change, no migration, and no hardcoded fallback city
+ * (a club's own history is always right; a hardcoded one wouldn't be).
+ */
+export function useRecentLocations(limit = 6) {
+  const { profile } = useAuth();
+  const [locations, setLocations] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!profile?.club_id) {
+      setLocations([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("events")
+        .select("location")
+        .eq("club_id", profile.club_id)
+        .not("location", "is", null)
+        .order("starts_at", { ascending: false });
+      if (error) console.error("Failed to load recent locations:", error.message);
+
+      const seen = new Set<string>();
+      const deduped: string[] = [];
+      for (const row of (data as { location: string | null }[]) ?? []) {
+        const value = row.location?.trim();
+        if (!value) continue;
+        const key = value.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(value);
+        if (deduped.length >= limit) break;
+      }
+      setLocations(deduped);
+    } finally {
+      setLoading(false);
+    }
+  }, [profile?.club_id, limit]);
+
+  useEffect(() => { load(); }, [load]);
+  return { locations, loading };
+}
+
 export function useLatestDevelopmentPlan(playerId?: string) {
   const [plan, setPlan] = useState<DevelopmentPlan | null>(null);
   const [loading, setLoading] = useState(true);
