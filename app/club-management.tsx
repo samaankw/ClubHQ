@@ -220,7 +220,7 @@ export default function ClubManagement() {
   };
 
   const archivePlayer = async (player: Player) => {
-    const ok = await confirmAsync(`Archive ${player.full_name}?`, "The player's history stays in the database but they disappear from the active roster.", "Archive");
+    const ok = await confirmAsync(`Archive ${player.full_name}?`, "Their history is kept — they just come off the active roster.", "Archive");
     if (!ok) return;
     const { error } = await supabase.from("players").update({ archived_at: new Date().toISOString() }).eq("id", player.id);
     if (error) notify("Couldn't archive player", error.message);
@@ -238,8 +238,7 @@ export default function ClubManagement() {
 
   return (
     <Screen ref={scrollRef}>
-      <Text role="h1">Run the club without opening Supabase</Text>
-      <Text tone="secondary">Create teams, build rosters, assign coaches, and generate one-time parent link codes.</Text>
+      <Text tone="secondary">Set up your teams, build rosters, and invite parents.</Text>
 
       <Card style={{ gap: space[3] }}>
         <View style={styles.headerRow}>
