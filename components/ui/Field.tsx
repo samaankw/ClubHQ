@@ -1,22 +1,38 @@
 import React from "react";
 import { View, TextInput, TextInputProps, StyleSheet } from "react-native";
-import { Eyebrow } from "./Text";
+import { Eyebrow, Text } from "./Text";
 import { color, radius, space, type as typeTokens, borderWidth } from "@/theme";
 
 export interface FieldProps extends TextInputProps {
   label?: string;
+  /** Validation message. Renders the input in an error state with the text beneath. */
+  error?: string;
 }
 
-export function Field({ label, style, multiline, ...rest }: FieldProps) {
+let idCounter = 0;
+
+export function Field({ label, style, multiline, error, id, testID, ...rest }: FieldProps) {
+  const errorId = React.useMemo(() => id ?? `field-error-${++idCounter}`, [id]);
+
   return (
     <View style={styles.wrap}>
       {label ? <Eyebrow>{label}</Eyebrow> : null}
       <TextInput
+        testID={testID}
         placeholderTextColor={color.text.tertiary}
         multiline={multiline}
-        style={[styles.input, multiline && styles.multiline, style]}
+        style={[styles.input, multiline && styles.multiline, error && styles.inputError, style]}
+        accessibilityState={error ? { invalid: true } : undefined}
+        aria-invalid={error ? true : undefined}
+        aria-errormessage={error ? errorId : undefined}
+        accessibilityErrorMessage={error}
         {...rest}
       />
+      {error ? (
+        <Text role="caption" tone="danger" nativeID={errorId} id={errorId}>
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -33,5 +49,6 @@ const styles = StyleSheet.create({
     color: color.text.primary,
     fontSize: typeTokens.body.fontSize,
   },
+  inputError: { borderColor: color.border.danger },
   multiline: { minHeight: space[10], textAlignVertical: "top" },
 });

@@ -54,6 +54,7 @@ export const color = {
     subtle: palette.slate[200],
     default: palette.slate[300],
     brand: brand[500],
+    danger: palette.red[600],
   },
   icon: {
     default: palette.slate[600],
