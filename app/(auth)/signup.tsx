@@ -18,18 +18,28 @@ export default function Signup() {
   const [role, setRole] = useState<Role>("parent");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [nameError, setNameError] = useState<string | undefined>();
+  const [emailError, setEmailError] = useState<string | undefined>();
+  const [passwordError, setPasswordError] = useState<string | undefined>();
+  const [termsError, setTermsError] = useState<string | undefined>();
 
   const handleSignup = async () => {
     const cleanName = fullName.trim();
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanName || !cleanEmail || password.length < 8) {
-      notify("Check your details", "Enter your name, email, and a password with at least 8 characters.");
+      setNameError(!cleanName ? "Enter your name." : undefined);
+      setEmailError(!cleanEmail ? "Enter your email." : undefined);
+      setPasswordError(password.length < 8 ? "Use at least 8 characters." : undefined);
       return;
     }
+    setNameError(undefined);
+    setEmailError(undefined);
+    setPasswordError(undefined);
     if (!agreedToTerms) {
-      notify("Please review the Terms & Privacy Policy", "You need to agree before creating an account.");
+      setTermsError("You need to agree before creating an account.");
       return;
     }
+    setTermsError(undefined);
 
     setLoading(true);
     try {
@@ -61,15 +71,36 @@ export default function Signup() {
       </Text>
 
       <View style={styles.form}>
-        <Field placeholder="Full name" value={fullName} onChangeText={setFullName} />
+        <Field
+          placeholder="Full name"
+          value={fullName}
+          onChangeText={(v) => {
+            setFullName(v);
+            if (nameError) setNameError(undefined);
+          }}
+          error={nameError}
+        />
         <Field
           placeholder="Email"
           autoCapitalize="none"
           keyboardType="email-address"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(v) => {
+            setEmail(v);
+            if (emailError) setEmailError(undefined);
+          }}
+          error={emailError}
         />
-        <Field placeholder="Password (8+ characters)" secureTextEntry value={password} onChangeText={setPassword} />
+        <Field
+          placeholder="Password (8+ characters)"
+          secureTextEntry
+          value={password}
+          onChangeText={(v) => {
+            setPassword(v);
+            if (passwordError) setPasswordError(undefined);
+          }}
+          error={passwordError}
+        />
 
         <View style={styles.roleBlock}>
           <Eyebrow>I am a…</Eyebrow>
@@ -85,31 +116,41 @@ export default function Signup() {
           securely linked to the parent account.
         </Text>
 
-        <Pressable
-          style={styles.consentRow}
-          onPress={() => setAgreedToTerms((v) => !v)}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: agreedToTerms }}
-        >
-          <View style={[styles.checkbox, agreedToTerms && styles.checkboxOn]}>
-            {agreedToTerms && <Ionicons name="checkmark" size={14} color={color.text.inverse} />}
-          </View>
-          <Text role="bodySm" style={styles.consentText}>
-            I agree to the{" "}
-            <Link href="/(auth)/legal-terms">
-              <Text role="bodySm" tone="brand" style={styles.consentLink}>
-                Terms of Service
-              </Text>
-            </Link>{" "}
-            and acknowledge the{" "}
-            <Link href="/(auth)/privacy">
-              <Text role="bodySm" tone="brand" style={styles.consentLink}>
-                Privacy Policy
-              </Text>
-            </Link>
-            .
-          </Text>
-        </Pressable>
+        <View style={{ gap: space[2] }}>
+          <Pressable
+            style={styles.consentRow}
+            onPress={() => {
+              setAgreedToTerms((v) => !v);
+              if (termsError) setTermsError(undefined);
+            }}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: agreedToTerms }}
+          >
+            <View style={[styles.checkbox, agreedToTerms && styles.checkboxOn]}>
+              {agreedToTerms && <Ionicons name="checkmark" size={14} color={color.text.inverse} />}
+            </View>
+            <Text role="bodySm" style={styles.consentText}>
+              I agree to the{" "}
+              <Link href="/(auth)/legal-terms">
+                <Text role="bodySm" tone="brand" style={styles.consentLink}>
+                  Terms of Service
+                </Text>
+              </Link>{" "}
+              and acknowledge the{" "}
+              <Link href="/(auth)/privacy">
+                <Text role="bodySm" tone="brand" style={styles.consentLink}>
+                  Privacy Policy
+                </Text>
+              </Link>
+              .
+            </Text>
+          </Pressable>
+          {termsError ? (
+            <Text role="caption" tone="danger">
+              {termsError}
+            </Text>
+          ) : null}
+        </View>
 
         <Button label={loading ? "Creating…" : "Create Account"} onPress={handleSignup} disabled={loading} fullWidth />
       </View>

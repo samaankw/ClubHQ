@@ -13,11 +13,26 @@ export default function ClaimPlayer() {
   const [code, setCode] = useState("");
   const [consent, setConsent] = useState(false);
   const [working, setWorking] = useState(false);
+  const [roleError, setRoleError] = useState<string | undefined>();
+  const [codeError, setCodeError] = useState<string | undefined>();
+  const [consentError, setConsentError] = useState<string | undefined>();
 
   const claim = async () => {
-    if (profile?.role !== "parent") return notify("Parent account required", "Player links can only be claimed by a parent account.");
-    if (!code.trim()) return notify("Code required", "Enter the 8-character player link code from your club director.");
-    if (!consent) return notify("Consent required", "Confirm your parental authority and consent for this player's ClubHQ development record.");
+    if (profile?.role !== "parent") {
+      setRoleError("Player links can only be claimed by a parent account.");
+      return;
+    }
+    if (!code.trim()) {
+      setCodeError("Enter the 8-character player link code from your club director.");
+      return;
+    }
+    if (!consent) {
+      setConsentError("Confirm your parental authority and consent for this player's ClubHQ development record.");
+      return;
+    }
+    setRoleError(undefined);
+    setCodeError(undefined);
+    setConsentError(undefined);
     setWorking(true);
     const { data, error } = await supabase.rpc("claim_parent_link_code", { p_code: code.trim(), p_confirm_parental_consent: true });
     setWorking(false);
@@ -35,27 +50,46 @@ export default function ClaimPlayer() {
         Your director creates a one-time player link code. This keeps player records separate from the general club
         invite code.
       </Text>
+      {roleError ? (
+        <Text role="caption" tone="danger">
+          {roleError}
+        </Text>
+      ) : null}
       <Field
         placeholder="Player link code"
         autoCapitalize="characters"
         value={code}
-        onChangeText={setCode}
+        onChangeText={(v) => {
+          setCode(v);
+          if (codeError) setCodeError(undefined);
+        }}
         style={styles.codeInput}
+        error={codeError}
       />
-      <Pressable
-        style={styles.consentRow}
-        onPress={() => setConsent((v) => !v)}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: consent }}
-      >
-        <View style={[styles.checkbox, consent && styles.checkboxOn]}>
-          {consent && <Ionicons name="checkmark" size={14} color={color.text.inverse} />}
-        </View>
-        <Text role="bodySm" tone="secondary" style={styles.consentText}>
-          I confirm I am this player's parent or legal guardian and consent to ClubHQ processing this player's
-          development data, including AI-assisted coaching reports.
-        </Text>
-      </Pressable>
+      <View style={{ gap: space[2] }}>
+        <Pressable
+          style={styles.consentRow}
+          onPress={() => {
+            setConsent((v) => !v);
+            if (consentError) setConsentError(undefined);
+          }}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: consent }}
+        >
+          <View style={[styles.checkbox, consent && styles.checkboxOn]}>
+            {consent && <Ionicons name="checkmark" size={14} color={color.text.inverse} />}
+          </View>
+          <Text role="bodySm" tone="secondary" style={styles.consentText}>
+            I confirm I am this player's parent or legal guardian and consent to ClubHQ processing this player's
+            development data, including AI-assisted coaching reports.
+          </Text>
+        </Pressable>
+        {consentError ? (
+          <Text role="caption" tone="danger">
+            {consentError}
+          </Text>
+        ) : null}
+      </View>
       <Button label={working ? "Linking…" : "Link Player"} onPress={claim} disabled={working} fullWidth />
       <Pressable style={styles.skipLink} onPress={() => router.replace("/(tabs)/dashboard")}>
         <Text role="label" tone="secondary" style={styles.skipLinkText}>

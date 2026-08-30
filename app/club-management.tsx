@@ -27,6 +27,9 @@ export default function ClubManagement() {
   const [birthDate, setBirthDate] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [teamNameError, setTeamNameError] = useState<string | undefined>();
+  const [playerNameError, setPlayerNameError] = useState<string | undefined>();
+  const [birthDateError, setBirthDateError] = useState<string | undefined>();
   const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(new Date()));
   const [payments, setPayments] = useState<PlayerPayment[]>([]);
   const period = format(selectedMonth, "yyyy-MM");
@@ -85,7 +88,11 @@ export default function ClubManagement() {
   }
 
   const createTeam = async () => {
-    if (!profile.club_id || !teamName.trim()) return notify("Team name required", "Enter a team name first.");
+    if (!profile.club_id || !teamName.trim()) {
+      setTeamNameError("Enter a team name first.");
+      return;
+    }
+    setTeamNameError(undefined);
     setBusy(true);
     // Assign the creating director to their own team straight away. A director
     // who just made a team is its coach until they say otherwise — making them
@@ -111,8 +118,16 @@ export default function ClubManagement() {
   };
 
   const addPlayer = async () => {
-    if (!selectedTeamId || !playerName.trim()) return notify("Missing info", "Choose a team and enter the player's name.");
-    if (birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return notify("Birth date format", "Use YYYY-MM-DD or leave it blank.");
+    if (!selectedTeamId || !playerName.trim()) {
+      setPlayerNameError(!playerName.trim() ? "Enter the player's name." : "Choose a team first.");
+      return;
+    }
+    if (birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+      setBirthDateError("Use YYYY-MM-DD or leave it blank.");
+      return;
+    }
+    setPlayerNameError(undefined);
+    setBirthDateError(undefined);
     setBusy(true);
     const { error } = await supabase.from("players").insert({ team_id: selectedTeamId, full_name: playerName.trim(), position: position.trim() || null, birth_date: birthDate || null });
     setBusy(false);
@@ -291,13 +306,29 @@ export default function ClubManagement() {
 
           <Card style={{ gap: space[3] }}>
             <Eyebrow>Add Player to {teamLabel(selectedTeam)}</Eyebrow>
-            <Field placeholder="Player full name" value={playerName} onChangeText={setPlayerName} />
+            <Field
+              placeholder="Player full name"
+              value={playerName}
+              onChangeText={(v) => {
+                setPlayerName(v);
+                if (playerNameError) setPlayerNameError(undefined);
+              }}
+              error={playerNameError}
+            />
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
                 <Field placeholder="Position" value={position} onChangeText={setPosition} />
               </View>
               <View style={{ flex: 1 }}>
-                <Field placeholder="Birth date YYYY-MM-DD" value={birthDate} onChangeText={setBirthDate} />
+                <Field
+                  placeholder="Birth date YYYY-MM-DD"
+                  value={birthDate}
+                  onChangeText={(v) => {
+                    setBirthDate(v);
+                    if (birthDateError) setBirthDateError(undefined);
+                  }}
+                  error={birthDateError}
+                />
               </View>
             </View>
             <Button label="Add Player" onPress={addPlayer} disabled={busy} fullWidth />
@@ -353,7 +384,15 @@ export default function ClubManagement() {
 
       <View style={styles.dashedContainer}>
         <Eyebrow>Quick Create Team</Eyebrow>
-        <Field placeholder="Team name, e.g. U10 Boys Red" value={teamName} onChangeText={setTeamName} />
+        <Field
+          placeholder="Team name, e.g. U10 Boys Red"
+          value={teamName}
+          onChangeText={(v) => {
+            setTeamName(v);
+            if (teamNameError) setTeamNameError(undefined);
+          }}
+          error={teamNameError}
+        />
         <View style={styles.row}>
           <View style={{ flex: 1 }}>
             <Field placeholder="Age group" value={ageGroup} onChangeText={setAgeGroup} />
