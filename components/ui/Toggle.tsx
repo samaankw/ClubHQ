@@ -25,6 +25,12 @@ export function Toggle({ label, value, onValueChange }: ToggleProps) {
         trackColor={{ true: color.bg.brand, false: color.border.subtle }}
         thumbColor={color.bg.surface}
         ios_backgroundColor={color.border.subtle}
+        // react-native-web's Switch has its own `activeThumbColor`, used when
+        // the switch is ON, and it defaults to #009688 (teal). `thumbColor`
+        // alone only covers the OFF state there, so the web build showed a
+        // green thumb on a blue track whenever a toggle was enabled. The prop
+        // is web-only and absent from RN's types, hence the cast.
+        {...({ activeThumbColor: color.bg.surface } as object)}
       />
     </View>
   );
