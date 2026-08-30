@@ -283,6 +283,123 @@ export function useRecentLocations(limit = 6) {
   return { locations, loading };
 }
 
+export interface SetupStep {
+  key: "club" | "team" | "players" | "practice";
+  title: string;
+  /** Shown under the title once complete, e.g. the club's name. */
+  detail?: string;
+  done: boolean;
+  /** Where tapping it should go. */
+  href: string;
+}
+
+/**
+ * Derives the four-step "getting started" checklist a newly-onboarded
+ * director sees on the dashboard, purely from existing tables — no schema
+ * change. Each step after "club" is a cheap existence check (`count: "exact",
+ * head: true`) rather than a full row fetch, since all the checklist needs is
+ * whether at least one non-archived row exists.
+ */
+export function useSetupProgress() {
+  const { profile } = useAuth();
+  const [steps, setSteps] = useState<SetupStep[]>([]);
+  const [loading, setLoading] = useState(true);
+  // Raw counts behind the "team"/"players" steps, exposed alongside the
+  // checklist so the dashboard's "Club Status"/"Players" stat tiles can dim
+  // themselves at zero without a second round of count queries.
+  const [teamCount, setTeamCount] = useState(0);
+  const [playerCount, setPlayerCount] = useState(0);
+
+  const load = useCallback(async () => {
+    // Team/player creation is director-gated in RLS ("teams_write_staff",
+    // "players_insert_staff" both require role = 'director'), and this
+    // checklist only ever points at those actions — so a coach or parent
+    // gets an empty checklist rather than four queries they have no use for.
+    if (!profile?.club_id || profile.role !== "director") {
+      setSteps([]);
+      setTeamCount(0);
+      setPlayerCount(0);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const [clubResult, teamResult, playerResult, eventResult] = await Promise.all([
+        supabase.from("clubs").select("name").eq("id", profile.club_id).maybeSingle(),
+        supabase
+          .from("teams")
+          .select("id", { count: "exact", head: true })
+          .eq("club_id", profile.club_id)
+          .is("archived_at", null),
+        supabase
+          .from("players")
+          .select("id, teams!inner(club_id)", { count: "exact", head: true })
+          .eq("teams.club_id", profile.club_id)
+          .is("archived_at", null),
+        supabase
+          .from("events")
+          .select("id", { count: "exact", head: true })
+          .eq("club_id", profile.club_id),
+      ]);
+
+      if (clubResult.error) console.error("Failed to load club:", clubResult.error.message);
+      if (teamResult.error) console.error("Failed to count teams:", teamResult.error.message);
+      if (playerResult.error) console.error("Failed to count players:", playerResult.error.message);
+      if (eventResult.error) console.error("Failed to count events:", eventResult.error.message);
+
+      const clubName = (clubResult.data as { name: string } | null)?.name;
+      setTeamCount(teamResult.count ?? 0);
+      setPlayerCount(playerResult.count ?? 0);
+
+      setSteps([
+        {
+          key: "club",
+          title: "Create Club Profile",
+          detail: clubName ? `${clubName} established` : undefined,
+          done: true,
+          href: "/profile",
+        },
+        {
+          key: "team",
+          title: "Setup your first team",
+          done: (teamResult.count ?? 0) > 0,
+          href: "/club-management",
+        },
+        {
+          key: "players",
+          title: "Add your roster",
+          done: (playerResult.count ?? 0) > 0,
+          href: "/(tabs)/players",
+        },
+        {
+          key: "practice",
+          title: "Schedule a practice",
+          done: (eventResult.count ?? 0) > 0,
+          href: "/modals/create-event",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }, [profile?.club_id, profile?.role]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const completed = steps.filter((s) => s.done).length;
+  const total = steps.length;
+
+  return {
+    steps,
+    completed,
+    total,
+    allDone: total > 0 && completed === total,
+    loading,
+    teamCount,
+    playerCount,
+  };
+}
+
 export function useLatestDevelopmentPlan(playerId?: string) {
   const [plan, setPlan] = useState<DevelopmentPlan | null>(null);
   const [loading, setLoading] = useState(true);

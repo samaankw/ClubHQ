@@ -217,8 +217,24 @@ export default function Players() {
               />
               <Button label="Link a Player" onPress={() => router.push("/claim-player")} />
             </View>
+          ) : profile?.role === "director" ? (
+            // Adding a player is director-gated in RLS (`players_insert_staff`),
+            // and the only add-player path in the app lives on Club Management
+            // — so only a director gets the button here.
+            <View style={styles.linkPrompt}>
+              <EmptyState
+                icon="people"
+                title="No players yet"
+                body="Start building your roster by adding your first player."
+              />
+              <Button label="Add Single Player" onPress={() => router.push("/club-management")} />
+            </View>
           ) : (
-            <EmptyState title="No players yet." />
+            <EmptyState
+              icon="people"
+              title="No players yet"
+              body="Ask your director to add players to get the roster started."
+            />
           )
         }
         renderItem={({ item }) => (

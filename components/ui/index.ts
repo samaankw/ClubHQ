@@ -33,5 +33,7 @@ export { Toggle } from "./Toggle";
 export type { ToggleProps } from "./Toggle";
 export { StepDots } from "./StepDots";
 export type { StepDotsProps } from "./StepDots";
+export { SetupChecklist } from "./SetupChecklist";
+export type { SetupChecklistProps } from "./SetupChecklist";
 export { Calendar } from "./Calendar";
 export type { CalendarProps } from "./Calendar";

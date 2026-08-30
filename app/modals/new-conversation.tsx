@@ -7,7 +7,7 @@ import { notify } from "@/lib/alertCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { goBackOr } from "@/lib/navigation";
 import ModalBackButton from "@/components/ModalBackButton";
-import { Screen, Text, SegmentedControl, ListRow } from "@/components/ui";
+import { Screen, Text, SegmentedControl, ListRow, EmptyState, Button } from "@/components/ui";
 import { color, space } from "@/theme";
 
 interface TeamRow {
@@ -94,9 +94,14 @@ export default function NewConversation() {
           maxToRenderPerBatch={12}
           windowSize={7}
           ListEmptyComponent={
-            <Text tone="secondary" style={styles.centerText}>
-              No teams found for your club yet.
-            </Text>
+            <View style={styles.emptyWrap}>
+              <EmptyState
+                icon="chatbubbles"
+                title="No teams found yet"
+                body="You'll need at least one team setup before you can start a group conversation."
+              />
+              <Button label="Go to Club Operations →" onPress={() => router.push("/club-management")} fullWidth />
+            </View>
           }
           renderItem={({ item }) => (
             <ListRow icon="people" title={teamLabel(item)} onPress={() => startTeamChat(item)} />
@@ -130,4 +135,5 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   spinner: { marginTop: space[10] },
   centerText: { textAlign: "center", marginTop: space[10] },
+  emptyWrap: { alignItems: "center", gap: space[3], marginTop: space[10] },
 });

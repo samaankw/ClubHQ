@@ -3,7 +3,14 @@ import { View, ScrollView, RefreshControl } from "react-native";
 import { format } from "date-fns";
 import { router } from "expo-router";
 import { useAuth } from "@/lib/AuthProvider";
-import { useNextEvent, useWeekCounts, useRecentAnnouncements, useMyPlayers, useLatestDevelopmentPlan } from "@/lib/hooks";
+import {
+  useNextEvent,
+  useWeekCounts,
+  useRecentAnnouncements,
+  useMyPlayers,
+  useLatestDevelopmentPlan,
+  useSetupProgress,
+} from "@/lib/hooks";
 import ClubBioSection from "@/components/ClubBioSection";
 import CoachesSection from "@/components/CoachesSection";
 import {
@@ -20,8 +27,9 @@ import {
   ListRow,
   ProgressBar,
   Divider,
+  SetupChecklist,
 } from "@/components/ui";
-import { space } from "@/theme";
+import { space, opacity } from "@/theme";
 
 function PlayerDevelopmentCard() {
   const { players, loading } = useMyPlayers();
@@ -101,6 +109,21 @@ export default function Dashboard() {
   const { event, loading: eventLoading, refresh: refreshEvent } = useNextEvent();
   const { counts, loading: countsLoading, refresh: refreshCounts } = useWeekCounts();
   const { announcements, loading: annLoading, refresh: refreshAnn } = useRecentAnnouncements(3);
+  const {
+    steps: setupSteps,
+    completed: setupCompleted,
+    total: setupTotal,
+    allDone: setupAllDone,
+    loading: setupLoading,
+    teamCount,
+    playerCount,
+  } = useSetupProgress();
+
+  // Team/player creation is director-gated in RLS (`teams_write_staff`,
+  // `players_insert_staff` both require role = 'director'), so a coach or
+  // parent must never see a checklist pointing at doors they can't open.
+  const showSetupChecklist =
+    profile?.role === "director" && !setupLoading && setupSteps.length > 0 && !setupAllDone;
 
   const [refreshing, setRefreshing] = React.useState(false);
   const onRefresh = async () => {
@@ -116,6 +139,27 @@ export default function Dashboard() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <ClubBioSection />
+
+        {showSetupChecklist && (
+          <SetupChecklist
+            steps={setupSteps}
+            completed={setupCompleted}
+            total={setupTotal}
+            onStepPress={(step) => router.push(step.href as never)}
+          />
+        )}
+
+        {profile?.role === "director" && (
+          <View style={{ flexDirection: "row", gap: space[3] }}>
+            <View style={[{ flex: 1 }, teamCount === 0 && { opacity: opacity.disabled }]}>
+              <StatTile label="Club Status" value={String(teamCount)} footnote="Teams active" />
+            </View>
+            <View style={[{ flex: 1 }, playerCount === 0 && { opacity: opacity.disabled }]}>
+              <StatTile label="Players" value={String(playerCount)} footnote="Roster count" />
+            </View>
+          </View>
+        )}
+
         <CoachesSection />
 
         <Card padded={false} style={{ paddingVertical: space[2] }}>
