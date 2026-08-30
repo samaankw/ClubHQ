@@ -3565,6 +3565,82 @@ presentation.
 
 ---
 
+### Task 34: RLS policy tests
+
+The app's entire security model lives in Row Level Security policies across 26
+tables, and **none of it is verified**. The 103 existing tests cover the design
+system — tokens, components, the linter — which is the part least likely to
+fail silently. A broken RLS policy is not a bug, it is a privacy breach, and
+nothing currently catches one.
+
+This was flagged as the top risk at the start of the project and is still open.
+
+**Files:**
+- Create: `supabase/tests/rls.test.sql`
+- Create: `supabase/tests/README.md` (how to run, both ways)
+
+#### The technique — already proven, do not re-derive it
+
+Docker is not available, so `supabase start` is out. `pgtap` **1.3.3 is
+installed** on the dev project (`whrbxptrndmdnlojvhrk`) and the following
+approach has been verified end to end:
+
+```sql
+begin;
+-- seed auth.users, profiles, clubs, teams, players …
+set local role authenticated;
+set local request.jwt.claims to '{"sub":"<uuid>","role":"authenticated"}';
+-- assertions here run under that user's RLS
+rollback;
+```
+
+A probe using exactly this proved cross-club isolation holds (a director saw 1
+own-club player, 0 from another club) and left **zero rows** behind after the
+rollback. Everything happens inside one transaction; nothing persists.
+
+Note `profiles` rows are created automatically by the `on_auth_user_created`
+trigger when a row is inserted into `auth.users` — so seed users first, then
+`update profiles set role=…, club_id=…`, rather than inserting profiles directly.
+
+#### What to assert
+
+Each of these is a real policy in the schema, and each failure would be a
+distinct privacy or integrity problem:
+
+1. **Cross-club isolation** — a director of club A sees none of club B's
+   players, teams, events, or announcements.
+2. **Parent isolation** — a parent sees only players where `parent_id` is
+   theirs, not every player in their club. (This was a deliberate hardening in
+   migration `0010`; prove it did not regress.)
+3. **Draft plans hidden from parents** — `development_plans` with status
+   `draft` or `coach_reviewed` are invisible to the linked parent; only
+   `published` appears. Staff see all.
+4. **`rate_limit_hits` is unreachable** — an authenticated user gets zero rows
+   and cannot delete. This is the migration `0033` fix; a regression re-opens
+   uncapped AI spend.
+5. **Role self-promotion is blocked** — a coach cannot `update profiles set
+   role = 'director'`, and cannot insert a row into `teams` (director-only via
+   `teams_write_staff`).
+6. **Messaging authorisation** — a user cannot insert a message into a
+   conversation they are not a participant of (the `0007` fix).
+7. **Evaluation authorisation** — a coach cannot write an evaluation for a
+   player outside their club.
+
+#### Hard rules
+
+- **Read-only against real data.** Every test seeds its own fixtures inside the
+  transaction and rolls back. Do not touch, modify, or delete any existing row.
+- Assert with pgTAP (`plan`, `is`, `ok`, `throws_ok`, `finish`) rather than bare
+  selects, so failures name themselves.
+- Tests must be runnable two ways, and the README must say how:
+  `supabase test db` once Docker exists, and via the Supabase MCP
+  `execute_sql` against a scratch project today.
+- Do **not** add `pgtap` to `supabase/migrations/` — it is a test dependency
+  and does not belong in production schema. It is already enabled on the dev
+  project ad hoc.
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Token layers (Tasks 3–4), radius scale exploration (Task 3), component library (Tasks 5–12), token lint (Task 2), tab bar reskin (Task 13), first screen (Task 14). **Deferred to later plans by design:** the remaining 13 screen conversions (Plan 2) and the Figma variables and components (Plan 3). The spec's success criteria 3 and 4 are met across Plans 2 and 3, not here.
