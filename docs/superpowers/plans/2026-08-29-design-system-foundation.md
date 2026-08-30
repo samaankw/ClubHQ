@@ -3357,6 +3357,81 @@ inline message.
 
 ---
 
+### Task 31: Restructure Club Management
+
+`app/club-management.tsx` (446 lines) has four concrete problems, all reported
+by the user from the running app.
+
+**1. Two dead buttons.** The team card's **Add Player** and **Invite Parents**
+buttons both call only `setSelectedTeamId(team.id)`. When that team is already
+selected — the common case, since selecting it is what reveals the card — they
+do nothing at all. Nothing moves, nothing focuses, no feedback.
+
+Fix: keep the selection, and additionally scroll the relevant card into view.
+`Screen` already forwards a ref to its ScrollView (added in Task 30 for
+validation scroll-into-view) — use it with `measureLayout` on the target card.
+**Add Player** scrolls to the Add Player form; **Invite Parents** scrolls to the
+roster, which is where the per-player "Parent code" action lives.
+
+**2. An empty card containing only "Archive team".** The Assigned Coaches card
+hides its picker when the club has one staff member (Task: solo-club fix), which
+leaves a card with a header and nothing else — and archiving, a destructive
+action, sitting in it by accident.
+
+Fix: give **Archive team** its own card at the **bottom** of the team-management
+group, below the roster and fees. Destructive actions belong last and alone, not
+adjacent to routine controls. When the coaches picker is hidden and there are no
+coaches to show, render no coaches card at all.
+
+**3. The Roster card is doing two unrelated jobs.** It shows who is on the team
+*and* carries a `‹ Aug 2026 ›` month stepper that actually scopes
+`player_payments`. A roster does not change by month; only fees do. The stepper
+appears to page the roster through time, which is why it reads as confusing.
+
+Fix: split into two cards.
+- **Roster (N)** — no month. Per player: name, position, parent-link status, and
+  the **Parent code** and **Archive** actions.
+- **Training Fees — ‹ Aug 2026 ›** — the month stepper lives here and nowhere
+  else, with the existing "no money moves through the app" note and one
+  Paid/Unpaid control per player.
+
+The underlying `player_payments` query, its `period` key, and the upsert with
+`onConflict: "player_id,period"` are unchanged — only which card the month
+control lives in.
+
+**4. Creating a team is mixed into managing a team.** "Quick Create Team" sits
+*after* the roster, inside the block about the currently selected team.
+
+Fix: move it directly beneath the **Active Teams** list, before any
+selected-team content. Creating a team belongs with the list of teams.
+
+#### Resulting order
+
+```
+Setup Progress
+Active Teams            (team cards)
+Create Team             ← moved up, own card
+── selected team below ──
+Assigned Coaches        (only when there is more than one staff member)
+Add Player to <team>
+Roster (N)              ← no month stepper
+Training Fees ‹ month › ← month stepper lives here
+Archive team            ← own card, last
+Archiving info note
+```
+
+#### Hard rules
+
+- **No data-layer changes.** Every query, RPC, upsert, and `confirmAsync` guard
+  stays exactly as it is. Verify:
+  `git diff -- app/club-management.tsx | grep "^-" | grep -E "supabase\.|rpc\(|router\.|confirmAsync" || echo "clean"`
+- The archive confirmations keep their existing copy — they explain that history
+  is preserved, which is the thing a director needs to know before tapping.
+- Director-only gating on the whole screen is unchanged.
+- No raw design values. `npm test` and `npm run verify` must pass.
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Token layers (Tasks 3–4), radius scale exploration (Task 3), component library (Tasks 5–12), token lint (Task 2), tab bar reskin (Task 13), first screen (Task 14). **Deferred to later plans by design:** the remaining 13 screen conversions (Plan 2) and the Figma variables and components (Plan 3). The spec's success criteria 3 and 4 are met across Plans 2 and 3, not here.
