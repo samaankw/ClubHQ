@@ -3040,6 +3040,109 @@ nothing new; `verify` already runs it.
 
 ---
 
+### Task 28: Make event scheduling less manual
+
+`app/modals/create-event.tsx` currently makes a coach type a date as
+`YYYY-MM-DD`, enter the time across three separate fields (hour / minute /
+AM-PM), and type a venue from scratch every time. This is the most-used
+creation flow in the app and the most tedious.
+
+Scope, per the user's 2026-08-29 decision: **date, time, and location only.**
+No other smart defaults on this form.
+
+**Files:**
+- Create: `components/ui/Calendar.tsx`, `__tests__/ui/Calendar.test.tsx`
+- Modify: `components/ui/index.ts`, `app/modals/create-event.tsx`, `lib/hooks.ts`
+
+#### 1. `Calendar` — a design-system month grid
+
+Custom, not a native picker: the app runs on iOS, Android, and web, and one
+component that behaves identically everywhere beats a native control that
+renders inconsistently on web. `date-fns` is already a dependency — use it for
+all date maths; do not hand-roll calendar arithmetic.
+
+```tsx
+export interface CalendarProps {
+  /** Currently selected day, or null. */
+  value: Date | null;
+  onChange: (date: Date) => void;
+  /** Days before this are not selectable. Defaults to today. */
+  minDate?: Date;
+}
+```
+
+Behaviour: a month header with the month/year and prev/next arrows; a
+seven-column week-day header row; a grid of days for the visible month with
+leading/trailing blanks; the selected day filled with `color.bg.brand` and
+white text; today outlined when not selected; days before `minDate` rendered at
+`opacity.disabled` and non-interactive. Prev/next moves the visible month
+without changing the selection.
+
+Every day cell needs `accessibilityRole="button"` and an
+`accessibilityLabel` of the full date, plus `accessibilityState.selected`.
+
+Tests (RNTL 14 is **async** — `async` bodies, `await render`, `await fireEvent`):
+- renders the correct number of day cells for a known month
+- pressing a day calls `onChange` with that date
+- the selected day carries `accessibilityState.selected`
+- a day before `minDate` does not call `onChange` when pressed
+- prev/next changes the visible month without emitting `onChange`
+
+#### 2. Quick-pick chips
+
+Above the calendar: **Today**, **Tomorrow**, **This Saturday** (computed with
+`date-fns`; if today is Saturday, that chip means the coming Saturday, not
+today). Selecting one sets the date and is reflected in the grid.
+
+#### 3. Time chips
+
+Replace the hour / minute / AM-PM triple with a `FilterChipRow` of common
+practice times — 4:00, 4:30, 5:00, 5:30, 6:00, 6:30 PM — plus a **Custom**
+chip that reveals the existing three-field entry. Coaches schedule at round
+times; typing three fields for "5:00 PM" is the worst part of this form.
+
+**The existing parse-and-validate logic must be preserved** for the custom
+path: hour 1–12, minute 0–59, and the `hour24 = (hour12 % 12) + (PM ? 12 : 0)`
+conversion into `starts_at`. Chips simply set the same state the fields set.
+
+#### 4. Location suggestions
+
+Add a hook to `lib/hooks.ts`:
+
+```ts
+/** Distinct venues this club has used before, most-recent first. */
+export function useRecentLocations(limit = 6): { locations: string[]; loading: boolean }
+```
+
+Query `events` for the caller's club, `location` not null, ordered by
+`starts_at` descending, then de-duplicate case-insensitively and take `limit`.
+This is a **read of existing data — no schema change and no migration.**
+
+Render the results as tappable chips above the location `Field`; tapping one
+fills the field, which stays freely editable. Render nothing when the club has
+no history yet — no placeholder, no hardcoded city. (A hardcoded "Atlanta"
+would be wrong for a club in Marietta; the club's own history is always right.)
+
+#### 5. Hard rules
+
+- Presentation and input-affordance only. **The `starts_at` construction, the
+  `create_targeted_event` / `update_targeted_event` RPCs, the targeting
+  branches, and the recurrence/series logic are untouched.** Verify:
+  `git diff -- app/modals/create-event.tsx | grep "^-" | grep -E "supabase\.|rpc\(|router\.|series|p_starts_at"` → empty.
+- The edit path matters: `create-event` doubles as the edit form and prefills
+  from an existing event. Prefilling must still work — the calendar shows the
+  event's date, and a time that is not one of the chips must fall back to the
+  custom fields rather than being silently rounded.
+- No raw design values. `npm test` and `npm run verify` must pass.
+
+- [ ] **Step 1** — TDD `Calendar`, export it from the barrel.
+- [ ] **Step 2** — `useRecentLocations` in `lib/hooks.ts`.
+- [ ] **Step 3** — wire all three into `create-event`.
+- [ ] **Step 4** — verify, including the edit-prefill path.
+- [ ] **Step 5** — commit.
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Token layers (Tasks 3–4), radius scale exploration (Task 3), component library (Tasks 5–12), token lint (Task 2), tab bar reskin (Task 13), first screen (Task 14). **Deferred to later plans by design:** the remaining 13 screen conversions (Plan 2) and the Figma variables and components (Plan 3). The spec's success criteria 3 and 4 are met across Plans 2 and 3, not here.
