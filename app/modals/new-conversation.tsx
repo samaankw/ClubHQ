@@ -20,7 +20,7 @@ interface PersonRow {
 }
 
 export default function NewConversation() {
-  const { profile } = useAuth();
+  const { profile, orgConfig } = useAuth();
   const [mode, setMode] = useState<"team" | "direct">("team");
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [people, setPeople] = useState<PersonRow[]>([]);
@@ -73,7 +73,7 @@ export default function NewConversation() {
       <Stack.Screen options={{ headerLeft: () => <ModalBackButton onPress={() => goBackOr("/(tabs)/messages")} /> }} />
       <View style={styles.toggleRow}>
         <Pressable style={[styles.toggle, mode === "team" && styles.toggleActive]} onPress={() => setMode("team")}>
-          <Text style={[styles.toggleText, mode === "team" && styles.toggleTextActive]}>Team Chat</Text>
+          <Text style={[styles.toggleText, mode === "team" && styles.toggleTextActive]}>{orgConfig.labels.grouping} Chat</Text>
         </Pressable>
         <Pressable style={[styles.toggle, mode === "direct" && styles.toggleActive]} onPress={() => setMode("direct")}>
           <Text style={[styles.toggleText, mode === "direct" && styles.toggleTextActive]}>Direct Message</Text>
@@ -89,7 +89,7 @@ export default function NewConversation() {
           initialNumToRender={12}
           maxToRenderPerBatch={12}
           windowSize={7}
-          ListEmptyComponent={<Text style={styles.muted}>No teams found for your club yet.</Text>}
+          ListEmptyComponent={<Text style={styles.muted}>No {orgConfig.labels.groupingPlural.toLowerCase()} found for your club yet.</Text>}
           renderItem={({ item }) => (
             <Pressable style={styles.row} onPress={() => startTeamChat(item)}>
               <Text style={styles.rowText}>👥 {groupLabel(item)}</Text>

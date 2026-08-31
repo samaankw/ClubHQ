@@ -11,7 +11,7 @@ import { confirmAsync, notify } from "@/lib/alertCompat";
 type TeamCoach = { team_id: string; coach_id: string };
 
 export default function ClubManagement() {
-  const { profile } = useAuth();
+  const { profile, orgConfig } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [staff, setStaff] = useState<Profile[]>([]);
@@ -67,11 +67,11 @@ export default function ClubManagement() {
   }
 
   const createTeam = async () => {
-    if (!profile.club_id || !teamName.trim()) return notify("Team name required", "Enter a team name first.");
+    if (!profile.club_id || !teamName.trim()) return notify(`${orgConfig.labels.grouping} name required`, `Enter a ${orgConfig.labels.grouping.toLowerCase()} name first.`);
     setBusy(true);
     const { error } = await supabase.from("teams").insert({ club_id: profile.club_id, name: teamName.trim(), age_group: ageGroup.trim() || null, season: season.trim() || null });
     setBusy(false);
-    if (error) return notify("Couldn't create team", error.message);
+    if (error) return notify(`Couldn't create ${orgConfig.labels.grouping.toLowerCase()}`, error.message);
     setTeamName(""); setAgeGroup(""); setSeason(""); await load();
   };
 
@@ -136,7 +136,7 @@ export default function ClubManagement() {
     const ok = await confirmAsync(`Archive ${groupLabel(selectedTeam)}?`, "Players and history stay intact. Move active players first if needed.", "Archive");
     if (!ok) return;
     const { error } = await supabase.from("teams").update({ archived_at: new Date().toISOString() }).eq("id", selectedTeam.id);
-    if (error) notify("Couldn't archive team", error.message);
+    if (error) notify(`Couldn't archive ${orgConfig.labels.grouping.toLowerCase()}`, error.message);
     else await load();
   };
 
@@ -146,20 +146,20 @@ export default function ClubManagement() {
       <Text style={styles.pageCopy}>Create teams, build rosters, assign coaches, and generate one-time parent link codes.</Text>
 
       <View style={styles.card}>
-        <Text style={styles.heading}>Create Team</Text>
-        <TextInput style={styles.input} placeholder="Team name, e.g. U10 Boys Red" value={teamName} onChangeText={setTeamName} />
+        <Text style={styles.heading}>Create {orgConfig.labels.grouping}</Text>
+        <TextInput style={styles.input} placeholder={`${orgConfig.labels.grouping} name, e.g. U10 Boys Red`} value={teamName} onChangeText={setTeamName} />
         <View style={styles.row}><TextInput style={[styles.input, styles.flex]} placeholder="Age group" value={ageGroup} onChangeText={setAgeGroup} /><TextInput style={[styles.input, styles.flex]} placeholder="Season" value={season} onChangeText={setSeason} /></View>
-        <Pressable style={styles.primary} onPress={createTeam} disabled={busy}><Text style={styles.primaryText}>Create Team</Text></Pressable>
+        <Pressable style={styles.primary} onPress={createTeam} disabled={busy}><Text style={styles.primaryText}>Create {orgConfig.labels.grouping}</Text></Pressable>
       </View>
 
-      <Text style={styles.sectionLabel}>ACTIVE TEAMS</Text>
+      <Text style={styles.sectionLabel}>ACTIVE {orgConfig.labels.groupingPlural.toUpperCase()}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
         {teams.map((team) => <Pressable key={team.id} style={[styles.chip, selectedTeamId === team.id && styles.chipActive]} onPress={() => setSelectedTeamId(team.id)}><Text style={[styles.chipText, selectedTeamId === team.id && styles.chipTextActive]}>{groupLabel(team)}</Text></Pressable>)}
       </ScrollView>
 
       {selectedTeam && <>
         <View style={styles.card}>
-          <View style={styles.headerRow}><View><Text style={styles.heading}>{groupLabel(selectedTeam)}</Text><Text style={styles.muted}>{selectedTeam.name} · {selectedTeam.season || "No season"}</Text></View><Pressable onPress={archiveTeam}><Text style={styles.dangerLink}>Archive team</Text></Pressable></View>
+          <View style={styles.headerRow}><View><Text style={styles.heading}>{groupLabel(selectedTeam)}</Text><Text style={styles.muted}>{selectedTeam.name} · {selectedTeam.season || "No season"}</Text></View><Pressable onPress={archiveTeam}><Text style={styles.dangerLink}>Archive {orgConfig.labels.grouping.toLowerCase()}</Text></Pressable></View>
           <Text style={styles.subheading}>Assigned Coaches</Text>
           {staff.map((coach) => {
             const assigned = teamCoaches.some((tc) => tc.team_id === selectedTeam.id && tc.coach_id === coach.id);
@@ -176,7 +176,7 @@ export default function ClubManagement() {
 
         <View style={styles.card}>
           <View style={styles.headerRow}>
-            <Text style={styles.heading}>Roster ({selectedPlayers.length})</Text>
+            <Text style={styles.heading}>Players ({selectedPlayers.length})</Text>
             <View style={styles.monthNav}>
               <Pressable onPress={() => setSelectedMonth((m) => addMonths(m, -1))}><Text style={styles.monthNavArrow}>‹</Text></Pressable>
               <Text style={styles.monthNavLabel}>{format(selectedMonth, "MMM yyyy")}</Text>

@@ -3,7 +3,8 @@ import { View, Text, TextInput, FlatList, Pressable, StyleSheet, ActivityIndicat
 import { Stack, router } from "expo-router";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/lib/supabase";
-import { groupLabel } from "@/lib/orgConfig";
+import { useAuth } from "@/lib/AuthProvider";
+import { groupLabel, OrgConfig } from "@/lib/orgConfig";
 import { notify } from "@/lib/alertCompat";
 import { goBackOr } from "@/lib/navigation";
 import ModalBackButton from "@/components/ModalBackButton";
@@ -20,14 +21,15 @@ interface MessageResult {
   other_participant_name?: string | null;
 }
 
-function conversationLabel(row: MessageResult): string {
+function conversationLabel(row: MessageResult, config: OrgConfig): string {
   if (row.conversation_type === "team_group") {
-    return row.team_name ? groupLabel({ name: row.team_name, age_group: row.team_age_group }) : "Team Chat";
+    return row.team_name ? groupLabel({ name: row.team_name, age_group: row.team_age_group }) : `${config.labels.grouping} Chat`;
   }
   return row.other_participant_name ?? "Direct Message";
 }
 
 export default function SearchMessages() {
+  const { orgConfig } = useAuth();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MessageResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -89,7 +91,7 @@ export default function SearchMessages() {
         renderItem={({ item }) => (
           <Pressable style={styles.card} onPress={() => router.push(`/conversation/${item.conversation_id}` as never)}>
             <View style={styles.cardHeader}>
-              <Text style={styles.conversationLabel}>{conversationLabel(item)}</Text>
+              <Text style={styles.conversationLabel}>{conversationLabel(item, orgConfig)}</Text>
               <Text style={styles.time}>{formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}</Text>
             </View>
             <Text style={styles.sender}>{item.sender_name}</Text>

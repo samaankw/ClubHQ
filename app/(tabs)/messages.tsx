@@ -19,7 +19,7 @@ interface ConversationRow {
 }
 
 export default function Messages() {
-  const { profile } = useAuth();
+  const { profile, orgConfig } = useAuth();
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -90,7 +90,7 @@ export default function Messages() {
                 {item.type === "team_group"
                   ? item.team_name
                     ? groupLabel({ name: item.team_name, age_group: item.team_age_group })
-                    : "Team Chat"
+                    : `${orgConfig.labels.grouping} Chat`
                   : item.other_participant_name ?? "Direct Message"}
               </Text>
               <Text style={styles.preview} numberOfLines={1}>

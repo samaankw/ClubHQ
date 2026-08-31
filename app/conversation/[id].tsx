@@ -16,7 +16,7 @@ interface MessageRow {
 
 export default function Conversation() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { profile } = useAuth();
+  const { profile, orgConfig } = useAuth();
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [draft, setDraft] = useState("");
   const [title, setTitle] = useState("Conversation");
@@ -35,12 +35,12 @@ export default function Conversation() {
       );
       if (!convo) return;
       if (convo.type === "team_group") {
-        setTitle(convo.team_name ? groupLabel({ name: convo.team_name, age_group: convo.team_age_group }) : "Team Chat");
+        setTitle(convo.team_name ? groupLabel({ name: convo.team_name, age_group: convo.team_age_group }) : `${orgConfig.labels.grouping} Chat`);
       } else {
         setTitle(convo.other_participant_name ?? "Direct Message");
       }
     })();
-  }, [id]);
+  }, [id, orgConfig]);
 
   const load = useCallback(async () => {
     if (!id) return;

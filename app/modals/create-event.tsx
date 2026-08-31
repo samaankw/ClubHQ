@@ -26,7 +26,7 @@ const TYPES: { key: EventType; label: string }[] = [
 type AudienceMode = "club" | "team" | "player";
 
 export default function CreateEvent() {
-  const { profile } = useAuth();
+  const { profile, orgConfig } = useAuth();
   const { eventId } = useLocalSearchParams<{ eventId?: string }>();
   const isEditing = !!eventId;
   // Holds the specific players an edited event already had until the
@@ -162,7 +162,7 @@ export default function CreateEvent() {
   const handleSubmit = async () => {
     if (!title.trim() || !dateStr || !hourStr || !minuteStr) return notify("Missing info", "Please add a title, date (YYYY-MM-DD), and a time.");
     if (!profile?.club_id) return notify("No club found", "Your profile isn't linked to a club yet.");
-    if (audienceMode === "team" && !teamId) return notify("Team required", "Pick a training group for this event.");
+    if (audienceMode === "team" && !teamId) return notify(`${orgConfig.labels.grouping} required`, `Pick a ${orgConfig.labels.grouping.toLowerCase()} for this event.`);
     if (audienceMode === "team" && teamRoster.length > 0 && !attendingIds.length) return notify("No one attending", "Pick at least one player training that day, or switch groups.");
     if (audienceMode === "player" && !selectedPlayerIds.length) return notify("Player required", "Pick who this session is for.");
 
@@ -286,7 +286,7 @@ export default function CreateEvent() {
           </Pressable>
         )}
         <Pressable style={[styles.teamChip, audienceMode === "team" && styles.teamChipActive]} onPress={() => setAudienceMode("team")}>
-          <Text style={[styles.teamChipText, audienceMode === "team" && styles.teamChipTextActive]}>Training Group</Text>
+          <Text style={[styles.teamChipText, audienceMode === "team" && styles.teamChipTextActive]}>{orgConfig.labels.grouping}</Text>
         </Pressable>
         <Pressable style={[styles.teamChip, audienceMode === "player" && styles.teamChipActive]} onPress={() => setAudienceMode("player")}>
           <Text style={[styles.teamChipText, audienceMode === "player" && styles.teamChipTextActive]}>Select Players</Text>
@@ -300,7 +300,7 @@ export default function CreateEvent() {
               <Text style={[styles.teamChipText, teamId === team.id && styles.teamChipTextActive]}>{groupLabel(team)}</Text>
             </Pressable>
           ))}
-          {!teams.length && <Text style={styles.mutedNote}>No training groups assigned yet.</Text>}
+          {!teams.length && <Text style={styles.mutedNote}>No {orgConfig.labels.groupingPlural.toLowerCase()} assigned yet.</Text>}
         </ScrollView>
       )}
 
@@ -337,7 +337,7 @@ export default function CreateEvent() {
               </Pressable>
             );
           })}
-          {!players.length && <Text style={styles.mutedNote}>No players found on your teams yet.</Text>}
+          {!players.length && <Text style={styles.mutedNote}>No players found on your {orgConfig.labels.groupingPlural.toLowerCase()} yet.</Text>}
         </View>
       )}
 

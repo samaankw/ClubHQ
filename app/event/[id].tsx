@@ -6,16 +6,16 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { AttendanceRecord, AttendanceStatus, ClubEvent, EventRSVP, PaymentStatus, Player, PlayerPayment, RSVPStatus } from "@/types/db";
 import { confirmAsync, notify } from "@/lib/alertCompat";
-import { groupLabel } from "@/lib/orgConfig";
+import { groupLabel, OrgConfig } from "@/lib/orgConfig";
 import { goBackOr } from "@/lib/navigation";
 import { addEventToDeviceCalendar } from "@/lib/calendarExport";
 
-function audienceLabel(event: ClubEvent): string {
+function audienceLabel(event: ClubEvent, config: OrgConfig): string {
   const targets = event.event_players ?? [];
   const names = targets.map((t) => t.players.full_name).join(", ");
-  if (targets.length && event.team_id) return `${event.teams ? groupLabel(event.teams) : "Team"} · ${names}`;
+  if (targets.length && event.team_id) return `${event.teams ? groupLabel(event.teams) : config.labels.grouping} · ${names}`;
   if (targets.length) return names;
-  if (event.team_id) return event.teams ? groupLabel(event.teams) : "Team";
+  if (event.team_id) return event.teams ? groupLabel(event.teams) : config.labels.grouping;
   return "Club-wide";
 }
 
@@ -33,7 +33,7 @@ const ATTENDANCE_OPTIONS: { value: AttendanceStatus; label: string }[] = [
 
 export default function EventDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { profile } = useAuth();
+  const { profile, orgConfig } = useAuth();
   const [event, setEvent] = useState<ClubEvent | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [rsvps, setRsvps] = useState<EventRSVP[]>([]);
@@ -206,7 +206,7 @@ export default function EventDetail() {
       <View style={styles.hero}>
         <View style={styles.typeRow}>
           <Text style={styles.type}>{event.type.replace("_", " ").toUpperCase()}</Text>
-          <View style={styles.audienceTag}><Text style={styles.audienceTagText}>{audienceLabel(event)}</Text></View>
+          <View style={styles.audienceTag}><Text style={styles.audienceTagText}>{audienceLabel(event, orgConfig)}</Text></View>
         </View>
         <Text style={styles.title}>{event.title}</Text>
         <Text style={styles.meta}>{format(new Date(event.starts_at), "EEEE, MMMM d · h:mm a")}</Text>
@@ -246,7 +246,7 @@ export default function EventDetail() {
           ? event.team_id
             ? "Attending Today"
             : event.event_players.length > 1 ? "Players" : "Player"
-          : isStaff ? "Roster" : "Your Players"}
+          : isStaff ? "Players" : "Your Players"}
       </Text>
       {players.length === 0 ? <Text style={styles.muted}>No eligible players for this event.</Text> : players.map((player) => {
         const rsvp = rsvps.find((r) => r.player_id === player.id)?.status ?? "no_response";

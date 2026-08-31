@@ -8,7 +8,7 @@ import { ClubEvent } from "@/types/db";
 import AnnouncementsList from "@/components/AnnouncementsList";
 import SwipeableRow from "@/components/SwipeableRow";
 import { confirmAsync, notify } from "@/lib/alertCompat";
-import { groupLabel } from "@/lib/orgConfig";
+import { groupLabel, OrgConfig } from "@/lib/orgConfig";
 
 const TYPE_EMOJI: Record<string, string> = {
   practice: "🏃",
@@ -17,21 +17,21 @@ const TYPE_EMOJI: Record<string, string> = {
   club_event: "🎉",
 };
 
-function audienceLabel(event: ClubEvent): string {
+function audienceLabel(event: ClubEvent, config: OrgConfig): string {
   const targets = event.event_players ?? [];
   const names = targets.map((t) => t.players.full_name).join(", ");
   // A team event with specific players attached means "not everyone in the
   // group showed up" — still worth labeling by group, just with who's in.
-  if (targets.length && event.team_id) return `${event.teams ? groupLabel(event.teams) : "Team"} · ${names}`;
+  if (targets.length && event.team_id) return `${event.teams ? groupLabel(event.teams) : config.labels.grouping} · ${names}`;
   if (targets.length) return names;
-  if (event.team_id) return event.teams ? groupLabel(event.teams) : "Team";
+  if (event.team_id) return event.teams ? groupLabel(event.teams) : config.labels.grouping;
   return "Club-wide";
 }
 
 type Section = "events" | "announcements";
 
 function EventsSection() {
-  const { profile } = useAuth();
+  const { profile, orgConfig } = useAuth();
   const [events, setEvents] = useState<ClubEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const canCreate = profile?.role === "coach" || profile?.role === "director";
@@ -94,7 +94,7 @@ function EventsSection() {
                 <View style={styles.titleRow}>
                   <Text style={styles.title}>{item.title}</Text>
                   <View style={[styles.audienceTag, !!item.event_players?.length && styles.audienceTagPrivate]}>
-                    <Text style={[styles.audienceTagText, !!item.event_players?.length && styles.audienceTagTextPrivate]}>{audienceLabel(item)}</Text>
+                    <Text style={[styles.audienceTagText, !!item.event_players?.length && styles.audienceTagTextPrivate]}>{audienceLabel(item, orgConfig)}</Text>
                   </View>
                 </View>
                 <Text style={styles.meta}>

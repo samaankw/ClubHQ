@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/AuthProvider";
 import { ANNOUNCEMENT_CATEGORIES } from "@/lib/announcementCategories";
 import { AnnouncementCategory, AnnouncementTargetType, Team } from "@/types/db";
 import { notify } from "@/lib/alertCompat";
-import { groupLabel } from "@/lib/orgConfig";
+import { groupLabel, OrgConfig } from "@/lib/orgConfig";
 import { goBackOr } from "@/lib/navigation";
 import ModalBackButton from "@/components/ModalBackButton";
 
@@ -17,15 +17,15 @@ interface PlayerOption {
 
 const CATEGORY_KEYS = Object.keys(ANNOUNCEMENT_CATEGORIES) as AnnouncementCategory[];
 
-const AUDIENCE_LABELS: Record<AnnouncementTargetType, string> = {
+const audienceLabels = (config: OrgConfig): Record<AnnouncementTargetType, string> => ({
   everyone: "Everyone",
-  team: "Training Group",
+  team: config.labels.grouping,
   players: "Selected Players",
   parents: "Selected Parents",
-};
+});
 
 export default function CreateAnnouncement() {
-  const { profile } = useAuth();
+  const { profile, orgConfig } = useAuth();
   const { announcementId } = useLocalSearchParams<{ announcementId?: string }>();
   const isEditing = !!announcementId;
   const [title, setTitle] = useState("");
@@ -116,7 +116,7 @@ export default function CreateAnnouncement() {
       return;
     }
 
-    if (targetType === "team" && !teamId) return notify("Group required", "Pick a training group to post to.");
+    if (targetType === "team" && !teamId) return notify(`${orgConfig.labels.grouping} required`, `Pick a ${orgConfig.labels.grouping.toLowerCase()} to post to.`);
     if ((targetType === "players" || targetType === "parents") && !selectedPlayerIds.length) {
       return notify("No one selected", "Pick at least one player.");
     }
@@ -189,7 +189,7 @@ export default function CreateAnnouncement() {
       {isEditing ? (
         <View style={styles.audienceLockedRow}>
           <Text style={styles.audienceLockedText}>
-            {AUDIENCE_LABELS[targetType]}{targetType === "team" && teams.find((t) => t.id === teamId) ? ` · ${groupLabel(teams.find((t) => t.id === teamId)!)}` : ""}
+            {audienceLabels(orgConfig)[targetType]}{targetType === "team" && teams.find((t) => t.id === teamId) ? ` · ${groupLabel(teams.find((t) => t.id === teamId)!)}` : ""}
           </Text>
           <Text style={styles.mutedNote}>Who this was sent to can't be changed after posting — post a new announcement to reach a different audience.</Text>
         </View>
@@ -202,7 +202,7 @@ export default function CreateAnnouncement() {
               </Pressable>
             )}
             <Pressable style={[styles.chip, targetType === "team" && styles.chipActive]} onPress={() => setTargetType("team")}>
-              <Text style={[styles.chipText, targetType === "team" && styles.chipTextActive]}>Training Group</Text>
+              <Text style={[styles.chipText, targetType === "team" && styles.chipTextActive]}>{orgConfig.labels.grouping}</Text>
             </Pressable>
             <Pressable style={[styles.chip, targetType === "players" && styles.chipActive]} onPress={() => setTargetType("players")}>
               <Text style={[styles.chipText, targetType === "players" && styles.chipTextActive]}>Selected Players</Text>

@@ -127,7 +127,7 @@ export default function PilotMetrics() {
           <View style={styles.row}>
             <StatCard
               big={evalRate7 !== null ? `${evalRate7}%` : "—"}
-              label="Roster evaluated (7 days)"
+              label="Players evaluated (7 days)"
               sub={`${metrics.evaluatedLast7Days} of ${metrics.totalPlayers} players`}
             />
             <StatCard
