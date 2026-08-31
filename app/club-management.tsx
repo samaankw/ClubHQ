@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { PaymentStatus, Player, PlayerPayment, Profile, Team } from "@/types/db";
 import { shareText } from "@/lib/shareCompat";
-import { teamLabel } from "@/lib/teamLabel";
+import { groupLabel } from "@/lib/orgConfig";
 import { confirmAsync, notify } from "@/lib/alertCompat";
 
 type TeamCoach = { team_id: string; coach_id: string };
@@ -133,7 +133,7 @@ export default function ClubManagement() {
 
   const archiveTeam = async () => {
     if (!selectedTeam) return;
-    const ok = await confirmAsync(`Archive ${teamLabel(selectedTeam)}?`, "Players and history stay intact. Move active players first if needed.", "Archive");
+    const ok = await confirmAsync(`Archive ${groupLabel(selectedTeam)}?`, "Players and history stay intact. Move active players first if needed.", "Archive");
     if (!ok) return;
     const { error } = await supabase.from("teams").update({ archived_at: new Date().toISOString() }).eq("id", selectedTeam.id);
     if (error) notify("Couldn't archive team", error.message);
@@ -154,12 +154,12 @@ export default function ClubManagement() {
 
       <Text style={styles.sectionLabel}>ACTIVE TEAMS</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-        {teams.map((team) => <Pressable key={team.id} style={[styles.chip, selectedTeamId === team.id && styles.chipActive]} onPress={() => setSelectedTeamId(team.id)}><Text style={[styles.chipText, selectedTeamId === team.id && styles.chipTextActive]}>{teamLabel(team)}</Text></Pressable>)}
+        {teams.map((team) => <Pressable key={team.id} style={[styles.chip, selectedTeamId === team.id && styles.chipActive]} onPress={() => setSelectedTeamId(team.id)}><Text style={[styles.chipText, selectedTeamId === team.id && styles.chipTextActive]}>{groupLabel(team)}</Text></Pressable>)}
       </ScrollView>
 
       {selectedTeam && <>
         <View style={styles.card}>
-          <View style={styles.headerRow}><View><Text style={styles.heading}>{teamLabel(selectedTeam)}</Text><Text style={styles.muted}>{selectedTeam.name} · {selectedTeam.season || "No season"}</Text></View><Pressable onPress={archiveTeam}><Text style={styles.dangerLink}>Archive team</Text></Pressable></View>
+          <View style={styles.headerRow}><View><Text style={styles.heading}>{groupLabel(selectedTeam)}</Text><Text style={styles.muted}>{selectedTeam.name} · {selectedTeam.season || "No season"}</Text></View><Pressable onPress={archiveTeam}><Text style={styles.dangerLink}>Archive team</Text></Pressable></View>
           <Text style={styles.subheading}>Assigned Coaches</Text>
           {staff.map((coach) => {
             const assigned = teamCoaches.some((tc) => tc.team_id === selectedTeam.id && tc.coach_id === coach.id);
@@ -168,7 +168,7 @@ export default function ClubManagement() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.heading}>Add Player to {teamLabel(selectedTeam)}</Text>
+          <Text style={styles.heading}>Add Player to {groupLabel(selectedTeam)}</Text>
           <TextInput style={styles.input} placeholder="Player full name" value={playerName} onChangeText={setPlayerName} />
           <View style={styles.row}><TextInput style={[styles.input, styles.flex]} placeholder="Position" value={position} onChangeText={setPosition} /><TextInput style={[styles.input, styles.flex]} placeholder="Birth date YYYY-MM-DD" value={birthDate} onChangeText={setBirthDate} /></View>
           <Pressable style={styles.primary} onPress={addPlayer} disabled={busy}><Text style={styles.primaryText}>Add Player</Text></Pressable>

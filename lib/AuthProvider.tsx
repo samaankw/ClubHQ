@@ -4,10 +4,12 @@ import { Session } from "@supabase/supabase-js";
 import * as Linking from "expo-linking";
 import { supabase } from "./supabase";
 import { Profile } from "@/types/db";
+import { OrgConfig, resolveOrgConfig, cacheOrgType, getCachedOrgType } from "./orgConfig";
 
 interface AuthContextValue {
   session: Session | null;
   profile: Profile | null;
+  orgConfig: OrgConfig;
   loading: boolean;
   refreshProfile: () => Promise<void>;
 }
@@ -15,6 +17,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue>({
   session: null,
   profile: null,
+  orgConfig: resolveOrgConfig(null),
   loading: true,
   refreshProfile: async () => {},
 });
@@ -40,10 +43,22 @@ async function createSessionFromUrl(url: string) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [orgConfig, setOrgConfig] = useState<OrgConfig>(resolveOrgConfig(null));
   const [loading, setLoading] = useState(true);
 
   const loadProfile = async (userId: string) => {
-    let { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+    // Read whatever org type was cached from the last successful load
+    // first, so labels/features resolve immediately even with no network
+    // (a coach on a field with no signal) rather than sitting on the
+    // small_club default until the request below completes or fails.
+    const cached = await getCachedOrgType(userId);
+    if (cached) setOrgConfig(resolveOrgConfig(cached));
+
+    let { data, error } = await supabase
+      .from("profiles")
+      .select("*, clubs(org_type)")
+      .eq("id", userId)
+      .maybeSingle();
 
     // A stale/skewed access token occasionally fails the DB's JWT check
     // ("JWT issued at future", "JWT expired") even though the session is
@@ -52,7 +67,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error && /jwt/i.test(error.message)) {
       const { error: refreshError } = await supabase.auth.refreshSession();
       if (!refreshError) {
-        ({ data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle());
+        ({ data, error } = await supabase
+          .from("profiles")
+          .select("*, clubs(org_type)")
+          .eq("id", userId)
+          .maybeSingle());
       }
     }
 
@@ -61,7 +80,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(null);
       return;
     }
-    setProfile(data as Profile | null);
+
+    const row = data as (Profile & { clubs?: { org_type: string } | { org_type: string }[] | null }) | null;
+    const clubsRel = row?.clubs;
+    const orgType = Array.isArray(clubsRel) ? clubsRel[0]?.org_type : clubsRel?.org_type;
+
+    setProfile(row as Profile | null);
+    setOrgConfig(resolveOrgConfig(orgType));
+    if (orgType) void cacheOrgType(userId, resolveOrgConfig(orgType).orgType);
   };
 
   useEffect(() => {
@@ -119,7 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (session) await loadProfile(session.user.id);
   };
 
-  return <AuthContext.Provider value={{ session, profile, loading, refreshProfile }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ session, profile, orgConfig, loading, refreshProfile }}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => useContext(AuthContext);

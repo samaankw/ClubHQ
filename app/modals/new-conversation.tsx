@@ -4,7 +4,7 @@ import { router, Stack } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { notify } from "@/lib/alertCompat";
-import { teamLabel } from "@/lib/teamLabel";
+import { groupLabel } from "@/lib/orgConfig";
 import { goBackOr } from "@/lib/navigation";
 import ModalBackButton from "@/components/ModalBackButton";
 
@@ -92,7 +92,7 @@ export default function NewConversation() {
           ListEmptyComponent={<Text style={styles.muted}>No teams found for your club yet.</Text>}
           renderItem={({ item }) => (
             <Pressable style={styles.row} onPress={() => startTeamChat(item)}>
-              <Text style={styles.rowText}>👥 {teamLabel(item)}</Text>
+              <Text style={styles.rowText}>👥 {groupLabel(item)}</Text>
             </Pressable>
           )}
         />

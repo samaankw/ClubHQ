@@ -8,7 +8,7 @@ import { ClubEvent } from "@/types/db";
 import AnnouncementsList from "@/components/AnnouncementsList";
 import SwipeableRow from "@/components/SwipeableRow";
 import { confirmAsync, notify } from "@/lib/alertCompat";
-import { teamLabel } from "@/lib/teamLabel";
+import { groupLabel } from "@/lib/orgConfig";
 
 const TYPE_EMOJI: Record<string, string> = {
   practice: "🏃",
@@ -22,9 +22,9 @@ function audienceLabel(event: ClubEvent): string {
   const names = targets.map((t) => t.players.full_name).join(", ");
   // A team event with specific players attached means "not everyone in the
   // group showed up" — still worth labeling by group, just with who's in.
-  if (targets.length && event.team_id) return `${event.teams ? teamLabel(event.teams) : "Team"} · ${names}`;
+  if (targets.length && event.team_id) return `${event.teams ? groupLabel(event.teams) : "Team"} · ${names}`;
   if (targets.length) return names;
-  if (event.team_id) return event.teams ? teamLabel(event.teams) : "Team";
+  if (event.team_id) return event.teams ? groupLabel(event.teams) : "Team";
   return "Club-wide";
 }
 

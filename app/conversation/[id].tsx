@@ -4,7 +4,7 @@ import { useLocalSearchParams, Stack } from "expo-router";
 import { format } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
-import { teamLabel } from "@/lib/teamLabel";
+import { groupLabel } from "@/lib/orgConfig";
 
 interface MessageRow {
   id: string;
@@ -35,7 +35,7 @@ export default function Conversation() {
       );
       if (!convo) return;
       if (convo.type === "team_group") {
-        setTitle(convo.team_name ? teamLabel({ name: convo.team_name, age_group: convo.team_age_group }) : "Team Chat");
+        setTitle(convo.team_name ? groupLabel({ name: convo.team_name, age_group: convo.team_age_group }) : "Team Chat");
       } else {
         setTitle(convo.other_participant_name ?? "Direct Message");
       }

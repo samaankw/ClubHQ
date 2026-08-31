@@ -5,7 +5,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
-import { teamLabel } from "@/lib/teamLabel";
+import { groupLabel } from "@/lib/orgConfig";
 
 interface ConversationRow {
   id: string;
@@ -89,7 +89,7 @@ export default function Messages() {
               <Text style={styles.title}>
                 {item.type === "team_group"
                   ? item.team_name
-                    ? teamLabel({ name: item.team_name, age_group: item.team_age_group })
+                    ? groupLabel({ name: item.team_name, age_group: item.team_age_group })
                     : "Team Chat"
                   : item.other_participant_name ?? "Direct Message"}
               </Text>

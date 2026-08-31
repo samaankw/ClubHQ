@@ -3,7 +3,7 @@ import { View, Text, TextInput, FlatList, Pressable, StyleSheet, ActivityIndicat
 import { Stack, router } from "expo-router";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/lib/supabase";
-import { teamLabel } from "@/lib/teamLabel";
+import { groupLabel } from "@/lib/orgConfig";
 import { notify } from "@/lib/alertCompat";
 import { goBackOr } from "@/lib/navigation";
 import ModalBackButton from "@/components/ModalBackButton";
@@ -22,7 +22,7 @@ interface MessageResult {
 
 function conversationLabel(row: MessageResult): string {
   if (row.conversation_type === "team_group") {
-    return row.team_name ? teamLabel({ name: row.team_name, age_group: row.team_age_group }) : "Team Chat";
+    return row.team_name ? groupLabel({ name: row.team_name, age_group: row.team_age_group }) : "Team Chat";
   }
   return row.other_participant_name ?? "Direct Message";
 }

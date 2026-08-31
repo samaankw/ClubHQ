@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/AuthProvider";
 import { ANNOUNCEMENT_CATEGORIES } from "@/lib/announcementCategories";
 import { AnnouncementCategory, AnnouncementTargetType, Team } from "@/types/db";
 import { notify } from "@/lib/alertCompat";
-import { teamLabel } from "@/lib/teamLabel";
+import { groupLabel } from "@/lib/orgConfig";
 import { goBackOr } from "@/lib/navigation";
 import ModalBackButton from "@/components/ModalBackButton";
 
@@ -189,7 +189,7 @@ export default function CreateAnnouncement() {
       {isEditing ? (
         <View style={styles.audienceLockedRow}>
           <Text style={styles.audienceLockedText}>
-            {AUDIENCE_LABELS[targetType]}{targetType === "team" && teams.find((t) => t.id === teamId) ? ` · ${teamLabel(teams.find((t) => t.id === teamId)!)}` : ""}
+            {AUDIENCE_LABELS[targetType]}{targetType === "team" && teams.find((t) => t.id === teamId) ? ` · ${groupLabel(teams.find((t) => t.id === teamId)!)}` : ""}
           </Text>
           <Text style={styles.mutedNote}>Who this was sent to can't be changed after posting — post a new announcement to reach a different audience.</Text>
         </View>
@@ -216,7 +216,7 @@ export default function CreateAnnouncement() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }} contentContainerStyle={styles.chipRow}>
               {teams.map((team) => (
                 <Pressable key={team.id} style={[styles.chip, teamId === team.id && styles.chipActive]} onPress={() => setTeamId(team.id)}>
-                  <Text style={[styles.chipText, teamId === team.id && styles.chipTextActive]}>{teamLabel(team)}</Text>
+                  <Text style={[styles.chipText, teamId === team.id && styles.chipTextActive]}>{groupLabel(team)}</Text>
                 </Pressable>
               ))}
             </ScrollView>

@@ -12,7 +12,7 @@ import { router } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { Player, Team } from "@/types/db";
-import { teamLabel } from "@/lib/teamLabel";
+import { groupLabel } from "@/lib/orgConfig";
 
 export default function Players() {
   const { profile } = useAuth();
@@ -209,7 +209,7 @@ export default function Players() {
                           styles.teamChipTextActive,
                       ]}
                     >
-                      {teamLabel(team)}
+                      {groupLabel(team)}
                     </Text>
                   </Pressable>
                 ))}

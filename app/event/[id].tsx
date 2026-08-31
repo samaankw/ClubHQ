@@ -6,16 +6,16 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { AttendanceRecord, AttendanceStatus, ClubEvent, EventRSVP, PaymentStatus, Player, PlayerPayment, RSVPStatus } from "@/types/db";
 import { confirmAsync, notify } from "@/lib/alertCompat";
-import { teamLabel } from "@/lib/teamLabel";
+import { groupLabel } from "@/lib/orgConfig";
 import { goBackOr } from "@/lib/navigation";
 import { addEventToDeviceCalendar } from "@/lib/calendarExport";
 
 function audienceLabel(event: ClubEvent): string {
   const targets = event.event_players ?? [];
   const names = targets.map((t) => t.players.full_name).join(", ");
-  if (targets.length && event.team_id) return `${event.teams ? teamLabel(event.teams) : "Team"} · ${names}`;
+  if (targets.length && event.team_id) return `${event.teams ? groupLabel(event.teams) : "Team"} · ${names}`;
   if (targets.length) return names;
-  if (event.team_id) return event.teams ? teamLabel(event.teams) : "Team";
+  if (event.team_id) return event.teams ? groupLabel(event.teams) : "Team";
   return "Club-wide";
 }
 

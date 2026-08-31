@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { ClubEvent, EventType, Team } from "@/types/db";
 import { notify } from "@/lib/alertCompat";
-import { teamLabel } from "@/lib/teamLabel";
+import { groupLabel } from "@/lib/orgConfig";
 import { goBackOr } from "@/lib/navigation";
 import ModalBackButton from "@/components/ModalBackButton";
 
@@ -297,7 +297,7 @@ export default function CreateEvent() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }} contentContainerStyle={styles.chipRow}>
           {teams.map((team) => (
             <Pressable key={team.id} style={[styles.teamChip, teamId === team.id && styles.teamChipActive]} onPress={() => setTeamId(team.id)}>
-              <Text style={[styles.teamChipText, teamId === team.id && styles.teamChipTextActive]}>{teamLabel(team)}</Text>
+              <Text style={[styles.teamChipText, teamId === team.id && styles.teamChipTextActive]}>{groupLabel(team)}</Text>
             </Pressable>
           ))}
           {!teams.length && <Text style={styles.mutedNote}>No training groups assigned yet.</Text>}
