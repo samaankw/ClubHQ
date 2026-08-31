@@ -14,7 +14,7 @@ import { corsHeaders } from "./cors.ts";
 
 export interface AuthedCaller {
   userId: string;
-  role: "director" | "coach" | "parent" | "player";
+  role: "director" | "coach" | "parent";
   clubId: string | null;
   admin: SupabaseClient;
 }

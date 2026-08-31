@@ -1,4 +1,4 @@
-export type Role = "director" | "coach" | "parent" | "player";
+export type Role = "director" | "coach" | "parent";
 
 export interface Profile {
   id: string;

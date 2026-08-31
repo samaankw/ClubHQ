@@ -19,7 +19,6 @@ serve(async (req) => {
 
   try {
     const caller = await authenticate(req);
-    if (caller.role === "player") throw new AuthError("Player accounts cannot self-delete from this build.", 403);
 
     if (caller.role === "director") {
       const { count, error: clubError } = await caller.admin

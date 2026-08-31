@@ -80,8 +80,7 @@ app/
 │   └── privacy.tsx
 ├── (tabs)/
 │   ├── dashboard.tsx
-│   ├── schedule.tsx
-│   ├── announcements.tsx
+│   ├── schedule.tsx        (Events / Announcements toggle -- no separate announcements tab)
 │   ├── messages.tsx
 │   ├── players.tsx
 │   ├── copilot.tsx
