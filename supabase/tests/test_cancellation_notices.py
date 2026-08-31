@@ -71,7 +71,7 @@ class Fixture:
     def cancellations(self):
         self.cur.execute(
             "select id, title, body, category, target_type, team_id, auto_generated,"
-            " source_cancelled_event_ids, source_series_id"
+            " source_cancelled_event_ids, source_series_id, author_id, club_id"
             " from announcements where category = 'cancellation' order by created_at")
         return self.cur.fetchall()
 
@@ -97,7 +97,7 @@ def run():
     returned = cur.fetchone()[0]
     rows = fx.cancellations()
     if check("deleting an upcoming session writes one notice", len(rows) == 1, f"got {len(rows)}"):
-        aid, title, body, cat, tt, team_id, auto, evt_ids, series = rows[0]
+        aid, title, body, cat, tt, team_id, auto, evt_ids, series = rows[0][:9]
         check("title reads 'Cancelled: …'", title == "Cancelled: Thursday Small Group", title)
         check("body says when it was", body.startswith("Was: "), repr(body))
         check("targets the team", tt == "team" and team_id == fx.team, f"{tt} {team_id}")
@@ -128,7 +128,7 @@ def run():
     cur.execute("select delete_event(%s, true)", (e,))
     rows = fx.cancellations()
     if check("player-targeted session writes a notice", len(rows) == 1, f"got {len(rows)}"):
-        aid, _, _, _, tt, team_id, _, _, _ = rows[0]
+        aid, _, _, _, tt, team_id, _, _, _ = rows[0][:9]
         check("target_type is 'players'", tt == "players", tt)
         check("team_id is null (target_type check constraint)", team_id is None, str(team_id))
         cur.execute("select player_id from announcement_player_targets where announcement_id=%s", (aid,))
@@ -150,7 +150,7 @@ def run():
     returned = cur.fetchone()[0]
     rows = fx.cancellations()
     if check("cancelling 4 sessions writes ONE notice", len(rows) == 1, f"got {len(rows)}"):
-        aid, title, body, _, _, _, _, evt_ids, series = rows[0]
+        aid, title, body, _, _, _, _, evt_ids, series = rows[0][:9]
         check("title counts them", title == "4 sessions cancelled: Thursday Small Group", title)
         check("body lists 4 dates", len(body.strip().splitlines()) == 4, repr(body))
         # Sessions are weekly from `future`, so the day-of-month in each line
@@ -242,6 +242,46 @@ def run():
     if check("mismatched targeting produces two notices, not one", len(rows) == 2, f"got {len(rows)}"):
         teams = {r[5] for r in rows}
         check("one per audience", teams == {fx.team, fx.other_team}, str(teams))
+
+    # --- Contract with send-announcement-push -------------------------------
+    #
+    # The client fires send-announcement-push for each id these RPCs return.
+    # That function refuses to fan out unless announcement.author_id equals the
+    # caller and club_id equals the caller's club (index.ts:55-60). If the
+    # trigger ever attributed a notice to events.created_by instead of
+    # auth.uid() -- which is what the *change* trigger in 0033 falls back to --
+    # every cancellation posted by a coach who didn't create the session would
+    # be written correctly and then silently 403 at the push step. The notice
+    # would sit in the feed and no phone would ring, which is the exact failure
+    # the feature exists to prevent.
+    #
+    # Recipient selection lives on the other side of that boundary and is
+    # covered in supabase/functions/tests/announcement_push_test.ts.
+    clear()
+    second = uuid.uuid4()
+    cur.execute("insert into auth.users (id) values (%s)", (second,))
+    cur.execute("insert into profiles (id, club_id, role, full_name)"
+                " values (%s,%s,'coach','Coach Two')"
+                " on conflict (id) do update set club_id=excluded.club_id, role='coach'",
+                (second, fx.club))
+    cur.execute("insert into team_coaches (team_id, coach_id) values (%s,%s)", (fx.team, second))
+
+    e = fx.make_event(future)          # created_by = fx.director
+    fx.act_as(second)                  # a different coach does the cancelling
+    cur.execute("select delete_event(%s, true)", (e,))
+    returned = cur.fetchone()[0] or []
+    rows = fx.cancellations()
+
+    if check("a coach can cancel a session someone else created", len(rows) == 1, f"got {len(rows)}"):
+        check("author_id is the cancelling coach, not the event's creator",
+              rows[0][9] == second,
+              f"author_id={rows[0][9]}, cancelled by {second}, created by {fx.director}")
+        check("club_id matches, so the push clears its club check",
+              rows[0][10] == fx.club, str(rows[0][10]))
+        check("the RPC returns exactly the notice ids to push",
+              [r[0] for r in rows] == list(returned),
+              f"returned {list(returned)}, created {[r[0] for r in rows]}")
+    fx.act_as(fx.director)
 
     print()
     failed = [n for n, ok, _ in results if not ok]

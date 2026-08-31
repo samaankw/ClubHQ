@@ -31,6 +31,14 @@ $PGBIN/pg_ctl -D /tmp/clubhq-pgdata stop -m fast
 
 On macOS swap `linux-x64` for `darwin-arm64` (or `darwin-x64` on Intel).
 
+## The other half
+
+These tests stop at the database. They assert which audience a notice is
+addressed to (`target_type`, `team_id`, rows in `announcement_player_targets`)
+and that `author_id` is the caller, but not who that audience resolves to or
+which devices get pinged — that is `send-announcement-push`, covered in
+`supabase/functions/tests/` via `npm run test:functions`.
+
 ## What's stubbed
 
 `run_migrations.py` creates a minimal stand-in for the pieces Supabase

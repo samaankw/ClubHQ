@@ -19,9 +19,15 @@
 import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
 import { authenticate, enforceRateLimit, errorResponse, AuthError } from "../_shared/auth.ts";
 import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
-
-const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
-const EXPO_PUSH_BATCH_SIZE = 100; // Expo's documented per-request limit
+import {
+  buildPushMessages,
+  chunkMessages,
+  collectPushTokens,
+  EXPO_PUSH_URL,
+  filterOptedIn,
+  PushableAnnouncement,
+  resolveRecipientIds,
+} from "../_shared/announcementPush.ts";
 
 serve(async (req) => {
   const preflight = handleCorsPreflight(req);
@@ -71,48 +77,14 @@ serve(async (req) => {
     }
 
     // ---- Recipient targeting (mirrors announcements_read RLS — see header) ----
-    const recipientIds = new Set<string>();
+    // Lives in ../_shared/announcementPush.ts so it can be tested directly;
+    // see supabase/functions/tests/announcement_push_test.ts.
+    const recipientIds = await resolveRecipientIds(
+      supabase,
+      announcement as PushableAnnouncement
+    );
 
-    if (announcement.target_type === "players" || announcement.target_type === "parents") {
-      // Specific families only — a note to two players' parents shouldn't
-      // page every coach's phone the way a club-wide post would.
-      const { data: targets } = await supabase
-        .from("announcement_player_targets")
-        .select("players(parent_id)")
-        .eq("announcement_id", announcement.id);
-      (targets ?? []).forEach((t) => {
-        const parentId = (t.players as unknown as { parent_id: string | null } | null)?.parent_id;
-        if (parentId && parentId !== announcement.author_id) recipientIds.add(parentId);
-      });
-    } else if (announcement.target_type === "everyone") {
-      const { data: clubMembers } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("club_id", announcement.club_id)
-        .neq("id", announcement.author_id);
-      (clubMembers ?? []).forEach((p) => recipientIds.add(p.id));
-    } else {
-      // target_type === "team"
-      const [{ data: staff }, { data: players }] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("id")
-          .eq("club_id", announcement.club_id)
-          .in("role", ["coach", "director"])
-          .neq("id", announcement.author_id),
-        supabase
-          .from("players")
-          .select("parent_id")
-          .eq("team_id", announcement.team_id)
-          .not("parent_id", "is", null),
-      ]);
-      (staff ?? []).forEach((p) => recipientIds.add(p.id));
-      (players ?? []).forEach((p) => {
-        if (p.parent_id && p.parent_id !== announcement.author_id) recipientIds.add(p.parent_id);
-      });
-    }
-
-    if (recipientIds.size === 0) {
+    if (recipientIds.length === 0) {
       return new Response(JSON.stringify({ sent: 0, reason: "no_recipients" }), {
         headers: { ...corsHeaders, "content-type": "application/json" },
       });
@@ -121,49 +93,30 @@ serve(async (req) => {
     // Respect each recipient's own preference before sending anything —
     // someone who muted announcement pushes should still see it in-app,
     // just not get pinged for it.
-    const { data: optedIn } = await supabase
-      .from("profiles")
-      .select("id")
-      .in("id", Array.from(recipientIds))
-      .eq("notify_announcements", true);
-    const notifiableIds = (optedIn ?? []).map((p) => p.id);
+    const notifiableIds = await filterOptedIn(supabase, recipientIds);
     if (notifiableIds.length === 0) {
       return new Response(JSON.stringify({ sent: 0, reason: "no_recipients_opted_in" }), {
         headers: { ...corsHeaders, "content-type": "application/json" },
       });
     }
 
-    const { data: tokenRows } = await supabase
-      .from("push_tokens")
-      .select("expo_push_token")
-      .in("user_id", notifiableIds)
-      .eq("enabled", true);
-
-    const tokens = Array.from(new Set((tokenRows ?? []).map((t) => t.expo_push_token))).filter(Boolean);
+    const tokens = await collectPushTokens(supabase, notifiableIds);
     if (tokens.length === 0) {
       return new Response(JSON.stringify({ sent: 0, reason: "no_push_tokens" }), {
         headers: { ...corsHeaders, "content-type": "application/json" },
       });
     }
 
-    // Notification shape mirrors GroupMe/TeamSnap: the group/team is the
-    // title, and the body reads like a chat preview — "Coach Sam: Practice
-    // moved to 6pm" — rather than a generic "New announcement" banner.
-    const pinPrefix = announcement.pinned ? "📌 " : "";
-    const notifTitle = teamName ?? club?.name ?? "ClubHQ";
-    const notifBody = `${pinPrefix}${author?.full_name ?? "Someone"}: ${announcement.title}`;
-
-    const messages = tokens.map((to) => ({
-      to,
-      title: notifTitle,
-      body: notifBody,
-      sound: "default",
-      data: { type: "announcement", announcementId: announcement.id, teamId: announcement.team_id },
-    }));
+    const messages = buildPushMessages({
+      tokens,
+      announcement: announcement as PushableAnnouncement,
+      authorName: author?.full_name ?? null,
+      teamName,
+      clubName: club?.name ?? null,
+    });
 
     let sent = 0;
-    for (let i = 0; i < messages.length; i += EXPO_PUSH_BATCH_SIZE) {
-      const batch = messages.slice(i, i + EXPO_PUSH_BATCH_SIZE);
+    for (const batch of chunkMessages(messages)) {
       const resp = await fetch(EXPO_PUSH_URL, {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json" },
@@ -176,7 +129,7 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ sent, recipients: recipientIds.size }), {
+    return new Response(JSON.stringify({ sent, recipients: recipientIds.length }), {
       headers: { ...corsHeaders, "content-type": "application/json" },
     });
   } catch (err) {
