@@ -77,7 +77,10 @@ export function useWeekCounts() {
   return { counts, loading, refresh: load };
 }
 
-export type AnnouncementWithRead = Announcement & { isRead: boolean };
+// Defined in ./feed so the pure feed-building module stays free of React
+// and Supabase imports; re-exported here for existing call sites.
+export type { AnnouncementWithRead } from "./feed";
+import type { AnnouncementWithRead } from "./feed";
 
 export function useRecentAnnouncements(limit = 5) {
   const { profile } = useAuth();
