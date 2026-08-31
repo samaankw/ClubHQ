@@ -4,9 +4,28 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAuth } from "@/lib/AuthProvider";
 import { registerPushToken } from "@/lib/notifications";
 import { useUnreadAnnouncementsCount } from "@/lib/hooks";
+import { OrgConfig } from "@/lib/orgConfig";
+
+type TabName = "dashboard" | "schedule" | "messages" | "players" | "copilot" | "profile";
+
+// Every Tabs.Screen's href goes through this instead of an ad-hoc literal,
+// so a future club-only tab (standings, lineups -- Phase 3) has one place to
+// add a case rather than a new bespoke hardcoded href on its own screen.
+// Nothing in today's tab set actually varies by org type yet: teams/games
+// aren't tabs, they're fields inside existing screens, so every case below
+// besides copilot's (unconditional, unrelated to org type) returns
+// `undefined` for now.
+function tabHref(tab: TabName, _orgConfig: OrgConfig): undefined | null {
+  if (tab === "copilot") {
+    // Always reachable via router.push from Profile, never a tab-bar icon,
+    // for any role or org type.
+    return null;
+  }
+  return undefined;
+}
 
 export default function TabsLayout() {
-  const { profile } = useAuth();
+  const { profile, orgConfig } = useAuth();
   const unreadAnnouncements = useUnreadAnnouncementsCount();
 
   useEffect(() => {
@@ -45,6 +64,7 @@ export default function TabsLayout() {
         name="dashboard"
         options={{
           title: "Home",
+          href: tabHref("dashboard", orgConfig),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "home" : "home-outline"}
@@ -59,6 +79,7 @@ export default function TabsLayout() {
         name="schedule"
         options={{
           title: "Schedule",
+          href: tabHref("schedule", orgConfig),
           tabBarBadge: unreadAnnouncements > 0 ? unreadAnnouncements : undefined,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
@@ -74,6 +95,7 @@ export default function TabsLayout() {
   name="messages"
   options={{
     title: "Messages",
+    href: tabHref("messages", orgConfig),
     tabBarIcon: ({ color, focused }) => (
       <Ionicons
         name={
@@ -92,6 +114,7 @@ export default function TabsLayout() {
         name="players"
         options={{
           title: "Players",
+          href: tabHref("players", orgConfig),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "people" : "people-outline"}
@@ -102,15 +125,11 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* Copilot is a coach/director tool, not a daily screen for every
-          role — reachable from Profile instead of taking a permanent slot
-          in an already-crowded tab bar. href: null keeps the route working
-          via router.push while hiding it from the tab bar itself. */}
       <Tabs.Screen
         name="copilot"
         options={{
           title: "Copilot",
-          href: null,
+          href: tabHref("copilot", orgConfig),
         }}
       />
 
@@ -118,6 +137,7 @@ export default function TabsLayout() {
         name="profile"
         options={{
           title: "Profile",
+          href: tabHref("profile", orgConfig),
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? "person" : "person-outline"}

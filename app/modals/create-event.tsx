@@ -16,13 +16,6 @@ interface PlayerOption {
   teams?: { age_group: string | null } | null;
 }
 
-const TYPES: { key: EventType; label: string }[] = [
-  { key: "practice", label: "Practice" },
-  { key: "game", label: "Game" },
-  { key: "tournament", label: "Tournament" },
-  { key: "club_event", label: "Club Event" },
-];
-
 type AudienceMode = "club" | "team" | "player";
 
 export default function CreateEvent() {
@@ -33,7 +26,7 @@ export default function CreateEvent() {
   // relevant roster/player list finishes loading and can apply it — cleared
   // right after, so switching teams afterward still defaults to "everyone".
   const presetPlayerIdsRef = useRef<string[] | null>(null);
-  const [type, setType] = useState<EventType>("practice");
+  const [type, setType] = useState<EventType>(orgConfig.defaultEventType as EventType);
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
   const [dateStr, setDateStr] = useState("");
@@ -275,7 +268,7 @@ export default function CreateEvent() {
       />
       <Text style={styles.label}>EVENT TYPE</Text>
       <View style={styles.typeRow}>
-        {TYPES.map((t) => <Pressable key={t.key} style={[styles.typeChip, type === t.key && styles.typeChipActive]} onPress={() => setType(t.key)}><Text style={[styles.typeChipText, type === t.key && styles.typeChipTextActive]}>{t.label}</Text></Pressable>)}
+        {orgConfig.eventTypes.map((t) => <Pressable key={t.key} style={[styles.typeChip, type === t.key && styles.typeChipActive]} onPress={() => setType(t.key as EventType)}><Text style={[styles.typeChipText, type === t.key && styles.typeChipTextActive]}>{t.label}</Text></Pressable>)}
       </View>
 
       <Text style={styles.label}>AUDIENCE</Text>

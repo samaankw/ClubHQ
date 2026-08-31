@@ -40,6 +40,10 @@ const TYPE_LABEL: Record<string, string> = {
   game: "Game",
   tournament: "Tournament",
   club_event: "Event",
+  private_session: "Private Session",
+  small_group: "Small Group Session",
+  clinic: "Clinic",
+  camp: "Camp",
 };
 
 serve(async (req) => {

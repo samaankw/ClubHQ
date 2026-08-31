@@ -81,7 +81,7 @@ export interface Announcement {
   created_at: string;
 }
 
-export type EventType = "practice" | "game" | "tournament" | "club_event";
+export type EventType = "practice" | "game" | "tournament" | "club_event" | "private_session" | "small_group" | "clinic" | "camp";
 
 export interface ClubEvent {
   id: string;

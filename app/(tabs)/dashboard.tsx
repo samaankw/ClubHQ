@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet, RefreshControl, Pressable } from "r
 import { format } from "date-fns";
 import { router } from "expo-router";
 import { useAuth } from "@/lib/AuthProvider";
-import { useNextEvent, useWeekCounts, useRecentAnnouncements, useMyPlayers, useLatestDevelopmentPlan } from "@/lib/hooks";
+import { useNextEvent, useWeekCounts, useActivityStats, useRecentAnnouncements, useMyPlayers, useLatestDevelopmentPlan } from "@/lib/hooks";
 import ClubBioSection from "@/components/ClubBioSection";
 import CoachesSection from "@/components/CoachesSection";
 function Card({ children }: { children: React.ReactNode }) {
@@ -72,15 +72,16 @@ function PlayerDevelopmentCard() {
 }
 
 export default function Dashboard() {
-  const { profile } = useAuth();
+  const { profile, orgConfig } = useAuth();
   const { event, loading: eventLoading, refresh: refreshEvent } = useNextEvent();
   const { counts, loading: countsLoading, refresh: refreshCounts } = useWeekCounts();
+  const { stats, loading: statsLoading, refresh: refreshStats } = useActivityStats();
   const { announcements, loading: annLoading, refresh: refreshAnn } = useRecentAnnouncements(3);
 
   const [refreshing, setRefreshing] = React.useState(false);
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refreshEvent(), refreshCounts(), refreshAnn()]);
+    await Promise.all([refreshEvent(), refreshCounts(), refreshStats(), refreshAnn()]);
     setRefreshing(false);
   };
 
@@ -107,19 +108,34 @@ export default function Dashboard() {
         )}
       </Card>
 
-      <Card>
-        <Text style={styles.cardLabel}>CLUB THIS WEEK</Text>
-        {countsLoading ? (
-          <Text style={styles.muted}>Loading…</Text>
-        ) : (
-          <View style={styles.statsRow}>
-            <Stat n={counts.games} label="Games" />
-            <Stat n={counts.practices} label="Practices" />
-            <Stat n={counts.tournaments} label="Tournaments" />
-            <Stat n={counts.clubEvents} label="Club Events" />
-          </View>
-        )}
-      </Card>
+      {orgConfig.features.games ? (
+        <Card>
+          <Text style={styles.cardLabel}>CLUB THIS WEEK</Text>
+          {countsLoading ? (
+            <Text style={styles.muted}>Loading…</Text>
+          ) : (
+            <View style={styles.statsRow}>
+              <Stat n={counts.games} label="Games" />
+              <Stat n={counts.practices} label="Practices" />
+              <Stat n={counts.tournaments} label="Tournaments" />
+              <Stat n={counts.clubEvents} label="Club Events" />
+            </View>
+          )}
+        </Card>
+      ) : (
+        <Card>
+          <Text style={styles.cardLabel}>THIS WEEK</Text>
+          {statsLoading ? (
+            <Text style={styles.muted}>Loading…</Text>
+          ) : (
+            <View style={styles.statsRow}>
+              <Stat n={stats.sessionsDelivered} label="Sessions" />
+              <Stat n={stats.playersEvaluated} label="Players Evaluated" />
+              <Stat n={stats.homeworkCompletionPct ?? 0} label="Homework Done" suffix="%" />
+            </View>
+          )}
+        </Card>
+      )}
 
       {profile?.role === "parent" && <PlayerDevelopmentCard />}
 
@@ -141,10 +157,10 @@ export default function Dashboard() {
   );
 }
 
-function Stat({ n, label }: { n: number; label: string }) {
+function Stat({ n, label, suffix }: { n: number; label: string; suffix?: string }) {
   return (
     <View style={styles.stat}>
-      <Text style={styles.statNum}>{n}</Text>
+      <Text style={styles.statNum}>{n}{suffix ?? ""}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );

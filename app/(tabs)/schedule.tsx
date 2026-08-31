@@ -15,6 +15,10 @@ const TYPE_EMOJI: Record<string, string> = {
   game: "⚽",
   tournament: "🏆",
   club_event: "🎉",
+  private_session: "🎯",
+  small_group: "👥",
+  clinic: "📋",
+  camp: "☀️",
 };
 
 function audienceLabel(event: ClubEvent, config: OrgConfig): string {

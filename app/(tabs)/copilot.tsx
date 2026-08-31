@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
 import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { OrgConfig } from "@/lib/orgConfig";
 
 interface ChatMessage {
   id: string;
@@ -9,15 +10,18 @@ interface ChatMessage {
   text: string;
 }
 
-const SUGGESTIONS = [
+// "across the club" and "which coaches" assumed a multi-staff club — neither
+// holds for a solo private trainer, so both are sourced from org config
+// instead of hardcoded.
+const suggestions = (config: OrgConfig): string[] => [
   "Which players improved the most this season?",
-  "What's the most common weakness across the club?",
-  "Which coaches are completing evaluations consistently?",
+  `What's the most common weakness across your ${config.labels.groupingPlural.toLowerCase()}?`,
+  `Which ${config.labels.staffPlural.toLowerCase()} are completing evaluations consistently?`,
   "What's our homework completion rate?",
 ];
 
 export default function Copilot() {
-  const { profile } = useAuth();
+  const { profile, orgConfig } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [asking, setAsking] = useState(false);
@@ -69,7 +73,7 @@ export default function Copilot() {
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>Ask about your club</Text>
           <Text style={styles.emptySubtitle}>Player development, coach activity, homework completion — grounded in your live data.</Text>
-          {SUGGESTIONS.map((s) => (
+          {suggestions(orgConfig).map((s) => (
             <Pressable key={s} style={styles.suggestionChip} onPress={() => ask(s)}>
               <Text style={styles.suggestionText}>{s}</Text>
             </Pressable>

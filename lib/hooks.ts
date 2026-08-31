@@ -77,6 +77,67 @@ export function useWeekCounts() {
   return { counts, loading, refresh: load };
 }
 
+// For org types without games/tournaments (private_trainer, academy) —
+// "CLUB THIS WEEK"'s Games/Practices/Tournaments breakdown is permanently
+// zero for a solo trainer, so this looks backward at the same week instead
+// of forward: what actually happened, not what's scheduled. Same query
+// shapes as pilot-metrics.tsx's evaluatedLast7Days/homeworkCompletionPct,
+// kept consistent rather than reinvented, since the two screens should never
+// disagree about the same underlying numbers.
+export function useActivityStats() {
+  const { profile } = useAuth();
+  const [stats, setStats] = useState({ sessionsDelivered: 0, playersEvaluated: 0, homeworkCompletionPct: null as number | null });
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!profile?.club_id) {
+      setStats({ sessionsDelivered: 0, playersEvaluated: 0, homeworkCompletionPct: null });
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const now = new Date();
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      const { data: teams } = await supabase.from("teams").select("id").eq("club_id", profile.club_id);
+      const teamIds = (teams ?? []).map((t) => t.id);
+      const { data: players } = await supabase
+        .from("players")
+        .select("id")
+        .in("team_id", teamIds.length ? teamIds : ["00000000-0000-0000-0000-000000000000"]);
+      const playerIds = (players ?? []).map((p) => p.id);
+      const safePlayerIds = playerIds.length ? playerIds : ["00000000-0000-0000-0000-000000000000"];
+
+      const [{ count: sessionsCount }, { data: evals }, { data: homework }] = await Promise.all([
+        supabase
+          .from("events")
+          .select("id", { count: "exact", head: true })
+          .eq("club_id", profile.club_id)
+          .gte("starts_at", sevenDaysAgo)
+          .lte("starts_at", now.toISOString()),
+        supabase.from("evaluations").select("player_id").in("player_id", safePlayerIds).gte("created_at", sevenDaysAgo),
+        supabase.from("homework_items").select("completed, player_id").in("player_id", safePlayerIds),
+      ]);
+
+      const hwTotal = homework?.length ?? 0;
+      const hwDone = (homework ?? []).filter((h) => h.completed).length;
+
+      setStats({
+        sessionsDelivered: sessionsCount ?? 0,
+        playersEvaluated: new Set((evals ?? []).map((e) => e.player_id)).size,
+        homeworkCompletionPct: hwTotal ? Math.round((hwDone / hwTotal) * 100) : null,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [profile?.club_id]);
+
+  useEffect(() => { load(); }, [load]);
+  return { stats, loading, refresh: load };
+}
+
 export type AnnouncementWithRead = Announcement & { isRead: boolean };
 
 export function useRecentAnnouncements(limit = 5) {

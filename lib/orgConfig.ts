@@ -22,10 +22,26 @@ export interface OrgConfig {
     lineups: boolean;
     referees: boolean;
   };
-  // Event-type chip default in create-event.tsx (Phase D) -- must not be
-  // "practice" for an org with no practices.
+  // Event-type chips in create-event.tsx (Phase D) -- must not offer
+  // "practice"/"game"/"tournament" for an org with no such thing.
+  // defaultEventType must be one of eventTypes' keys.
+  eventTypes: { key: string; label: string }[];
   defaultEventType: string;
 }
+
+const CLUB_EVENT_TYPES = [
+  { key: "practice", label: "Practice" },
+  { key: "game", label: "Game" },
+  { key: "tournament", label: "Tournament" },
+  { key: "club_event", label: "Club Event" },
+];
+
+const NON_CLUB_EVENT_TYPES = [
+  { key: "private_session", label: "Private Session" },
+  { key: "small_group", label: "Small Group" },
+  { key: "clinic", label: "Clinic" },
+  { key: "camp", label: "Camp" },
+];
 
 export const DEFAULT_ORG_TYPE: OrgType = "small_club";
 
@@ -44,6 +60,7 @@ export const ORG_CONFIGS: Record<OrgType, OrgConfig> = {
       admin: "Owner",
     },
     features: NON_CLUB_FEATURES,
+    eventTypes: NON_CLUB_EVENT_TYPES,
     defaultEventType: "private_session",
   },
   academy: {
@@ -57,6 +74,7 @@ export const ORG_CONFIGS: Record<OrgType, OrgConfig> = {
       admin: "Director",
     },
     features: NON_CLUB_FEATURES,
+    eventTypes: NON_CLUB_EVENT_TYPES,
     defaultEventType: "clinic",
   },
   small_club: {
@@ -70,6 +88,7 @@ export const ORG_CONFIGS: Record<OrgType, OrgConfig> = {
       admin: "Director",
     },
     features: CLUB_FEATURES,
+    eventTypes: CLUB_EVENT_TYPES,
     defaultEventType: "practice",
   },
   large_club: {
@@ -83,6 +102,7 @@ export const ORG_CONFIGS: Record<OrgType, OrgConfig> = {
       admin: "Director",
     },
     features: CLUB_FEATURES,
+    eventTypes: CLUB_EVENT_TYPES,
     defaultEventType: "practice",
   },
 };
