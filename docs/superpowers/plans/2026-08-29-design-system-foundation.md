@@ -3641,6 +3641,87 @@ distinct privacy or integrity problem:
 
 ---
 
+### Task 35: Business-logic tests, and close the `lib/` linter gap
+
+Two related pieces of work: extract the app's untested business logic into pure
+modules and test it, and fix a blind spot found while looking for it.
+
+#### Part A — the linter never scanned `lib/`
+
+`scripts/lint-tokens.mjs` has `SCAN_ROOTS = ["app", "components"]`. `lib/` has
+never been checked, and it contains three raw hex colours:
+
+```
+lib/announcementCategories.ts:12   changed: "#FF9F0A"
+lib/announcementCategories.ts:13   opportunity: "#30D158"
+lib/announcementCategories.ts:14   info: "#0A6CFF"     ← the legacy brand blue
+```
+
+These are **not** dead constants — they colour the accent bar on announcement
+cards, so a retired brand blue is still rendering on the Schedule tab. The claim
+that all three legacy blues were retired was wrong; it was made against a grep
+that omitted `lib/`.
+
+Fix: add `lib` to `SCAN_ROOTS`, then tokenise those three to
+`color.icon.warning`, `color.text.success`, and `color.text.brand`
+respectively. Fix anything else the widened scan surfaces.
+
+#### Part B — extract and test the business logic
+
+103 tests cover tokens, components, and the linter. None cover the logic that
+decides **what gets written to the database**. A bug in any of the following
+writes wrong data silently, and neither typecheck nor lint would notice.
+
+Extract into pure, testable modules — no React, no Supabase — and have the
+screens call them:
+
+**`lib/eventSchedule.ts`**
+- `buildStartsAt(dateStr, hour, minute, meridiem): Date` — the 12→24 hour
+  conversion currently inline at `app/modals/create-event.tsx:305`. The rule is
+  `hour24 = (hour12 % 12) + (PM ? 12 : 0)`; **do not alter it**, just move it.
+- `matchTimePreset(hour, minute, meridiem)` — currently `matchingPreset` at
+  line 58, which decides whether an existing event's time lands on a chip or in
+  the custom fields.
+- `weeklyOccurrences(start: Date, count: number): Date[]` — same day and time
+  each week.
+
+**`lib/eventTargeting.ts`**
+- `resolveTargeting({ audienceMode, teamId, selectedPlayerIds, attendingIds, teamRoster })`
+  → `{ teamId, playerIds }`, mirroring lines 316-317 exactly. This decides who
+  an event or announcement reaches; a mistake here sends a private session to
+  the whole club, or an announcement to the wrong parents.
+
+**`lib/dedupeLocations.ts`** — the case-insensitive de-duplication inside
+`useRecentLocations`, extracted so it can be tested without a database.
+
+#### What the tests must cover
+
+- **`buildStartsAt`**: 12 AM → hour 0, 12 PM → hour 12, 1 PM → 13, 11 PM → 23.
+  Midnight and noon are where 12-hour conversions classically break.
+- **`matchTimePreset`**: an on-chip time matches; **5:17 PM does not and must
+  fall through to custom** — this is what stops a saved event being silently
+  rounded when a coach reopens it.
+- **`weeklyOccurrences`**: correct count, 7-day spacing, same clock time —
+  including across a month boundary and a DST transition if the runtime honours
+  one.
+- **`resolveTargeting`**: club-wide → no team and no players; whole team → team
+  id, no players; partial team → the attending subset; specific players → those
+  players and no team.
+- **`dedupeLocations`**: case-insensitive, preserves first-seen order, respects
+  the limit, drops blanks.
+- **`teamLabel`** and **`announcementCategories`** — both already pure, both
+  currently untested.
+
+#### Hard rules
+
+- **Extraction must not change behaviour.** Every rule moves verbatim. Verify:
+  `git diff -- app/modals/create-event.tsx | grep "^-" | grep -E "supabase\.|rpc\(|router\." || echo "clean"`
+- The screens must call the extracted functions — do not leave a second copy
+  behind. Two implementations of the same rule will diverge.
+- `npm test` and `npm run verify` must pass, with the linter now scanning `lib/`.
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Token layers (Tasks 3–4), radius scale exploration (Task 3), component library (Tasks 5–12), token lint (Task 2), tab bar reskin (Task 13), first screen (Task 14). **Deferred to later plans by design:** the remaining 13 screen conversions (Plan 2) and the Figma variables and components (Plan 3). The spec's success criteria 3 and 4 are met across Plans 2 and 3, not here.
