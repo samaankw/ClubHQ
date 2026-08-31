@@ -1,14 +1,35 @@
 import React from "react";
-import { View, Text, ScrollView, StyleSheet, RefreshControl, Pressable } from "react-native";
+import { View, ScrollView, RefreshControl } from "react-native";
 import { format } from "date-fns";
 import { router } from "expo-router";
 import { useAuth } from "@/lib/AuthProvider";
-import { useNextEvent, useWeekCounts, useRecentAnnouncements, useMyPlayers, useLatestDevelopmentPlan } from "@/lib/hooks";
+import {
+  useNextEvent,
+  useWeekCounts,
+  useRecentAnnouncements,
+  useMyPlayers,
+  useLatestDevelopmentPlan,
+  useSetupProgress,
+} from "@/lib/hooks";
 import ClubBioSection from "@/components/ClubBioSection";
 import CoachesSection from "@/components/CoachesSection";
-function Card({ children }: { children: React.ReactNode }) {
-  return <View style={styles.card}>{children}</View>;
-}
+import {
+  Screen,
+  Card,
+  Eyebrow,
+  Text,
+  Button,
+  Badge,
+  Avatar,
+  Chip,
+  IconChip,
+  StatTile,
+  ListRow,
+  ProgressBar,
+  Divider,
+  SetupChecklist,
+} from "@/components/ui";
+import { space, opacity } from "@/theme";
 
 function PlayerDevelopmentCard() {
   const { players, loading } = useMyPlayers();
@@ -28,12 +49,12 @@ function PlayerDevelopmentCard() {
     // has no player card at all, with no clue why or what to do about it.
     if (loading) return null;
     return (
-      <Card>
-        <Text style={styles.cardLabel}>MY PLAYERS</Text>
-        <Text style={styles.muted}>No child linked to your account yet. Your director can give you a one-time player code.</Text>
-        <Pressable style={styles.linkButton} onPress={() => router.push("/claim-player")}>
-          <Text style={styles.linkButtonText}>Link a Player →</Text>
-        </Pressable>
+      <Card style={{ gap: space[3] }}>
+        <Eyebrow>My Players</Eyebrow>
+        <Text tone="secondary">
+          No child linked to your account yet. Your director can give you a one-time player code.
+        </Text>
+        <Button label="Link a Player" variant="secondary" size="sm" onPress={() => router.push("/claim-player")} />
       </Card>
     );
   }
@@ -43,30 +64,42 @@ function PlayerDevelopmentCard() {
   const delta = after - before;
 
   return (
-    <Card>
-      <Text style={styles.cardLabel}>MY PLAYERS</Text>
+    <Card style={{ gap: space[3] }}>
+      <Eyebrow>My Players</Eyebrow>
+
       {players.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.playerPicker} contentContainerStyle={styles.playerPickerRow}>
-          {players.map((p) => (
-            <Pressable key={p.id} onPress={() => setSelectedId(p.id)} style={[styles.playerChip, p.id === player.id && styles.playerChipActive]}>
-              <Text style={[styles.playerChipText, p.id === player.id && styles.playerChipTextActive]}>{p.full_name}</Text>
-            </Pressable>
-          ))}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={{ flexDirection: "row", gap: space[2] }}>
+            {players.map((p) => (
+              <Chip key={p.id} label={p.full_name} selected={p.id === player.id} onPress={() => setSelectedId(p.id)} />
+            ))}
+          </View>
         </ScrollView>
       )}
-      <Text style={styles.playerName}>{player.full_name}</Text>
-      <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8 }}>
-        <Text style={styles.bigScore}>{after || "—"}</Text>
+
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space[3] }}>
+        <Avatar uri={player.photo_url} name={player.full_name} />
+        <Text role="h2">{player.full_name}</Text>
+      </View>
+
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space[3] }}>
+        <Text role="display" tone="brand">
+          {after || "—"}
+        </Text>
         {delta !== 0 && (
-          <Text style={[styles.delta, { color: delta > 0 ? "#30D158" : "#FF6B6B" }]}>
-            {delta > 0 ? "↑" : "↓"} {Math.abs(delta)}
-          </Text>
+          <Badge label={`${delta > 0 ? "↑" : "↓"} ${Math.abs(delta)}`} tone={delta > 0 ? "success" : "danger"} />
         )}
       </View>
-      {plan?.summary ? <Text style={styles.muted}>{plan.summary}</Text> : <Text style={styles.muted}>No published development plan yet.</Text>}
-      <Pressable style={styles.linkButton} onPress={() => router.push(`/player/${player.id}`)}>
-        <Text style={styles.linkButtonText}>View development profile →</Text>
-      </Pressable>
+      <ProgressBar value={after / 100} />
+
+      <Text tone="secondary">{plan?.summary ? plan.summary : "No published development plan yet."}</Text>
+
+      <Button
+        label="View development profile"
+        variant="ghost"
+        size="sm"
+        onPress={() => router.push(`/player/${player.id}`)}
+      />
     </Card>
   );
 }
@@ -76,6 +109,21 @@ export default function Dashboard() {
   const { event, loading: eventLoading, refresh: refreshEvent } = useNextEvent();
   const { counts, loading: countsLoading, refresh: refreshCounts } = useWeekCounts();
   const { announcements, loading: annLoading, refresh: refreshAnn } = useRecentAnnouncements(3);
+  const {
+    steps: setupSteps,
+    completed: setupCompleted,
+    total: setupTotal,
+    allDone: setupAllDone,
+    loading: setupLoading,
+    teamCount,
+    playerCount,
+  } = useSetupProgress();
+
+  // Team/player creation is director-gated in RLS (`teams_write_staff`,
+  // `players_insert_staff` both require role = 'director'), so a coach or
+  // parent must never see a checklist pointing at doors they can't open.
+  const showSetupChecklist =
+    profile?.role === "director" && !setupLoading && setupSteps.length > 0 && !setupAllDone;
 
   const [refreshing, setRefreshing] = React.useState(false);
   const onRefresh = async () => {
@@ -85,92 +133,104 @@ export default function Dashboard() {
   };
 
   return (
-  <ScrollView style={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-    <ClubBioSection />
-    <CoachesSection />
+    <Screen scroll={false}>
+      <ScrollView
+        contentContainerStyle={{ padding: space[4], gap: space[4] }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        <ClubBioSection />
 
-    <Card>
-      <Text style={styles.cardLabel}>NEXT EVENT</Text>
-      {eventLoading ? (
-        <Text style={styles.muted}>Loading...</Text>
-      ) : event ? (
-          <Pressable onPress={() => router.push(`/event/${event.id}`)}>
-            <Text style={styles.eventTitle}>{event.title}</Text>
-            <Text style={styles.muted}>
-              {format(new Date(event.starts_at), "EEE, MMM d — h:mm a")}
-              {event.location ? ` · ${event.location}` : ""}
-            </Text>
-            <Text style={styles.linkButtonText}>RSVP / attendance →</Text>
-          </Pressable>
-        ) : (
-          <Text style={styles.muted}>Nothing scheduled yet.</Text>
+        {showSetupChecklist && (
+          <SetupChecklist
+            steps={setupSteps}
+            completed={setupCompleted}
+            total={setupTotal}
+            onStepPress={(step) => router.push(step.href as never)}
+          />
         )}
-      </Card>
 
-      <Card>
-        <Text style={styles.cardLabel}>CLUB THIS WEEK</Text>
-        {countsLoading ? (
-          <Text style={styles.muted}>Loading…</Text>
-        ) : (
-          <View style={styles.statsRow}>
-            <Stat n={counts.games} label="Games" />
-            <Stat n={counts.practices} label="Practices" />
-            <Stat n={counts.tournaments} label="Tournaments" />
-            <Stat n={counts.clubEvents} label="Club Events" />
+        {profile?.role === "director" && (
+          <View style={{ flexDirection: "row", gap: space[3] }}>
+            <View style={[{ flex: 1 }, teamCount === 0 && { opacity: opacity.disabled }]}>
+              <StatTile label="Club Status" value={String(teamCount)} footnote="Teams active" />
+            </View>
+            <View style={[{ flex: 1 }, playerCount === 0 && { opacity: opacity.disabled }]}>
+              <StatTile label="Players" value={String(playerCount)} footnote="Roster count" />
+            </View>
           </View>
         )}
-      </Card>
 
-      {profile?.role === "parent" && <PlayerDevelopmentCard />}
+        {/* Parent-facing: "Meet the Coaches" introduces staff to families. A
+            coach or director looking at their own dashboard does not need an
+            introduction to themselves. */}
+        {profile?.role === "parent" && <CoachesSection />}
 
-      <Card>
-        <Text style={styles.cardLabel}>ANNOUNCEMENTS</Text>
-        {annLoading ? (
-          <Text style={styles.muted}>Loading…</Text>
-        ) : announcements.length === 0 ? (
-          <Text style={styles.muted}>No announcements yet.</Text>
-        ) : (
-          announcements.map((a) => (
-            <View key={a.id} style={styles.annRow}>
-              <Text style={styles.annTitle}>{a.pinned ? "📌 " : ""}{a.title}</Text>
+        <Card style={{ gap: space[2] }}>
+          <Eyebrow>Announcements</Eyebrow>
+          {annLoading ? (
+            <Text tone="secondary">Loading…</Text>
+          ) : announcements.length === 0 ? (
+            <Text tone="secondary">No announcements yet.</Text>
+          ) : (
+            announcements.map((a, i) => (
+              <React.Fragment key={a.id}>
+                {i > 0 && <Divider />}
+                <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], paddingVertical: space[2] }}>
+                  {a.pinned ? <IconChip name="pin" tone="brand" size={14} /> : null}
+                  <Text role="h3" style={{ flex: 1 }}>
+                    {a.title}
+                  </Text>
+                </View>
+              </React.Fragment>
+            ))
+          )}
+        </Card>
+
+        <Card padded={false} style={{ paddingVertical: space[2] }}>
+          <View style={{ paddingHorizontal: space[4], paddingTop: space[2] }}>
+            <Eyebrow>Next Event</Eyebrow>
+          </View>
+          {eventLoading ? (
+            <Text tone="secondary" style={{ paddingHorizontal: space[4], paddingBottom: space[3] }}>
+              Loading...
+            </Text>
+          ) : event ? (
+            <View style={{ paddingHorizontal: space[4] }}>
+              <ListRow
+                icon="calendar"
+                title={event.title}
+                subtitle={`${format(new Date(event.starts_at), "EEE, MMM d — h:mm a")}${event.location ? ` · ${event.location}` : ""}`}
+                onPress={() => router.push(`/event/${event.id}`)}
+              />
             </View>
-          ))
-        )}
-      </Card>
-    </ScrollView>
+          ) : (
+            <Text tone="secondary" style={{ paddingHorizontal: space[4], paddingBottom: space[3] }}>
+              Nothing scheduled yet.
+            </Text>
+          )}
+        </Card>
+
+        <Card style={{ gap: space[3] }}>
+          <Eyebrow>Club This Week</Eyebrow>
+          {countsLoading ? (
+            <Text tone="secondary">Loading…</Text>
+          ) : (
+            <View style={{ gap: space[3] }}>
+              <View style={{ flexDirection: "row", gap: space[3] }}>
+                <StatTile label="Games" value={String(counts.games)} icon="football" />
+                <StatTile label="Practices" value={String(counts.practices)} icon="fitness" />
+              </View>
+              <View style={{ flexDirection: "row", gap: space[3] }}>
+                <StatTile label="Tournaments" value={String(counts.tournaments)} icon="trophy" />
+                <StatTile label="Club Events" value={String(counts.clubEvents)} icon="megaphone" />
+              </View>
+            </View>
+          )}
+        </Card>
+
+        {profile?.role === "parent" && <PlayerDevelopmentCard />}
+
+      </ScrollView>
+    </Screen>
   );
 }
-
-function Stat({ n, label }: { n: number; label: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statNum}>{n}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0B0B0D", padding: 16 },
-  card: { backgroundColor: "#141416", borderRadius: 14, padding: 16, marginBottom: 14 },
-  cardLabel: { fontSize: 12, fontWeight: "700", color: "#9A9DA3", letterSpacing: 0.5, marginBottom: 8 },
-  eventTitle: { fontSize: 18, fontWeight: "700", color: "#0A6CFF" },
-  muted: { color: "#9A9DA3", marginTop: 4 },
-  statsRow: { flexDirection: "row", justifyContent: "space-between" },
-  stat: { alignItems: "center" },
-  statNum: { fontSize: 22, fontWeight: "800", color: "#0A6CFF" },
-  statLabel: { fontSize: 12, color: "#9A9DA3", marginTop: 2 },
-  bigScore: { fontSize: 36, fontWeight: "800", color: "#0A6CFF" },
-  delta: { fontSize: 16, fontWeight: "700" },
-  annRow: { paddingVertical: 6, borderTopWidth: 1, borderTopColor: "#242424" },
-  annTitle: { fontSize: 15, fontWeight: "600", color: "#F2F2F3" },
-  playerPicker: { marginBottom: 10 },
-  playerPickerRow: { flexDirection: "row", alignItems: "flex-start" },
-  playerChip: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: 18, backgroundColor: "#17181B", marginRight: 8 },
-  playerChipActive: { backgroundColor: "#0A6CFF" },
-  playerChipText: { color: "#9A9DA3", fontWeight: "600", fontSize: 12 },
-  playerChipTextActive: { color: "#fff" },
-  playerName: { fontSize: 16, fontWeight: "700", color: "#F2F2F3" },
-  linkButton: { marginTop: 12 },
-  linkButtonText: { color: "#0A6CFF", fontWeight: "700", marginTop: 7 },
-});

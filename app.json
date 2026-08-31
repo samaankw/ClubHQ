@@ -5,7 +5,7 @@
     "scheme": "clubhq",
     "version": "0.2.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "icon": "./assets/images/clubhq-icon.png",
     "plugins": [
       "expo-router",
@@ -49,7 +49,7 @@
       "package": "com.skario.clubhq",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/clubhq-adaptive-foreground.png",
-        "backgroundColor": "#0A6CFF"
+        "backgroundColor": "#0066FF"
       },
       "permissions": [
         "android.permission.RECORD_AUDIO",
@@ -59,8 +59,6 @@
       ]
     },
     "extra": {
-      "supabaseUrl": "SUPABASE_URL_HERE",
-      "supabaseAnonKey": "SUPABASE_ANON_KEY_HERE",
       "legalContactEmail": "hello@skariox.com",
       "router": {},
       "eas": {

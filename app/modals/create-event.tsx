@@ -1,20 +1,36 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView } from "react-native";
+import { View, Pressable, StyleSheet, ScrollView } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
-import { format } from "date-fns";
+import { addDays, format, nextSaturday, parse } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { useRecentLocations } from "@/lib/hooks";
 import { ClubEvent, EventType, Team } from "@/types/db";
 import { notify } from "@/lib/alertCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { goBackOr } from "@/lib/navigation";
+import { TIME_PRESETS, matchTimePreset, buildStartsAt, weeklyOccurrences } from "@/lib/eventSchedule";
+import { resolveTargeting, AudienceMode } from "@/lib/eventTargeting";
 import ModalBackButton from "@/components/ModalBackButton";
+import { Screen, Card, Text, Eyebrow, Field, Button, Chip, IconChip, Toggle, CardHeader, Calendar, FilterChipRow } from "@/components/ui";
+import type { IconName } from "@/components/ui";
+import { color, space, radius, borderWidth } from "@/theme";
 
 interface PlayerOption {
   id: string;
   full_name: string;
   teams?: { age_group: string | null } | null;
 }
+
+// Mirrors the icon choice dashboard.tsx and the Schedule tab already use for
+// these same four event types, so a type card here matches what a user has
+// already seen elsewhere.
+const TYPE_ICON: Record<EventType, IconName> = {
+  practice: "fitness",
+  game: "football",
+  tournament: "trophy",
+  club_event: "megaphone",
+};
 
 const TYPES: { key: EventType; label: string }[] = [
   { key: "practice", label: "Practice" },
@@ -23,7 +39,46 @@ const TYPES: { key: EventType; label: string }[] = [
   { key: "club_event", label: "Club Event" },
 ];
 
-type AudienceMode = "club" | "team" | "player";
+// "Custom" reveals the original hour/minute/AM-PM fields for anything the
+// TIME_PRESETS chips don't cover, so there's still exactly one way to end up
+// with an arbitrary time.
+const CUSTOM_TIME = "Custom";
+const TIME_OPTIONS = [...TIME_PRESETS.map((p) => p.label), CUSTOM_TIME];
+
+function TypeCard({ icon, label, selected, onPress }: { icon: IconName; label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={[styles.typeCard, selected && styles.typeCardSelected]}
+    >
+      <IconChip name={icon} tone="brand" />
+      <Text role="label" tone={selected ? "brand" : "primary"}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function CheckRow({ label, meta, checked, onPress }: { label: string; meta?: string; checked: boolean; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked }} onPress={onPress} style={styles.checkRow}>
+      <View style={[styles.checkbox, checked && styles.checkboxOn]}>
+        {checked ? <Text role="caption" tone="inverse">✓</Text> : null}
+      </View>
+      <Text role="h3" style={styles.checkRowLabel}>
+        {label}
+      </Text>
+      {meta ? (
+        <Text role="caption" tone="brand" style={styles.checkRowMeta}>
+          {meta}
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+}
 
 export default function CreateEvent() {
   const { profile } = useAuth();
@@ -40,7 +95,14 @@ export default function CreateEvent() {
   const [hourStr, setHourStr] = useState("");
   const [minuteStr, setMinuteStr] = useState("");
   const [meridiem, setMeridiem] = useState<"AM" | "PM">("AM");
+  // Which time chip reads as selected — one of TIME_PRESETS' labels, or
+  // CUSTOM_TIME, or "" before the coach has touched a time at all. This is
+  // purely a UI selection: hourStr/minuteStr/meridiem above stay the single
+  // source of truth that feeds starts_at on submit, whether they were set by
+  // tapping a chip or by typing into the custom fields.
+  const [timeChip, setTimeChip] = useState("");
   const [notes, setNotes] = useState("");
+  const { locations: recentLocations } = useRecentLocations();
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamId, setTeamId] = useState<string | null>(null);
   const [audienceMode, setAudienceMode] = useState<AudienceMode>(profile?.role === "director" ? "club" : "team");
@@ -54,6 +116,14 @@ export default function CreateEvent() {
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [repeatWeeksStr, setRepeatWeeksStr] = useState("8");
   const [submitting, setSubmitting] = useState(false);
+  const [titleError, setTitleError] = useState<string | undefined>();
+  const [dateError, setDateError] = useState<string | undefined>();
+  const [timeError, setTimeError] = useState<string | undefined>();
+  const [teamError, setTeamError] = useState<string | undefined>();
+  const [attendingError, setAttendingError] = useState<string | undefined>();
+  const [playerError, setPlayerError] = useState<string | undefined>();
+  const [repeatError, setRepeatError] = useState<string | undefined>();
+  const scrollRef = useRef<ScrollView>(null);
 
   const togglePlayer = (id: string) => {
     setSelectedPlayerIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
@@ -61,6 +131,19 @@ export default function CreateEvent() {
 
   const toggleAttending = (id: string) => {
     setAttendingIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
+  };
+
+  // Tapping a preset chip sets exactly the same hourStr/minuteStr/meridiem
+  // state the custom fields would — there is one path into starts_at, chips
+  // just fill it in faster. "Custom" leaves whatever is already there and
+  // reveals the fields so the coach can type something else.
+  const handleTimePick = (label: string) => {
+    setTimeChip(label);
+    const preset = TIME_PRESETS.find((p) => p.label === label);
+    if (!preset) return;
+    setHourStr(preset.hour);
+    setMinuteStr(preset.minute);
+    setMeridiem(preset.meridiem);
   };
 
   useEffect(() => {
@@ -80,10 +163,17 @@ export default function CreateEvent() {
       setTitle(ev.title);
       setLocation(ev.location ?? "");
       const startsAt = new Date(ev.starts_at);
+      const loadedHour = format(startsAt, "h");
+      const loadedMinute = format(startsAt, "mm");
+      const loadedMeridiem = format(startsAt, "a") as "AM" | "PM";
       setDateStr(format(startsAt, "yyyy-MM-dd"));
-      setHourStr(format(startsAt, "h"));
-      setMinuteStr(format(startsAt, "mm"));
-      setMeridiem(format(startsAt, "a") as "AM" | "PM");
+      setHourStr(loadedHour);
+      setMinuteStr(loadedMinute);
+      setMeridiem(loadedMeridiem);
+      // A prefilled time that isn't one of the chips must fall back to the
+      // custom fields rather than being silently rounded to the nearest one.
+      const preset = matchTimePreset(loadedHour, loadedMinute, loadedMeridiem);
+      setTimeChip(preset ? preset.label : CUSTOM_TIME);
       setNotes(ev.notes ?? "");
 
       const targetIds = (ev.event_players ?? []).map((t) => t.players.id);
@@ -160,31 +250,66 @@ export default function CreateEvent() {
   }, [audienceMode, teams]);
 
   const handleSubmit = async () => {
-    if (!title.trim() || !dateStr || !hourStr || !minuteStr) return notify("Missing info", "Please add a title, date (YYYY-MM-DD), and a time.");
+    if (!title.trim() || !dateStr || !hourStr || !minuteStr) {
+      setTitleError(!title.trim() ? "Add a title." : undefined);
+      setDateError(!dateStr ? "Pick a date." : undefined);
+      setTimeError(!hourStr || !minuteStr ? "Pick a time." : undefined);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    setTitleError(undefined);
+    setDateError(undefined);
     if (!profile?.club_id) return notify("No club found", "Your profile isn't linked to a club yet.");
-    if (audienceMode === "team" && !teamId) return notify("Team required", "Pick a training group for this event.");
-    if (audienceMode === "team" && teamRoster.length > 0 && !attendingIds.length) return notify("No one attending", "Pick at least one player training that day, or switch groups.");
-    if (audienceMode === "player" && !selectedPlayerIds.length) return notify("Player required", "Pick who this session is for.");
+    if (audienceMode === "team" && !teamId) {
+      setTeamError("Pick a training group for this event.");
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    setTeamError(undefined);
+    if (audienceMode === "team" && teamRoster.length > 0 && !attendingIds.length) {
+      setAttendingError("Pick at least one player training that day, or switch groups.");
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    setAttendingError(undefined);
+    if (audienceMode === "player" && !selectedPlayerIds.length) {
+      setPlayerError("Pick who this session is for.");
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    setPlayerError(undefined);
 
     const hour12 = parseInt(hourStr, 10);
     const minute = parseInt(minuteStr, 10);
     if (isNaN(hour12) || hour12 < 1 || hour12 > 12 || isNaN(minute) || minute < 0 || minute > 59) {
-      return notify("Invalid time", "Hour must be 1–12 and minutes 0–59.");
+      setTimeError("Hour must be 1–12 and minutes 0–59.");
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
     }
-    const hour24 = (hour12 % 12) + (meridiem === "PM" ? 12 : 0);
-    const startsAt = new Date(`${dateStr}T${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`);
-    if (isNaN(startsAt.getTime())) return notify("Invalid date", "Use YYYY-MM-DD for the date.");
+    setTimeError(undefined);
+    const startsAt = buildStartsAt(dateStr, hour12, minute, meridiem);
+    if (isNaN(startsAt.getTime())) {
+      setDateError("Use YYYY-MM-DD for the date.");
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    setDateError(undefined);
 
-    // Only attach an explicit player list when it's a *subset* of the group
-    // (someone's out that day) or a private session — a full group roster
-    // is represented by team_id alone, same as before.
-    const isPartialTeam = audienceMode === "team" && attendingIds.length < teamRoster.length;
-    const playerIds = audienceMode === "player" ? selectedPlayerIds : isPartialTeam ? attendingIds : null;
+    const { teamId: targetTeamId, playerIds } = resolveTargeting({
+      audienceMode,
+      teamId,
+      selectedPlayerIds,
+      attendingIds,
+      teamRoster,
+    });
 
     const occurrenceCount = !isEditing && repeatWeekly ? parseInt(repeatWeeksStr, 10) : 1;
     if (!isEditing && repeatWeekly && (isNaN(occurrenceCount) || occurrenceCount < 2 || occurrenceCount > 52)) {
-      return notify("Invalid repeat count", "Enter a number of weeks between 2 and 52.");
+      setRepeatError("Enter a number of weeks between 2 and 52.");
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
     }
+    setRepeatError(undefined);
 
     setSubmitting(true);
     // Player-targeted sessions (one or more specific players, possibly
@@ -199,7 +324,7 @@ export default function CreateEvent() {
         p_location: location.trim() || null,
         p_starts_at: startsAt.toISOString(),
         p_notes: notes.trim() || null,
-        p_team_id: audienceMode === "team" ? teamId : null,
+        p_team_id: targetTeamId,
         p_player_ids: playerIds,
       });
       setSubmitting(false);
@@ -228,16 +353,16 @@ export default function CreateEvent() {
         p_location: location.trim() || null,
         p_starts_at: startsAtIso,
         p_notes: notes.trim() || null,
-        p_team_id: audienceMode === "team" ? teamId : null,
+        p_team_id: targetTeamId,
         p_player_ids: playerIds,
         p_series_id: seriesIdArg,
       });
 
     let seriesId: string | null = null;
     let firstEventId: string | null = null;
+    const occurrences = weeklyOccurrences(startsAt, occurrenceCount);
     for (let i = 0; i < occurrenceCount; i++) {
-      const occurrenceStart = new Date(startsAt.getTime() + i * 7 * 24 * 60 * 60 * 1000);
-      const { data: newEventId, error } = await createOccurrence(occurrenceStart.toISOString(), seriesId);
+      const { data: newEventId, error } = await createOccurrence(occurrences[i].toISOString(), seriesId);
       if (error) {
         setSubmitting(false);
         return notify(
@@ -265,177 +390,299 @@ export default function CreateEvent() {
     goBackOr("/(tabs)/schedule?section=events");
   };
 
+  // date-fns' nextSaturday returns the Saturday *after* the given date, so
+  // when today is already Saturday this correctly lands 7 days out — "the
+  // coming Saturday", never today.
+  const today = new Date();
+  const quickDates = [
+    { label: "Today", value: format(today, "yyyy-MM-dd") },
+    { label: "Tomorrow", value: format(addDays(today, 1), "yyyy-MM-dd") },
+    { label: "This Saturday", value: format(nextSaturday(today), "yyyy-MM-dd") },
+  ];
+  const selectedDate = dateStr ? parse(dateStr, "yyyy-MM-dd", new Date()) : null;
+  const showCustomTime = timeChip === CUSTOM_TIME;
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <Screen ref={scrollRef}>
       <Stack.Screen
         options={{
           title: isEditing ? "Edit Event" : "New Event",
           headerLeft: () => <ModalBackButton onPress={() => goBackOr(isEditing ? `/event/${eventId}` : "/(tabs)/schedule?section=events")} />,
         }}
       />
-      <Text style={styles.label}>EVENT TYPE</Text>
-      <View style={styles.typeRow}>
-        {TYPES.map((t) => <Pressable key={t.key} style={[styles.typeChip, type === t.key && styles.typeChipActive]} onPress={() => setType(t.key)}><Text style={[styles.typeChipText, type === t.key && styles.typeChipTextActive]}>{t.label}</Text></Pressable>)}
+
+      <View style={styles.section}>
+        <Eyebrow>What kind of event?</Eyebrow>
+        <View style={styles.typeGrid}>
+          {TYPES.map((t) => (
+            <TypeCard key={t.key} icon={TYPE_ICON[t.key]} label={t.label} selected={type === t.key} onPress={() => setType(t.key)} />
+          ))}
+        </View>
       </View>
 
-      <Text style={styles.label}>AUDIENCE</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }} contentContainerStyle={styles.chipRow}>
-        {profile?.role === "director" && (
-          <Pressable style={[styles.teamChip, audienceMode === "club" && styles.teamChipActive]} onPress={() => setAudienceMode("club")}>
-            <Text style={[styles.teamChipText, audienceMode === "club" && styles.teamChipTextActive]}>Club-wide</Text>
-          </Pressable>
-        )}
-        <Pressable style={[styles.teamChip, audienceMode === "team" && styles.teamChipActive]} onPress={() => setAudienceMode("team")}>
-          <Text style={[styles.teamChipText, audienceMode === "team" && styles.teamChipTextActive]}>Training Group</Text>
-        </Pressable>
-        <Pressable style={[styles.teamChip, audienceMode === "player" && styles.teamChipActive]} onPress={() => setAudienceMode("player")}>
-          <Text style={[styles.teamChipText, audienceMode === "player" && styles.teamChipTextActive]}>Select Players</Text>
-        </Pressable>
-      </ScrollView>
+      <View style={styles.section}>
+        <Eyebrow>Audience</Eyebrow>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {profile?.role === "director" && (
+            <Chip label="Club-wide" selected={audienceMode === "club"} onPress={() => setAudienceMode("club")} />
+          )}
+          <Chip label="Training Group" selected={audienceMode === "team"} onPress={() => setAudienceMode("team")} />
+          <Chip label="Select Players" selected={audienceMode === "player"} onPress={() => setAudienceMode("player")} />
+        </ScrollView>
+      </View>
 
       {audienceMode === "team" && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }} contentContainerStyle={styles.chipRow}>
-          {teams.map((team) => (
-            <Pressable key={team.id} style={[styles.teamChip, teamId === team.id && styles.teamChipActive]} onPress={() => setTeamId(team.id)}>
-              <Text style={[styles.teamChipText, teamId === team.id && styles.teamChipTextActive]}>{teamLabel(team)}</Text>
-            </Pressable>
-          ))}
-          {!teams.length && <Text style={styles.mutedNote}>No training groups assigned yet.</Text>}
-        </ScrollView>
+        <View style={styles.section}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {teams.map((team) => (
+              <Chip
+                key={team.id}
+                label={teamLabel(team)}
+                selected={teamId === team.id}
+                onPress={() => {
+                  setTeamId(team.id);
+                  if (teamError) setTeamError(undefined);
+                }}
+              />
+            ))}
+          </ScrollView>
+          {!teams.length && <Text tone="secondary">No training groups assigned yet.</Text>}
+          {teamError ? (
+            <Text role="caption" tone="danger">
+              {teamError}
+            </Text>
+          ) : null}
+        </View>
       )}
 
       {audienceMode === "team" && teamId && teamRoster.length > 0 && (
-        <View style={styles.rosterCard}>
-          <View style={styles.rosterHeaderRow}>
-            <Text style={styles.rosterHeading}>Who's training today? ({attendingIds.length}/{teamRoster.length})</Text>
-            <Pressable onPress={() => setAttendingIds(attendingIds.length === teamRoster.length ? [] : teamRoster.map((p) => p.id))}>
-              <Text style={styles.rosterToggleAll}>{attendingIds.length === teamRoster.length ? "Clear all" : "Select all"}</Text>
-            </Pressable>
-          </View>
-          {teamRoster.map((p) => {
-            const isAttending = attendingIds.includes(p.id);
-            return (
-              <Pressable key={p.id} style={styles.rosterRow} onPress={() => toggleAttending(p.id)}>
-                <View style={[styles.checkBox, isAttending && styles.checkBoxOn]}>{isAttending && <Text style={styles.checkMark}>✓</Text>}</View>
-                <Text style={styles.rosterName}>{p.full_name}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <Card style={styles.rosterCard}>
+          <CardHeader
+            title={`Who's training today? (${attendingIds.length}/${teamRoster.length})`}
+            action={attendingIds.length === teamRoster.length ? "Clear all" : "Select all"}
+            onAction={() => setAttendingIds(attendingIds.length === teamRoster.length ? [] : teamRoster.map((p) => p.id))}
+          />
+          {teamRoster.map((p) => (
+            <CheckRow
+              key={p.id}
+              label={p.full_name}
+              checked={attendingIds.includes(p.id)}
+              onPress={() => {
+                toggleAttending(p.id);
+                if (attendingError) setAttendingError(undefined);
+              }}
+            />
+          ))}
+          {attendingError ? (
+            <Text role="caption" tone="danger">
+              {attendingError}
+            </Text>
+          ) : null}
+        </Card>
       )}
 
       {audienceMode === "player" && (
-        <View style={styles.rosterCard}>
-          <Text style={styles.rosterHeading}>Pick anyone, from any group ({selectedPlayerIds.length} selected)</Text>
-          {players.map((p) => {
-            const isSelected = selectedPlayerIds.includes(p.id);
-            return (
-              <Pressable key={p.id} style={styles.rosterRow} onPress={() => togglePlayer(p.id)}>
-                <View style={[styles.checkBox, isSelected && styles.checkBoxOn]}>{isSelected && <Text style={styles.checkMark}>✓</Text>}</View>
-                <Text style={styles.rosterName}>{p.full_name}</Text>
-                {p.teams?.age_group ? <Text style={styles.rosterAgeGroup}>{p.teams.age_group}</Text> : null}
-              </Pressable>
-            );
-          })}
-          {!players.length && <Text style={styles.mutedNote}>No players found on your teams yet.</Text>}
-        </View>
+        <Card style={styles.rosterCard}>
+          <Eyebrow>Pick anyone, from any group ({selectedPlayerIds.length} selected)</Eyebrow>
+          {players.map((p) => (
+            <CheckRow
+              key={p.id}
+              label={p.full_name}
+              meta={p.teams?.age_group ?? undefined}
+              checked={selectedPlayerIds.includes(p.id)}
+              onPress={() => {
+                togglePlayer(p.id);
+                if (playerError) setPlayerError(undefined);
+              }}
+            />
+          ))}
+          {!players.length && <Text tone="secondary">No players found on your teams yet.</Text>}
+          {playerError ? (
+            <Text role="caption" tone="danger">
+              {playerError}
+            </Text>
+          ) : null}
+        </Card>
       )}
 
-      <TextInput style={styles.input} placeholder="Title (e.g. U10 vs Northside FC)" placeholderTextColor="#6B6F76" value={title} onChangeText={setTitle} />
-      <TextInput style={styles.input} placeholder="Location" placeholderTextColor="#6B6F76" value={location} onChangeText={setLocation} />
-      <TextInput style={styles.input} placeholder="Date (YYYY-MM-DD)" placeholderTextColor="#6B6F76" value={dateStr} onChangeText={setDateStr} />
-      <View style={styles.timeRow}>
-        <TextInput
-          style={[styles.input, styles.timeInput]}
-          placeholder="3"
-          placeholderTextColor="#6B6F76"
-          value={hourStr}
-          onChangeText={setHourStr}
-          keyboardType="number-pad"
-          maxLength={2}
+      <View style={styles.section}>
+        <Field
+          placeholder="Title (e.g. U10 vs Northside FC)"
+          value={title}
+          onChangeText={(v) => {
+            setTitle(v);
+            if (titleError) setTitleError(undefined);
+          }}
+          error={titleError}
         />
-        <Text style={styles.timeColon}>:</Text>
-        <TextInput
-          style={[styles.input, styles.timeInput]}
-          placeholder="00"
-          placeholderTextColor="#6B6F76"
-          value={minuteStr}
-          onChangeText={setMinuteStr}
-          keyboardType="number-pad"
-          maxLength={2}
-        />
-        <View style={styles.meridiemGroup}>
-          <Pressable style={[styles.meridiemChip, meridiem === "AM" && styles.meridiemChipActive]} onPress={() => setMeridiem("AM")}>
-            <Text style={[styles.meridiemChipText, meridiem === "AM" && styles.meridiemChipTextActive]}>AM</Text>
-          </Pressable>
-          <Pressable style={[styles.meridiemChip, meridiem === "PM" && styles.meridiemChipActive]} onPress={() => setMeridiem("PM")}>
-            <Text style={[styles.meridiemChipText, meridiem === "PM" && styles.meridiemChipTextActive]}>PM</Text>
-          </Pressable>
-        </View>
+
+        {!!recentLocations.length && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {recentLocations.map((loc) => (
+              <Chip
+                key={loc}
+                label={loc}
+                selected={location.trim().toLowerCase() === loc.toLowerCase()}
+                onPress={() => setLocation(loc)}
+              />
+            ))}
+          </ScrollView>
+        )}
+        <Field placeholder="Location" value={location} onChangeText={setLocation} />
       </View>
 
-      {!isEditing && (
-        <View style={styles.rosterCard}>
-          <Pressable style={styles.repeatRow} onPress={() => setRepeatWeekly((v) => !v)}>
-            <View style={[styles.checkBox, repeatWeekly && styles.checkBoxOn]}>{repeatWeekly && <Text style={styles.checkMark}>✓</Text>}</View>
-            <Text style={styles.rosterName}>Repeats weekly</Text>
-          </Pressable>
-          {repeatWeekly && (
-            <View style={styles.repeatWeeksRow}>
-              <Text style={styles.mutedNote}>Same day and time, for</Text>
-              <TextInput
-                style={[styles.input, styles.repeatWeeksInput]}
-                value={repeatWeeksStr}
-                onChangeText={setRepeatWeeksStr}
+      <View style={styles.section}>
+        <Eyebrow>Date</Eyebrow>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {quickDates.map((q) => (
+            <Chip
+              key={q.label}
+              label={q.label}
+              selected={dateStr === q.value}
+              onPress={() => {
+                setDateStr(q.value);
+                if (dateError) setDateError(undefined);
+              }}
+            />
+          ))}
+        </ScrollView>
+        <Calendar
+          value={selectedDate}
+          onChange={(d) => {
+            setDateStr(format(d, "yyyy-MM-dd"));
+            if (dateError) setDateError(undefined);
+          }}
+        />
+        {dateError ? (
+          <Text role="caption" tone="danger">
+            {dateError}
+          </Text>
+        ) : null}
+      </View>
+
+      <View style={styles.section}>
+        <Eyebrow>Time</Eyebrow>
+        <FilterChipRow
+          options={TIME_OPTIONS}
+          value={timeChip}
+          onChange={(label) => {
+            handleTimePick(label);
+            if (timeError) setTimeError(undefined);
+          }}
+        />
+        {showCustomTime && (
+          <View style={styles.iconFieldRow}>
+            <IconChip name="time-outline" />
+            <View style={styles.timeRow}>
+              <Field
+                style={styles.timeInput}
+                placeholder="3"
+                value={hourStr}
+                onChangeText={(v) => {
+                  setHourStr(v);
+                  if (timeError) setTimeError(undefined);
+                }}
                 keyboardType="number-pad"
                 maxLength={2}
               />
-              <Text style={styles.mutedNote}>weeks</Text>
+              <Text role="h2">:</Text>
+              <Field
+                style={styles.timeInput}
+                placeholder="00"
+                value={minuteStr}
+                onChangeText={(v) => {
+                  setMinuteStr(v);
+                  if (timeError) setTimeError(undefined);
+                }}
+                keyboardType="number-pad"
+                maxLength={2}
+              />
+              <Chip label="AM" selected={meridiem === "AM"} onPress={() => setMeridiem("AM")} />
+              <Chip label="PM" selected={meridiem === "PM"} onPress={() => setMeridiem("PM")} />
+            </View>
+          </View>
+        )}
+        {timeError ? (
+          <Text role="caption" tone="danger">
+            {timeError}
+          </Text>
+        ) : null}
+      </View>
+
+      {!isEditing && (
+        <Card style={styles.rosterCard}>
+          <Toggle label="Repeats weekly" value={repeatWeekly} onValueChange={setRepeatWeekly} />
+          {repeatWeekly && (
+            <View style={styles.repeatWeeksRow}>
+              <Text tone="secondary">Same day and time, for</Text>
+              <Field
+                style={styles.repeatWeeksInput}
+                value={repeatWeeksStr}
+                onChangeText={(v) => {
+                  setRepeatWeeksStr(v);
+                  if (repeatError) setRepeatError(undefined);
+                }}
+                keyboardType="number-pad"
+                maxLength={2}
+              />
+              <Text tone="secondary">weeks</Text>
             </View>
           )}
-        </View>
+          {repeatError ? (
+            <Text role="caption" tone="danger">
+              {repeatError}
+            </Text>
+          ) : null}
+        </Card>
       )}
 
-      <TextInput style={[styles.input, styles.textarea]} placeholder="Notes (optional)" placeholderTextColor="#6B6F76" value={notes} onChangeText={setNotes} multiline />
-      <Pressable style={styles.button} onPress={handleSubmit} disabled={submitting}>
-        <Text style={styles.buttonText}>{submitting ? (isEditing ? "Saving…" : "Creating…") : isEditing ? "Save Changes" : "Add to Schedule"}</Text>
-      </Pressable>
-    </ScrollView>
+      <Field placeholder="Notes (optional)" value={notes} onChangeText={setNotes} multiline />
+
+      <Button
+        label={submitting ? (isEditing ? "Saving…" : "Creating…") : isEditing ? "Save Changes" : "Add to Schedule"}
+        onPress={handleSubmit}
+        disabled={submitting}
+        size="lg"
+        fullWidth
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, backgroundColor: "#0B0B0D", flexGrow: 1 },
-  label: { fontSize: 11, fontWeight: "800", color: "#9A9DA3", letterSpacing: .5, marginBottom: 8 },
-  typeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
-  typeChip: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: "#0A6CFF" },
-  typeChipActive: { backgroundColor: "#0A6CFF" }, typeChipText: { color: "#0A6CFF", fontWeight: "600" }, typeChipTextActive: { color: "#fff" },
-  chipRow: { flexDirection: "row", alignItems: "flex-start" },
-  teamChip: { marginRight: 8, paddingVertical: 8, paddingHorizontal: 13, borderRadius: 18, backgroundColor: "#17181B" }, teamChipActive: { backgroundColor: "#0A6CFF" }, teamChipText: { color: "#9A9DA3", fontWeight: "600" }, teamChipTextActive: { color: "#fff" },
-  mutedNote: { color: "#6B6F76", fontSize: 13, marginTop: 6 },
-  rosterCard: { backgroundColor: "#141416", borderRadius: 12, padding: 14, marginBottom: 14 },
-  rosterHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  rosterHeading: { fontSize: 12, fontWeight: "800", color: "#9A9DA3" },
-  rosterToggleAll: { fontSize: 13, fontWeight: "700", color: "#0A6CFF" },
-  rosterRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 7 },
-  rosterName: { color: "#F2F2F3", fontWeight: "600", fontSize: 14, flex: 1 },
-  rosterAgeGroup: { color: "#0A6CFF", fontWeight: "700", fontSize: 11, backgroundColor: "#17181B", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  checkBox: { width: 20, height: 20, borderRadius: 5, borderWidth: 2, borderColor: "#0A6CFF", alignItems: "center", justifyContent: "center" },
-  checkBoxOn: { backgroundColor: "#0A6CFF" },
-  checkMark: { color: "#fff", fontWeight: "800", fontSize: 12 },
-  input: { borderWidth: 1, borderColor: "#242424", borderRadius: 10, padding: 14, marginBottom: 14, fontSize: 16, color: "#F2F2F3", backgroundColor: "#141416" },
-  textarea: { height: 90, textAlignVertical: "top" },
-  timeRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 },
-  timeInput: { flex: 1, marginBottom: 0, textAlign: "center" },
-  timeColon: { color: "#F2F2F3", fontSize: 18, fontWeight: "700" },
-  meridiemGroup: { flexDirection: "row", borderRadius: 10, overflow: "hidden", borderWidth: 1, borderColor: "#242424" },
-  meridiemChip: { paddingVertical: 14, paddingHorizontal: 14, backgroundColor: "#141416" },
-  meridiemChipActive: { backgroundColor: "#0A6CFF" },
-  meridiemChipText: { color: "#9A9DA3", fontWeight: "700", fontSize: 13 },
-  meridiemChipTextActive: { color: "#fff" },
-  repeatRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  repeatWeeksRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
-  repeatWeeksInput: { width: 56, marginBottom: 0, textAlign: "center", paddingVertical: 10 },
-  button: { backgroundColor: "#0A6CFF", borderRadius: 10, padding: 16, alignItems: "center", marginTop: 8 },
-  buttonText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  section: { gap: space[3] },
+  typeGrid: { flexDirection: "row", flexWrap: "wrap", gap: space[3] },
+  typeCard: {
+    flexBasis: "47%",
+    flexGrow: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space[2],
+    padding: space[3],
+    borderRadius: radius.card,
+    borderWidth: borderWidth.thin,
+    borderColor: color.border.subtle,
+    backgroundColor: color.bg.surface,
+  },
+  typeCardSelected: { borderColor: color.border.brand },
+  chipRow: { flexDirection: "row", gap: space[2] },
+  rosterCard: { gap: space[2] },
+  checkRow: { flexDirection: "row", alignItems: "center", gap: space[3], paddingVertical: space[2] },
+  checkRowLabel: { flex: 1 },
+  checkRowMeta: { backgroundColor: color.bg.sunken, borderRadius: radius.sm, paddingHorizontal: space[2], paddingVertical: space[1] },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.xs,
+    borderWidth: borderWidth.thin,
+    borderColor: color.border.brand,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxOn: { backgroundColor: color.bg.brand },
+  iconFieldRow: { flexDirection: "row", alignItems: "center", gap: space[3] },
+  timeRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: space[2] },
+  timeInput: { width: 56, textAlign: "center" },
+  repeatWeeksRow: { flexDirection: "row", alignItems: "center", gap: space[2] },
+  repeatWeeksInput: { width: 56, textAlign: "center" },
 });

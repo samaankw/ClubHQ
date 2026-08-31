@@ -113,10 +113,27 @@ const configAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey as string | u
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || configUrl || "";
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || configAnonKey || "";
 
+// Fail loudly and specifically. Without this, an unconfigured checkout dies
+// inside createClient() with "Invalid supabaseUrl: Must be a valid HTTP or
+// HTTPS URL" — technically accurate, but it names no env var and no file, so
+// a fresh clone just white-screens with no route to the actual problem.
 const isPlaceholder = (value: string) => !value || value.includes("_HERE");
 if (isPlaceholder(SUPABASE_URL) || isPlaceholder(supabaseAnonKey)) {
-  console.warn(
-    "ClubHQ Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env."
+  const missing = [
+    isPlaceholder(SUPABASE_URL) ? "EXPO_PUBLIC_SUPABASE_URL" : null,
+    isPlaceholder(supabaseAnonKey) ? "EXPO_PUBLIC_SUPABASE_ANON_KEY" : null,
+  ].filter(Boolean);
+
+  throw new Error(
+    [
+      `ClubHQ Supabase is not configured — missing ${missing.join(" and ")}.`,
+      "",
+      "Create a .env file in the project root (see .env.example):",
+      "  EXPO_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co",
+      "  EXPO_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY",
+      "",
+      "Then restart the dev server — Expo only reads .env at startup.",
+    ].join("\n")
   );
 }
 

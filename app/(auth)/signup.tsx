@@ -1,11 +1,15 @@
 import React, { useState } from "react";
-import { Text, TextInput, Pressable, StyleSheet, ScrollView, View } from "react-native";
+import { View, Pressable, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { Link, router } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { Role } from "@/types/db";
 import { notify } from "@/lib/alertCompat";
+import { Screen, Text, Eyebrow, Field, Button, SegmentedControl } from "@/components/ui";
+import { color, space, radius, borderWidth } from "@/theme";
 
-const ROLES: Role[] = ["coach", "parent"];
+const ROLE_LABELS: Record<"coach" | "parent", string> = { coach: "Coach", parent: "Parent" };
+const LABEL_ROLES: Record<string, Role> = { Coach: "coach", Parent: "parent" };
 
 export default function Signup() {
   const [fullName, setFullName] = useState("");
@@ -14,18 +18,28 @@ export default function Signup() {
   const [role, setRole] = useState<Role>("parent");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [nameError, setNameError] = useState<string | undefined>();
+  const [emailError, setEmailError] = useState<string | undefined>();
+  const [passwordError, setPasswordError] = useState<string | undefined>();
+  const [termsError, setTermsError] = useState<string | undefined>();
 
   const handleSignup = async () => {
     const cleanName = fullName.trim();
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanName || !cleanEmail || password.length < 8) {
-      notify("Check your details", "Enter your name, email, and a password with at least 8 characters.");
+      setNameError(!cleanName ? "Enter your name." : undefined);
+      setEmailError(!cleanEmail ? "Enter your email." : undefined);
+      setPasswordError(password.length < 8 ? "Use at least 8 characters." : undefined);
       return;
     }
+    setNameError(undefined);
+    setEmailError(undefined);
+    setPasswordError(undefined);
     if (!agreedToTerms) {
-      notify("Please review the Terms & Privacy Policy", "You need to agree before creating an account.");
+      setTermsError("You need to agree before creating an account.");
       return;
     }
+    setTermsError(undefined);
 
     setLoading(true);
     try {
@@ -51,53 +65,119 @@ export default function Signup() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Create your account</Text>
-      <TextInput style={styles.input} placeholder="Full name" value={fullName} onChangeText={setFullName} />
-      <TextInput style={styles.input} placeholder="Email" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
-      <TextInput style={styles.input} placeholder="Password (8+ characters)" secureTextEntry value={password} onChangeText={setPassword} />
+    <Screen>
+      <Text role="h1" tone="brand" style={styles.center}>
+        Create your account
+      </Text>
 
-      <Text style={styles.label}>I am a…</Text>
-      <View style={styles.roleRow}>
-        {ROLES.map((r) => (
-          <Pressable key={r} style={[styles.roleChip, role === r && styles.roleChipActive]} onPress={() => setRole(r)}>
-            <Text style={[styles.roleChipText, role === r && styles.roleChipTextActive]}>{r[0].toUpperCase() + r.slice(1)}</Text>
+      <View style={styles.form}>
+        <Field
+          placeholder="Full name"
+          value={fullName}
+          onChangeText={(v) => {
+            setFullName(v);
+            if (nameError) setNameError(undefined);
+          }}
+          error={nameError}
+        />
+        <Field
+          placeholder="Email"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={(v) => {
+            setEmail(v);
+            if (emailError) setEmailError(undefined);
+          }}
+          error={emailError}
+        />
+        <Field
+          placeholder="Password (8+ characters)"
+          secureTextEntry
+          value={password}
+          onChangeText={(v) => {
+            setPassword(v);
+            if (passwordError) setPasswordError(undefined);
+          }}
+          error={passwordError}
+        />
+
+        <View style={styles.roleBlock}>
+          <Eyebrow>I am a…</Eyebrow>
+          <SegmentedControl
+            options={[ROLE_LABELS.coach, ROLE_LABELS.parent]}
+            value={ROLE_LABELS[role as "coach" | "parent"]}
+            onChange={(label) => setRole(LABEL_ROLES[label])}
+          />
+        </View>
+
+        <Text role="bodySm" tone="secondary">
+          Directors begin as coaches, then create a club. Parent consent for a child is recorded when that child is
+          securely linked to the parent account.
+        </Text>
+
+        <View style={{ gap: space[2] }}>
+          <Pressable
+            style={styles.consentRow}
+            onPress={() => {
+              setAgreedToTerms((v) => !v);
+              if (termsError) setTermsError(undefined);
+            }}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: agreedToTerms }}
+          >
+            <View style={[styles.checkbox, agreedToTerms && styles.checkboxOn]}>
+              {agreedToTerms && <Ionicons name="checkmark" size={14} color={color.text.inverse} />}
+            </View>
+            <Text role="bodySm" style={styles.consentText}>
+              I agree to the{" "}
+              <Link href="/(auth)/legal-terms">
+                <Text role="bodySm" tone="brand" style={styles.consentLink}>
+                  Terms of Service
+                </Text>
+              </Link>{" "}
+              and acknowledge the{" "}
+              <Link href="/(auth)/privacy">
+                <Text role="bodySm" tone="brand" style={styles.consentLink}>
+                  Privacy Policy
+                </Text>
+              </Link>
+              .
+            </Text>
           </Pressable>
-        ))}
+          {termsError ? (
+            <Text role="caption" tone="danger">
+              {termsError}
+            </Text>
+          ) : null}
+        </View>
+
+        <Button label={loading ? "Creating…" : "Create Account"} onPress={handleSignup} disabled={loading} fullWidth />
       </View>
-      <Text style={styles.hint}>Directors begin as coaches, then create a club. Parent consent for a child is recorded when that child is securely linked to the parent account.</Text>
 
-      <Pressable style={styles.consentRow} onPress={() => setAgreedToTerms((v) => !v)}>
-        <View style={[styles.checkbox, agreedToTerms && styles.checkboxOn]}>{agreedToTerms && <Text style={styles.checkmark}>✓</Text>}</View>
-        <Text style={styles.consentText}>I agree to the <Link href="/(auth)/legal-terms" style={styles.consentLink}>Terms of Service</Link> and acknowledge the <Link href="/(auth)/privacy" style={styles.consentLink}>Privacy Policy</Link>.</Text>
-      </Pressable>
-
-      <Pressable style={styles.button} onPress={handleSignup} disabled={loading}>
-        <Text style={styles.buttonText}>{loading ? "Creating…" : "Create Account"}</Text>
-      </Pressable>
-      <Link href="/(auth)/login" style={styles.link}>Already have an account? Sign in</Link>
-    </ScrollView>
+      <Link href="/(auth)/login" style={styles.link}>
+        <Text tone="brand">Already have an account? Sign in</Text>
+      </Link>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, justifyContent: "center", padding: 24, backgroundColor: "#fff" },
-  title: { fontSize: 26, fontWeight: "800", textAlign: "center", marginBottom: 24, color: "#0F4C81" },
-  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 10, padding: 14, marginBottom: 12, fontSize: 16 },
-  label: { fontSize: 14, fontWeight: "600", marginTop: 8, marginBottom: 8, color: "#333" },
-  roleRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
-  roleChip: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, borderWidth: 1, borderColor: "#0F4C81" },
-  roleChipActive: { backgroundColor: "#0F4C81" },
-  roleChipText: { color: "#0F4C81", fontWeight: "600" },
-  roleChipTextActive: { color: "#fff" },
-  hint: { fontSize: 12, color: "#888", marginBottom: 20, lineHeight: 17 },
-  consentRow: { flexDirection: "row", gap: 10, marginBottom: 14, alignItems: "flex-start" },
-  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: "#0F4C81", alignItems: "center", justifyContent: "center", marginTop: 1 },
-  checkboxOn: { backgroundColor: "#0F4C81" },
-  checkmark: { color: "#fff", fontWeight: "800", fontSize: 13 },
-  consentText: { flex: 1, fontSize: 13, color: "#333", lineHeight: 18 },
-  consentLink: { color: "#0F4C81", fontWeight: "700", textDecorationLine: "underline" },
-  button: { backgroundColor: "#0F4C81", borderRadius: 10, padding: 16, alignItems: "center", marginTop: 8 },
-  buttonText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-  link: { marginTop: 20, alignSelf: "center" },
+  center: { textAlign: "center" },
+  form: { gap: space[3] },
+  roleBlock: { gap: space[2] },
+  consentRow: { flexDirection: "row", gap: space[2], alignItems: "flex-start" },
+  checkbox: {
+    width: space[5],
+    height: space[5],
+    borderRadius: radius.xs,
+    borderWidth: borderWidth.thin,
+    borderColor: color.border.brand,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxOn: { backgroundColor: color.bg.brand, borderColor: color.bg.brand },
+  consentText: { flex: 1 },
+  consentLink: { textDecorationLine: "underline" },
+  link: { alignSelf: "center" },
 });

@@ -1,19 +1,24 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
+import { View, StyleSheet } from "react-native";
 import { Link, router } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { notify } from "@/lib/alertCompat";
+import { Screen, Text, Field, Button } from "@/components/ui";
+import { space } from "@/theme";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [emailError, setEmailError] = useState<string | undefined>();
+  const [passwordError, setPasswordError] = useState<string | undefined>();
 
   const handleLogin = async () => {
-    if (!email.trim() || !password) {
-      notify("Missing info", "Enter your email and password.");
-      return;
-    }
+    const nextEmailError = !email.trim() ? "Enter your email." : undefined;
+    const nextPasswordError = !password ? "Enter your password." : undefined;
+    setEmailError(nextEmailError);
+    setPasswordError(nextPasswordError);
+    if (nextEmailError || nextPasswordError) return;
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
     setLoading(false);
@@ -25,30 +30,56 @@ export default function Login() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>ClubHQ</Text>
-      <Text style={styles.subtitle}>Sign in to your club</Text>
+    <Screen scroll={false} style={styles.container}>
+      <Text role="display" tone="brand" style={styles.center}>
+        ClubHQ
+      </Text>
+      <Text tone="secondary" style={[styles.center, styles.subtitle]}>
+        Sign in to your club
+      </Text>
 
-      <TextInput style={styles.input} placeholder="Email" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
-      <TextInput style={styles.input} placeholder="Password" secureTextEntry value={password} onChangeText={setPassword} />
+      <View style={styles.form}>
+        <Field
+          placeholder="Email"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={(v) => {
+            setEmail(v);
+            if (emailError) setEmailError(undefined);
+          }}
+          error={emailError}
+        />
+        <Field
+          placeholder="Password"
+          secureTextEntry
+          value={password}
+          onChangeText={(v) => {
+            setPassword(v);
+            if (passwordError) setPasswordError(undefined);
+          }}
+          error={passwordError}
+        />
+        <Button label={loading ? "Signing in…" : "Sign In"} onPress={handleLogin} disabled={loading} fullWidth />
+      </View>
 
-      <Pressable style={styles.button} onPress={handleLogin} disabled={loading}>
-        <Text style={styles.buttonText}>{loading ? "Signing in…" : "Sign In"}</Text>
-      </Pressable>
-
-      <Link href="/(auth)/reset-password" style={styles.secondaryLink}>Forgot password?</Link>
-      <Link href="/(auth)/signup" style={styles.link}>Don't have an account? Sign up</Link>
-    </View>
+      <Link href="/(auth)/reset-password" style={styles.secondaryLink}>
+        <Text tone="brand" role="h3">
+          Forgot password?
+        </Text>
+      </Link>
+      <Link href="/(auth)/signup" style={styles.link}>
+        <Text tone="brand">Don't have an account? Sign up</Text>
+      </Link>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 24, backgroundColor: "#fff" },
-  title: { fontSize: 32, fontWeight: "800", textAlign: "center", color: "#0F4C81" },
-  subtitle: { fontSize: 15, textAlign: "center", color: "#666", marginBottom: 32 },
-  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 10, padding: 14, marginBottom: 12, fontSize: 16 },
-  button: { backgroundColor: "#0F4C81", borderRadius: 10, padding: 16, alignItems: "center", marginTop: 8 },
-  buttonText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-  secondaryLink: { marginTop: 16, alignSelf: "center", color: "#0F4C81", fontWeight: "600" },
-  link: { marginTop: 20, alignSelf: "center" },
+  container: { justifyContent: "center", paddingHorizontal: space[6] },
+  center: { textAlign: "center" },
+  subtitle: { marginBottom: space[7] },
+  form: { gap: space[3] },
+  secondaryLink: { marginTop: space[4], alignSelf: "center" },
+  link: { marginTop: space[5], alignSelf: "center" },
 });

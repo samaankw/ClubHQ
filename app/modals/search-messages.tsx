@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { View, Text, TextInput, FlatList, Pressable, StyleSheet, ActivityIndicator } from "react-native";
+import { View, FlatList, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 import { Stack, router } from "expo-router";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/lib/supabase";
@@ -7,6 +7,8 @@ import { teamLabel } from "@/lib/teamLabel";
 import { notify } from "@/lib/alertCompat";
 import { goBackOr } from "@/lib/navigation";
 import ModalBackButton from "@/components/ModalBackButton";
+import { Screen, Card, Text, Field } from "@/components/ui";
+import { color, space } from "@/theme";
 
 interface MessageResult {
   message_id: string;
@@ -57,59 +59,70 @@ export default function SearchMessages() {
   };
 
   return (
-    <View style={styles.container}>
+    <Screen scroll={false}>
       <Stack.Screen options={{ headerLeft: () => <ModalBackButton onPress={() => goBackOr("/(tabs)/messages")} /> }} />
       <View style={styles.searchBar}>
-        <TextInput
-          style={styles.input}
-          placeholder="Search messages…"
-          placeholderTextColor="#6B6F76"
-          value={query}
-          onChangeText={onChangeText}
-          autoFocus
-          returnKeyType="search"
-        />
-        {searching && <ActivityIndicator style={{ marginLeft: 8 }} />}
+        <View style={styles.searchField}>
+          <Field
+            placeholder="Search messages…"
+            value={query}
+            onChangeText={onChangeText}
+            autoFocus
+            returnKeyType="search"
+          />
+        </View>
+        {searching && <ActivityIndicator style={styles.spinner} color={color.icon.brand} />}
       </View>
 
       <FlatList
+        style={styles.list}
         data={results}
         keyExtractor={(r) => r.message_id}
         initialNumToRender={12}
         maxToRenderPerBatch={12}
         windowSize={7}
-        contentContainerStyle={{ padding: 16 }}
+        contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           searched && !searching ? (
-            <Text style={styles.muted}>No messages match “{query.trim()}”.</Text>
+            <Text tone="secondary" style={styles.centerText}>
+              No messages match “{query.trim()}”.
+            </Text>
           ) : !searching && query.trim().length === 0 ? (
-            <Text style={styles.muted}>Search across every conversation you're part of.</Text>
+            <Text tone="secondary" style={styles.centerText}>
+              Search across every conversation you're part of.
+            </Text>
           ) : null
         }
         renderItem={({ item }) => (
-          <Pressable style={styles.card} onPress={() => router.push(`/conversation/${item.conversation_id}` as never)}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.conversationLabel}>{conversationLabel(item)}</Text>
-              <Text style={styles.time}>{formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}</Text>
-            </View>
-            <Text style={styles.sender}>{item.sender_name}</Text>
-            <Text style={styles.body} numberOfLines={3}>{item.body}</Text>
+          <Pressable onPress={() => router.push(`/conversation/${item.conversation_id}` as never)}>
+            <Card style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text role="label" tone="brand">
+                  {conversationLabel(item)}
+                </Text>
+                <Text role="caption" tone="tertiary">
+                  {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
+                </Text>
+              </View>
+              <Text role="h3">{item.sender_name}</Text>
+              <Text tone="secondary" numberOfLines={3}>
+                {item.body}
+              </Text>
+            </Card>
           </Pressable>
         )}
       />
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0B0B0D" },
-  searchBar: { flexDirection: "row", alignItems: "center", margin: 16, marginBottom: 0, backgroundColor: "#141416", borderRadius: 10, borderWidth: 1, borderColor: "#242424", paddingHorizontal: 12 },
-  input: { flex: 1, color: "#F2F2F3", fontSize: 15, paddingVertical: 12 },
-  card: { backgroundColor: "#141416", borderRadius: 12, padding: 14, marginBottom: 10 },
+  searchBar: { flexDirection: "row", alignItems: "center", paddingHorizontal: space[4], paddingTop: space[4] },
+  searchField: { flex: 1 },
+  spinner: { marginLeft: space[2] },
+  list: { flex: 1 },
+  listContent: { padding: space[4], gap: space[3] },
+  card: { gap: space[1] },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  conversationLabel: { fontSize: 12, fontWeight: "700", color: "#0A6CFF" },
-  time: { fontSize: 11, color: "#6B6F76" },
-  sender: { fontSize: 13, fontWeight: "700", color: "#F2F2F3", marginTop: 6 },
-  body: { fontSize: 14, color: "#B5B8BE", marginTop: 3, lineHeight: 19 },
-  muted: { color: "#6B6F76", textAlign: "center", marginTop: 40 },
+  centerText: { textAlign: "center", marginTop: space[10] },
 });

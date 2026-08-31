@@ -1,4 +1,5 @@
 import { AnnouncementCategory } from "@/types/db";
+import { color } from "@/theme";
 
 export type FilterBucket = "schedule" | "weather" | "training" | "events" | "general";
 
@@ -9,9 +10,9 @@ export type FilterBucket = "schedule" | "weather" | "training" | "events" | "gen
 export type UrgencyTier = "changed" | "opportunity" | "info";
 
 const TIER_COLOR: Record<UrgencyTier, string> = {
-  changed: "#FF9F0A",
-  opportunity: "#30D158",
-  info: "#0A6CFF",
+  changed: color.icon.warning,
+  opportunity: color.text.success,
+  info: color.text.brand,
 };
 
 interface CategoryMeta {

@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { View, Text, FlatList, StyleSheet, Pressable, TextInput } from "react-native";
+import { View, FlatList, StyleSheet, Pressable, TextInput } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { format, isToday } from "date-fns";
@@ -9,11 +9,18 @@ import { useRecentAnnouncements } from "@/lib/hooks";
 import { ANNOUNCEMENT_CATEGORIES, FILTER_BUCKETS, FilterBucket } from "@/lib/announcementCategories";
 import SwipeableRow from "@/components/SwipeableRow";
 import { confirmAsync, notify } from "@/lib/alertCompat";
+import { Text, Eyebrow, FilterChipRow, EmptyState } from "@/components/ui";
+import { color, space, radius, elevation, borderWidth, type as typeTokens } from "@/theme";
 
 function formatPostedAt(iso: string) {
   const date = new Date(iso);
   return isToday(date) ? `Today at ${format(date, "h:mm a")}` : format(date, "MMM d, h:mm a");
 }
+
+// FilterChipRow trades in plain label strings, but the buckets it renders
+// also carry a distinct filter key — this maps the label back to the key
+// `onChange` needs, without changing FilterChipRow's generic string API.
+const FILTER_LABEL_TO_KEY = new Map(FILTER_BUCKETS.map((b) => [b.label, b.key]));
 
 export default function AnnouncementsList() {
   const { profile } = useAuth();
@@ -52,33 +59,25 @@ export default function AnnouncementsList() {
     refresh();
   };
 
+  const activeLabel = FILTER_BUCKETS.find((b) => b.key === filter)?.label ?? "All";
+
   return (
     <View style={styles.container}>
       <View style={styles.searchBar}>
-        <Ionicons name="search" size={16} color="#6B6F76" />
+        <Ionicons name="search" size={16} color={color.icon.muted} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search announcements…"
-          placeholderTextColor="#6B6F76"
+          placeholderTextColor={color.text.tertiary}
           value={query}
           onChangeText={setQuery}
         />
       </View>
       <View style={styles.filterRow}>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={FILTER_BUCKETS}
-          keyExtractor={(f) => f.key}
-          contentContainerStyle={{ flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 16, gap: 8 }}
-          renderItem={({ item }) => (
-            <Pressable
-              style={[styles.filterChip, filter === item.key && styles.filterChipActive]}
-              onPress={() => setFilter(item.key)}
-            >
-              <Text style={[styles.filterChipText, filter === item.key && styles.filterChipTextActive]}>{item.label}</Text>
-            </Pressable>
-          )}
+        <FilterChipRow
+          options={FILTER_BUCKETS.map((b) => b.label)}
+          value={activeLabel}
+          onChange={(label) => setFilter((FILTER_LABEL_TO_KEY.get(label) ?? "all") as FilterBucket | "all")}
         />
       </View>
 
@@ -90,39 +89,57 @@ export default function AnnouncementsList() {
         initialNumToRender={10}
         maxToRenderPerBatch={10}
         windowSize={7}
-        contentContainerStyle={{ padding: 16, paddingTop: 4 }}
-        ListEmptyComponent={<Text style={styles.muted}>No announcements yet.</Text>}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={<EmptyState icon="megaphone-outline" title="No announcements yet" />}
         renderItem={({ item }) => {
           const meta = ANNOUNCEMENT_CATEGORIES[item.category];
           const cardContent = (
-            <View style={styles.card}>
-              <View style={[styles.accentBar, { backgroundColor: meta.color }]} />
-              <View style={styles.cardBody}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.categoryRow}>
-                    <Ionicons name={meta.icon} size={15} color={meta.color} />
-                    <Text style={[styles.categoryLabel, { color: meta.color }]}>{meta.label}</Text>
+            <View style={styles.cardOuter}>
+              <View style={styles.cardClip}>
+                <View style={[styles.accentBar, { backgroundColor: meta.color }]} />
+                <View style={styles.cardBody}>
+                  <View style={styles.cardHeader}>
+                    <View style={styles.categoryRow}>
+                      <Ionicons name={meta.icon} size={15} color={meta.color} />
+                      <Eyebrow style={{ color: meta.color }}>{meta.label}</Eyebrow>
+                    </View>
+                    <View style={styles.headerRightRow}>
+                      {canDelete(item.author_id) && (
+                        <Pressable
+                          onPress={() => router.push(`/modals/create-announcement?announcementId=${item.id}`)}
+                          hitSlop={8}
+                          accessibilityRole="button"
+                          accessibilityLabel="Edit announcement"
+                        >
+                          <Ionicons name="pencil" size={15} color={color.icon.muted} />
+                        </Pressable>
+                      )}
+                      {!item.isRead && <View style={[styles.unreadDot, { backgroundColor: meta.color }]} />}
+                    </View>
                   </View>
-                  <View style={styles.headerRightRow}>
-                    {canDelete(item.author_id) && (
-                      <Pressable onPress={() => router.push(`/modals/create-announcement?announcementId=${item.id}`)} hitSlop={8}>
-                        <Ionicons name="pencil" size={15} color="#6B6F76" />
+                  <Text role="h3" style={!item.isRead && styles.titleUnread}>
+                    {item.pinned ? "📌 " : ""}
+                    {item.title}
+                  </Text>
+                  <Text role="body" tone="secondary" style={styles.body}>
+                    {item.body}
+                  </Text>
+                  <View style={styles.footerRow}>
+                    <Text role="caption" tone="tertiary">
+                      {formatPostedAt(item.created_at)}
+                    </Text>
+                    {meta.actionLabel && (
+                      <Pressable
+                        onPress={() => router.push("/(tabs)/schedule?section=events")}
+                        accessibilityRole="button"
+                        accessibilityLabel={meta.actionLabel}
+                      >
+                        <Text role="label" style={{ color: meta.color }}>
+                          {meta.actionLabel} →
+                        </Text>
                       </Pressable>
                     )}
-                    {!item.isRead && <View style={[styles.unreadDot, { backgroundColor: meta.color }]} />}
                   </View>
-                </View>
-                <Text style={[styles.title, !item.isRead && styles.titleUnread]}>
-                  {item.pinned ? "📌 " : ""}{item.title}
-                </Text>
-                <Text style={styles.body}>{item.body}</Text>
-                <View style={styles.footerRow}>
-                  <Text style={styles.meta}>{formatPostedAt(item.created_at)}</Text>
-                  {meta.actionLabel && (
-                    <Pressable onPress={() => router.push("/(tabs)/schedule?section=events")}>
-                      <Text style={[styles.actionLink, { color: meta.color }]}>{meta.actionLabel} →</Text>
-                    </Pressable>
-                  )}
                 </View>
               </View>
             </View>
@@ -137,9 +154,16 @@ export default function AnnouncementsList() {
       />
 
       {canPost && (
-        <Pressable style={styles.fab} onPress={() => router.push("/modals/create-announcement")}>
-          <Ionicons name="add" size={20} color="#fff" />
-          <Text style={styles.fabText}>New Announcement</Text>
+        <Pressable
+          style={styles.fab}
+          onPress={() => router.push("/modals/create-announcement")}
+          accessibilityRole="button"
+          accessibilityLabel="New announcement"
+        >
+          <Ionicons name="add" size={20} color={color.icon.inverse} />
+          <Text role="h3" tone="inverse">
+            New Announcement
+          </Text>
         </Pressable>
       )}
     </View>
@@ -147,38 +171,49 @@ export default function AnnouncementsList() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0B0B0D" },
-  searchBar: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#141416", borderRadius: 10, borderWidth: 1, borderColor: "#242424", marginHorizontal: 16, marginTop: 12, paddingHorizontal: 12 },
-  searchInput: { flex: 1, color: "#F2F2F3", fontSize: 14, paddingVertical: 11 },
-  filterRow: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#1C1D20" },
-  filterChip: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 18, backgroundColor: "#17181B" },
-  filterChipActive: { backgroundColor: "#0A6CFF" },
-  filterChipText: { color: "#9A9DA3", fontWeight: "700", fontSize: 13 },
-  filterChipTextActive: { color: "#fff" },
+  container: { flex: 1 },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space[2],
+    backgroundColor: color.bg.surface,
+    borderRadius: radius.input,
+    borderWidth: borderWidth.thin,
+    borderColor: color.border.subtle,
+    marginHorizontal: space[4],
+    marginTop: space[3],
+    paddingHorizontal: space[3],
+  },
+  searchInput: { flex: 1, color: color.text.primary, fontSize: typeTokens.body.fontSize, paddingVertical: space[3] },
+  filterRow: { paddingVertical: space[3], borderBottomWidth: borderWidth.thin, borderBottomColor: color.border.subtle },
 
-  card: { flexDirection: "row", backgroundColor: "#141416", borderRadius: 14, marginBottom: 12, overflow: "hidden" },
-  accentBar: { width: 4, backgroundColor: "#0A6CFF" },
-  cardBody: { flex: 1, padding: 14 },
-  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 },
-  categoryRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  headerRightRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  categoryLabel: { fontSize: 11, fontWeight: "800", color: "#0A6CFF", letterSpacing: 0.4, textTransform: "uppercase" },
-  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#0A6CFF" },
+  listContent: { padding: space[4], paddingTop: space[1], gap: space[3] },
 
-  title: { fontSize: 16, fontWeight: "700", color: "#F2F2F3" },
+  cardOuter: { borderRadius: radius.card, backgroundColor: color.bg.surface, ...elevation.card },
+  cardClip: { flexDirection: "row", borderRadius: radius.card, overflow: "hidden" },
+  accentBar: { width: space[1] },
+  cardBody: { flex: 1, padding: space[4], gap: space[1] },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  categoryRow: { flexDirection: "row", alignItems: "center", gap: space[1] },
+  headerRightRow: { flexDirection: "row", alignItems: "center", gap: space[2] },
+  unreadDot: { width: space[2], height: space[2], borderRadius: radius.full },
+
   titleUnread: { fontWeight: "800" },
-  body: { fontSize: 14, color: "#B5B8BE", marginTop: 6, lineHeight: 20 },
+  body: { marginTop: space[1] },
 
-  footerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 },
-  meta: { fontSize: 12, color: "#6B6F76" },
-  actionLink: { fontSize: 13, fontWeight: "700", color: "#0A6CFF" },
-
-  muted: { color: "#6B6F76", textAlign: "center", marginTop: 40 },
+  footerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: space[2] },
 
   fab: {
-    position: "absolute", right: 16, bottom: 20, flexDirection: "row", alignItems: "center", gap: 6,
-    paddingVertical: 14, paddingHorizontal: 18, borderRadius: 28,
-    backgroundColor: "#0A6CFF", shadowColor: "#000", shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
+    position: "absolute",
+    right: space[4],
+    bottom: space[5],
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space[1],
+    paddingVertical: space[3],
+    paddingHorizontal: space[4],
+    borderRadius: radius.full,
+    backgroundColor: color.bg.brand,
+    ...elevation.raised,
   },
-  fabText: { color: "#fff", fontSize: 15, fontWeight: "700" },
 });

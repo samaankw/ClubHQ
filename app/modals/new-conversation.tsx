@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator } from "react-native";
+import { View, FlatList, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 import { router, Stack } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
@@ -7,6 +7,8 @@ import { notify } from "@/lib/alertCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { goBackOr } from "@/lib/navigation";
 import ModalBackButton from "@/components/ModalBackButton";
+import { Screen, Text, SegmentedControl, ListRow, EmptyState, Button } from "@/components/ui";
+import { color, space } from "@/theme";
 
 interface TeamRow {
   id: string;
@@ -69,62 +71,69 @@ export default function NewConversation() {
   };
 
   return (
-    <View style={styles.container}>
+    <Screen scroll={false} style={styles.page}>
       <Stack.Screen options={{ headerLeft: () => <ModalBackButton onPress={() => goBackOr("/(tabs)/messages")} /> }} />
       <View style={styles.toggleRow}>
-        <Pressable style={[styles.toggle, mode === "team" && styles.toggleActive]} onPress={() => setMode("team")}>
-          <Text style={[styles.toggleText, mode === "team" && styles.toggleTextActive]}>Team Chat</Text>
-        </Pressable>
-        <Pressable style={[styles.toggle, mode === "direct" && styles.toggleActive]} onPress={() => setMode("direct")}>
-          <Text style={[styles.toggleText, mode === "direct" && styles.toggleTextActive]}>Direct Message</Text>
-        </Pressable>
+        <SegmentedControl
+          options={["Team Chat", "Direct Message"]}
+          value={mode === "team" ? "Team Chat" : "Direct Message"}
+          onChange={(v) => setMode(v === "Team Chat" ? "team" : "direct")}
+        />
       </View>
 
       {loading || working ? (
-        <ActivityIndicator style={{ marginTop: 40 }} />
+        <View style={styles.list}>
+          <ActivityIndicator style={styles.spinner} color={color.icon.brand} />
+        </View>
       ) : mode === "team" ? (
         <FlatList
+          style={styles.list}
           data={teams}
           keyExtractor={(t) => t.id}
           initialNumToRender={12}
           maxToRenderPerBatch={12}
           windowSize={7}
-          ListEmptyComponent={<Text style={styles.muted}>No teams found for your club yet.</Text>}
+          ListEmptyComponent={
+            <View style={styles.emptyWrap}>
+              <EmptyState
+                icon="chatbubbles"
+                title="No teams found yet"
+                body="You'll need at least one team setup before you can start a group conversation."
+              />
+              <Button label="Go to Club Operations →" onPress={() => router.push("/club-management")} fullWidth />
+            </View>
+          }
           renderItem={({ item }) => (
-            <Pressable style={styles.row} onPress={() => startTeamChat(item)}>
-              <Text style={styles.rowText}>👥 {teamLabel(item)}</Text>
-            </Pressable>
+            <ListRow icon="people" title={teamLabel(item)} onPress={() => startTeamChat(item)} />
           )}
         />
       ) : (
         <FlatList
+          style={styles.list}
           data={people}
           keyExtractor={(p) => p.id}
           initialNumToRender={12}
           maxToRenderPerBatch={12}
           windowSize={7}
-          ListEmptyComponent={<Text style={styles.muted}>No one else in your club yet.</Text>}
+          ListEmptyComponent={
+            <Text tone="secondary" style={styles.centerText}>
+              No one else in your club yet.
+            </Text>
+          }
           renderItem={({ item }) => (
-            <Pressable style={styles.row} onPress={() => startDirect(item)}>
-              <Text style={styles.rowText}>{item.full_name}</Text>
-              <Text style={styles.rowMeta}>{item.role}</Text>
-            </Pressable>
+            <ListRow title={item.full_name} subtitle={item.role} onPress={() => startDirect(item)} />
           )}
         />
       )}
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0B0B0D", padding: 16 },
-  toggleRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
-  toggle: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: "#0A6CFF", alignItems: "center" },
-  toggleActive: { backgroundColor: "#0A6CFF" },
-  toggleText: { color: "#0A6CFF", fontWeight: "700" },
-  toggleTextActive: { color: "#fff" },
-  row: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#242424", flexDirection: "row", justifyContent: "space-between" },
-  rowText: { fontSize: 16, fontWeight: "600", color: "#F2F2F3" },
-  rowMeta: { fontSize: 13, color: "#9A9DA3", textTransform: "capitalize" },
-  muted: { color: "#6B6F76", textAlign: "center", marginTop: 40 },
+  page: { padding: space[4] },
+  toggleRow: { marginBottom: space[4] },
+  list: { flex: 1 },
+  spinner: { marginTop: space[10] },
+  centerText: { textAlign: "center", marginTop: space[10] },
+  emptyWrap: { alignItems: "center", gap: space[3], marginTop: space[10] },
 });
