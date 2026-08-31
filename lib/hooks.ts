@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "./supabase";
 import { useAuth } from "./AuthProvider";
+import { dedupeLocations } from "./dedupeLocations";
 import { Announcement, ClubEvent, DevelopmentPlan, Player } from "@/types/db";
 
 export function useNextEvent() {
@@ -262,18 +263,8 @@ export function useRecentLocations(limit = 6) {
         .order("starts_at", { ascending: false });
       if (error) console.error("Failed to load recent locations:", error.message);
 
-      const seen = new Set<string>();
-      const deduped: string[] = [];
-      for (const row of (data as { location: string | null }[]) ?? []) {
-        const value = row.location?.trim();
-        if (!value) continue;
-        const key = value.toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        deduped.push(value);
-        if (deduped.length >= limit) break;
-      }
-      setLocations(deduped);
+      const rows = (data as { location: string | null }[]) ?? [];
+      setLocations(dedupeLocations(rows.map((r) => r.location), limit));
     } finally {
       setLoading(false);
     }

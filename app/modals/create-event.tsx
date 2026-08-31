@@ -9,6 +9,8 @@ import { ClubEvent, EventType, Team } from "@/types/db";
 import { notify } from "@/lib/alertCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { goBackOr } from "@/lib/navigation";
+import { TIME_PRESETS, matchTimePreset, buildStartsAt, weeklyOccurrences } from "@/lib/eventSchedule";
+import { resolveTargeting, AudienceMode } from "@/lib/eventTargeting";
 import ModalBackButton from "@/components/ModalBackButton";
 import { Screen, Card, Text, Eyebrow, Field, Button, Chip, IconChip, Toggle, CardHeader, Calendar, FilterChipRow } from "@/components/ui";
 import type { IconName } from "@/components/ui";
@@ -37,27 +39,11 @@ const TYPES: { key: EventType; label: string }[] = [
   { key: "club_event", label: "Club Event" },
 ];
 
-type AudienceMode = "club" | "team" | "player";
-
-// Coaches overwhelmingly schedule practices at a round time — these six cover
-// the common evening slots. "Custom" reveals the original hour/minute/AM-PM
-// fields for anything else, so there's still exactly one way to end up with
-// an arbitrary time.
-const TIME_PRESETS: { label: string; hour: string; minute: string; meridiem: "AM" | "PM" }[] = [
-  { label: "4:00 PM", hour: "4", minute: "00", meridiem: "PM" },
-  { label: "4:30 PM", hour: "4", minute: "30", meridiem: "PM" },
-  { label: "5:00 PM", hour: "5", minute: "00", meridiem: "PM" },
-  { label: "5:30 PM", hour: "5", minute: "30", meridiem: "PM" },
-  { label: "6:00 PM", hour: "6", minute: "00", meridiem: "PM" },
-  { label: "6:30 PM", hour: "6", minute: "30", meridiem: "PM" },
-];
+// "Custom" reveals the original hour/minute/AM-PM fields for anything the
+// TIME_PRESETS chips don't cover, so there's still exactly one way to end up
+// with an arbitrary time.
 const CUSTOM_TIME = "Custom";
 const TIME_OPTIONS = [...TIME_PRESETS.map((p) => p.label), CUSTOM_TIME];
-
-/** The preset whose hour/minute/meridiem match the current field values, if any. */
-function matchingPreset(hour: string, minute: string, meridiem: "AM" | "PM") {
-  return TIME_PRESETS.find((p) => p.hour === hour && p.minute === minute && p.meridiem === meridiem);
-}
 
 function TypeCard({ icon, label, selected, onPress }: { icon: IconName; label: string; selected: boolean; onPress: () => void }) {
   return (
@@ -186,7 +172,7 @@ export default function CreateEvent() {
       setMeridiem(loadedMeridiem);
       // A prefilled time that isn't one of the chips must fall back to the
       // custom fields rather than being silently rounded to the nearest one.
-      const preset = matchingPreset(loadedHour, loadedMinute, loadedMeridiem);
+      const preset = matchTimePreset(loadedHour, loadedMinute, loadedMeridiem);
       setTimeChip(preset ? preset.label : CUSTOM_TIME);
       setNotes(ev.notes ?? "");
 
@@ -301,8 +287,7 @@ export default function CreateEvent() {
       return;
     }
     setTimeError(undefined);
-    const hour24 = (hour12 % 12) + (meridiem === "PM" ? 12 : 0);
-    const startsAt = new Date(`${dateStr}T${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`);
+    const startsAt = buildStartsAt(dateStr, hour12, minute, meridiem);
     if (isNaN(startsAt.getTime())) {
       setDateError("Use YYYY-MM-DD for the date.");
       scrollRef.current?.scrollTo({ y: 0, animated: true });
@@ -310,11 +295,13 @@ export default function CreateEvent() {
     }
     setDateError(undefined);
 
-    // Only attach an explicit player list when it's a *subset* of the group
-    // (someone's out that day) or a private session — a full group roster
-    // is represented by team_id alone, same as before.
-    const isPartialTeam = audienceMode === "team" && attendingIds.length < teamRoster.length;
-    const playerIds = audienceMode === "player" ? selectedPlayerIds : isPartialTeam ? attendingIds : null;
+    const { teamId: targetTeamId, playerIds } = resolveTargeting({
+      audienceMode,
+      teamId,
+      selectedPlayerIds,
+      attendingIds,
+      teamRoster,
+    });
 
     const occurrenceCount = !isEditing && repeatWeekly ? parseInt(repeatWeeksStr, 10) : 1;
     if (!isEditing && repeatWeekly && (isNaN(occurrenceCount) || occurrenceCount < 2 || occurrenceCount > 52)) {
@@ -337,7 +324,7 @@ export default function CreateEvent() {
         p_location: location.trim() || null,
         p_starts_at: startsAt.toISOString(),
         p_notes: notes.trim() || null,
-        p_team_id: audienceMode === "team" ? teamId : null,
+        p_team_id: targetTeamId,
         p_player_ids: playerIds,
       });
       setSubmitting(false);
@@ -366,16 +353,16 @@ export default function CreateEvent() {
         p_location: location.trim() || null,
         p_starts_at: startsAtIso,
         p_notes: notes.trim() || null,
-        p_team_id: audienceMode === "team" ? teamId : null,
+        p_team_id: targetTeamId,
         p_player_ids: playerIds,
         p_series_id: seriesIdArg,
       });
 
     let seriesId: string | null = null;
     let firstEventId: string | null = null;
+    const occurrences = weeklyOccurrences(startsAt, occurrenceCount);
     for (let i = 0; i < occurrenceCount; i++) {
-      const occurrenceStart = new Date(startsAt.getTime() + i * 7 * 24 * 60 * 60 * 1000);
-      const { data: newEventId, error } = await createOccurrence(occurrenceStart.toISOString(), seriesId);
+      const { data: newEventId, error } = await createOccurrence(occurrences[i].toISOString(), seriesId);
       if (error) {
         setSubmitting(false);
         return notify(

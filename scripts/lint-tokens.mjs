@@ -19,7 +19,7 @@ export const PENDING = [];
 
 // Top-level trees to scan, and the directory name to skip everywhere inside
 // them (tokens themselves are allowed to contain raw values).
-const SCAN_ROOTS = ["app", "components"];
+const SCAN_ROOTS = ["app", "components", "lib"];
 const EXCLUDED_DIR = "theme";
 
 /**
