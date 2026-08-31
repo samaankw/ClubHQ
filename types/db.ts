@@ -79,6 +79,13 @@ export interface Announcement {
   category: AnnouncementCategory;
   target_type: AnnouncementTargetType;
   created_at: string;
+  // Set by the announce_event_change() trigger (0033) when a coach edits an
+  // event's time or location. These rows aren't hand-written, so the card
+  // labels them and hides the edit pencil.
+  auto_generated?: boolean;
+  source_event_id?: string | null;
+  source_prev_starts_at?: string | null;
+  source_prev_location?: string | null;
 }
 
 export type EventType = "practice" | "game" | "tournament" | "club_event";

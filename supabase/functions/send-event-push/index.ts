@@ -29,11 +29,10 @@ import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 const EXPO_PUSH_BATCH_SIZE = 100; // Expo's documented per-request limit
 
-// All current locations (Dunwoody, Snellville, Stone Mountain) are Atlanta
-// suburbs in the same timezone — hardcoded rather than derived per-club since
-// there's only one club today. Revisit if ClubHQ ever supports clubs outside
-// America/New_York.
-const CLUB_TIME_ZONE = "America/New_York";
+// Fallback only. clubs.timezone (added in migration 0033, so the change-notice
+// trigger could render wall-clock times without hardcoding a zone inside a
+// trigger) is the real source; this covers a club row that predates it.
+const DEFAULT_TIME_ZONE = "America/New_York";
 
 const TYPE_LABEL: Record<string, string> = {
   practice: "Practice",
@@ -91,7 +90,7 @@ serve(async (req) => {
     }
 
     const [{ data: club }, { data: targetRows }] = await Promise.all([
-      supabase.from("clubs").select("name").eq("id", event.club_id).single(),
+      supabase.from("clubs").select("name, timezone").eq("id", event.club_id).single(),
       supabase.from("event_players").select("players(parent_id)").eq("event_id", event.id),
     ]);
 
@@ -182,7 +181,7 @@ serve(async (req) => {
       day: "numeric",
       hour: "numeric",
       minute: "2-digit",
-      timeZone: CLUB_TIME_ZONE,
+      timeZone: club?.timezone || DEFAULT_TIME_ZONE,
     });
 
     const notifTitle = teamName ?? club?.name ?? "ClubHQ";

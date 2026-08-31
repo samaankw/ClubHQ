@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { format } from "date-fns";
@@ -54,6 +54,34 @@ export default function CreateEvent() {
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [repeatWeeksStr, setRepeatWeeksStr] = useState("8");
   const [submitting, setSubmitting] = useState(false);
+  // Defaults on: a coach who moved a session should have to opt *out* of
+  // telling families, not remember to opt in.
+  const [notifyChange, setNotifyChange] = useState(true);
+  // What the event looked like when the edit form opened, so we can tell
+  // whether this save actually moves the session or just fixes a typo in the
+  // notes — the notify toggle is meaningless in the second case.
+  const originalRef = useRef<{ startsAt: string; location: string } | null>(null);
+
+  // Shared by the submit handler and the "notify families" toggle, which
+  // only appears once the form actually differs from the saved event.
+  const composeStartsAt = (): Date | null => {
+    if (!dateStr || !hourStr || !minuteStr) return null;
+    const hour12 = parseInt(hourStr, 10);
+    const minute = parseInt(minuteStr, 10);
+    if (isNaN(hour12) || hour12 < 1 || hour12 > 12 || isNaN(minute) || minute < 0 || minute > 59) return null;
+    const hour24 = (hour12 % 12) + (meridiem === "PM" ? 12 : 0);
+    const d = new Date(`${dateStr}T${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`);
+    return isNaN(d.getTime()) ? null : d;
+  };
+
+  const scheduleChanged = useMemo(() => {
+    const original = originalRef.current;
+    if (!isEditing || !original) return false;
+    const next = composeStartsAt();
+    const timeChanged = !!next && next.getTime() !== new Date(original.startsAt).getTime();
+    return timeChanged || location.trim() !== original.location;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing, dateStr, hourStr, minuteStr, meridiem, location]);
 
   const togglePlayer = (id: string) => {
     setSelectedPlayerIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
@@ -85,6 +113,7 @@ export default function CreateEvent() {
       setMinuteStr(format(startsAt, "mm"));
       setMeridiem(format(startsAt, "a") as "AM" | "PM");
       setNotes(ev.notes ?? "");
+      originalRef.current = { startsAt: ev.starts_at, location: (ev.location ?? "").trim() };
 
       const targetIds = (ev.event_players ?? []).map((t) => t.players.id);
       if (ev.team_id) {
@@ -166,14 +195,10 @@ export default function CreateEvent() {
     if (audienceMode === "team" && teamRoster.length > 0 && !attendingIds.length) return notify("No one attending", "Pick at least one player training that day, or switch groups.");
     if (audienceMode === "player" && !selectedPlayerIds.length) return notify("Player required", "Pick who this session is for.");
 
-    const hour12 = parseInt(hourStr, 10);
-    const minute = parseInt(minuteStr, 10);
-    if (isNaN(hour12) || hour12 < 1 || hour12 > 12 || isNaN(minute) || minute < 0 || minute > 59) {
-      return notify("Invalid time", "Hour must be 1–12 and minutes 0–59.");
+    const startsAt = composeStartsAt();
+    if (!startsAt) {
+      return notify("Invalid time", "Use YYYY-MM-DD for the date, an hour from 1–12, and minutes 0–59.");
     }
-    const hour24 = (hour12 % 12) + (meridiem === "PM" ? 12 : 0);
-    const startsAt = new Date(`${dateStr}T${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`);
-    if (isNaN(startsAt.getTime())) return notify("Invalid date", "Use YYYY-MM-DD for the date.");
 
     // Only attach an explicit player list when it's a *subset* of the group
     // (someone's out that day) or a private session — a full group roster
@@ -201,16 +226,24 @@ export default function CreateEvent() {
         p_notes: notes.trim() || null,
         p_team_id: audienceMode === "team" ? teamId : null,
         p_player_ids: playerIds,
+        // Read server-side by announce_event_change() (migration 0033), which
+        // writes the "New time / New location" notice into the feed. Only
+        // meaningful when the time or location actually moved.
+        p_notify: notifyChange,
       });
       setSubmitting(false);
       if (error) return notify("Couldn't save changes", error.message);
 
-      // Fire-and-forget, same as on create — a time/location change is
-      // exactly the kind of edit parents need to actually be told about,
-      // not just something they'd only see if they happened to reopen the app.
-      supabase.functions.invoke("send-event-push", { body: { eventId, isUpdate: true } }).catch((err) => {
-        console.warn("Event update push notification failed to send:", err);
-      });
+      // Fire-and-forget, same as on create. The push and the in-feed notice
+      // are deliberately two mechanisms: the push is the interrupt, the
+      // announcement is the record for whoever missed it. Suppressing the
+      // notice suppresses both, or the coach would silence the feed and still
+      // ping everyone's phone.
+      if (!scheduleChanged || notifyChange) {
+        supabase.functions.invoke("send-event-push", { body: { eventId, isUpdate: true } }).catch((err) => {
+          console.warn("Event update push notification failed to send:", err);
+        });
+      }
 
       goBackOr(`/event/${eventId}`);
       return;
@@ -393,6 +426,25 @@ export default function CreateEvent() {
               <Text style={styles.mutedNote}>weeks</Text>
             </View>
           )}
+        </View>
+      )}
+
+      {/* Only surfaced once the time or location actually differs from the
+          saved event — a coach fixing a typo in the notes has no reason to
+          think about notifying anyone. */}
+      {scheduleChanged && (
+        <View style={styles.rosterCard}>
+          <Pressable style={styles.repeatRow} onPress={() => setNotifyChange((v) => !v)}>
+            <View style={[styles.checkBox, notifyChange && styles.checkBoxOn]}>
+              {notifyChange && <Text style={styles.checkMark}>✓</Text>}
+            </View>
+            <Text style={styles.rosterName}>Let families know what changed</Text>
+          </Pressable>
+          <Text style={styles.mutedNote}>
+            {notifyChange
+              ? "Posts the old and new details to the schedule feed and sends a notification."
+              : "This change will be saved silently. Families won't be told."}
+          </Text>
         </View>
       )}
 
