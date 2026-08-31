@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     let { data, error } = await supabase
       .from("profiles")
-      .select("*, clubs(org_type)")
+      .select("*, clubs!profiles_club_fk(org_type)")
       .eq("id", userId)
       .maybeSingle();
 
@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!refreshError) {
         ({ data, error } = await supabase
           .from("profiles")
-          .select("*, clubs(org_type)")
+          .select("*, clubs!profiles_club_fk(org_type)")
           .eq("id", userId)
           .maybeSingle());
       }
