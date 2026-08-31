@@ -64,6 +64,10 @@ export type AnnouncementCategory =
   | "challenge"
   | "what_to_bring"
   | "holiday"
+  // Written only by the announce_event_cancellation() trigger (0034). Not
+  // offered in the compose picker: posting "Cancelled" by hand would leave
+  // the session sitting on the schedule contradicting it.
+  | "cancellation"
   | "general";
 
 export type AnnouncementTargetType = "everyone" | "team" | "players" | "parents";
@@ -86,6 +90,13 @@ export interface Announcement {
   source_event_id?: string | null;
   source_prev_starts_at?: string | null;
   source_prev_location?: string | null;
+  // Set by announce_event_cancellation() (0034). Deliberately denormalized:
+  // these ids point at events that no longer exist, so source_event_id can't
+  // carry them — its FK nulls itself the moment the event is deleted.
+  // Multiple entries when a recurring series was cancelled in one go.
+  source_cancelled_event_ids?: string[] | null;
+  source_cancelled_starts_at?: string[] | null;
+  source_series_id?: string | null;
 }
 
 export type EventType = "practice" | "game" | "tournament" | "club_event";

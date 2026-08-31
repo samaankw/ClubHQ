@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { AttendanceRecord, AttendanceStatus, ClubEvent, EventRSVP, PaymentStatus, Player, PlayerPayment, RSVPStatus } from "@/types/db";
-import { confirmAsync, notify } from "@/lib/alertCompat";
+import { chooseAsync, confirmAsync, notify } from "@/lib/alertCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { goBackOr } from "@/lib/navigation";
 import { addEventToDeviceCalendar } from "@/lib/calendarExport";
@@ -58,31 +58,74 @@ export default function EventDetail() {
     }
   };
 
+  // The delete RPCs (0034) return the ids of the cancellation notices the
+  // trigger wrote. Fire-and-forget, matching every other push call site: a
+  // failed notification must not make a completed deletion look failed.
+  const pushCancellationNotices = (announcementIds: string[] | null) => {
+    for (const announcementId of announcementIds ?? []) {
+      supabase.functions
+        .invoke("send-announcement-push", { body: { announcementId } })
+        .catch((err) => {
+          console.warn("cancellation push failed", err);
+        });
+    }
+  };
+
+  // Deleting a session that already happened is record-keeping; the trigger
+  // skips it too, so offering a notification choice would be a lie.
+  const isUpcoming = !!event && new Date(event.starts_at).getTime() > Date.now();
+
   const deleteEvent = async () => {
     if (!event) return;
-    const ok = await confirmAsync("Delete event?", `"${event.title}" will be removed for everyone, including any RSVPs. This can't be undone.`);
-    if (!ok) return;
-    const { data, error } = await supabase.from("events").delete().eq("id", event.id).select();
+    const detail = `"${event.title}" will be removed for everyone, including any RSVPs. This can't be undone.`;
+
+    let notifyFamilies = false;
+    if (isUpcoming) {
+      const choice = await chooseAsync("Delete session?", detail, [
+        { key: "notify", label: "Delete and notify families", destructive: true },
+        { key: "quiet", label: "Delete without notifying", destructive: true },
+      ]);
+      if (!choice) return;
+      notifyFamilies = choice === "notify";
+    } else if (!(await confirmAsync("Delete session?", detail))) {
+      return;
+    }
+
+    const { data, error } = await supabase.rpc("delete_event", {
+      p_event_id: event.id,
+      p_notify: notifyFamilies,
+    });
     if (error) return notify("Couldn't delete", error.message);
-    if (!data || data.length === 0) return notify("Couldn't delete", "You don't have permission to delete this event.");
+    pushCancellationNotices(data as string[] | null);
     goBackOr("/(tabs)/schedule?section=events");
   };
 
   const cancelRemainingSeries = async () => {
     if (!event?.series_id) return;
-    const ok = await confirmAsync(
-      "Cancel remaining sessions?",
-      "This deletes this session and every later one in the series (past sessions are untouched). This can't be undone."
-    );
-    if (!ok) return;
-    const { data, error } = await supabase
-      .from("events")
-      .delete()
-      .eq("series_id", event.series_id)
-      .gte("starts_at", event.starts_at)
-      .select();
+    const detail =
+      "This deletes this session and every later one in the series (past sessions are untouched). This can't be undone.";
+
+    let notifyFamilies = false;
+    if (isUpcoming) {
+      const choice = await chooseAsync("Cancel remaining sessions?", detail, [
+        { key: "notify", label: "Cancel and notify families", destructive: true },
+        { key: "quiet", label: "Cancel without notifying", destructive: true },
+      ]);
+      if (!choice) return;
+      notifyFamilies = choice === "notify";
+    } else if (!(await confirmAsync("Cancel remaining sessions?", detail))) {
+      return;
+    }
+
+    // One notice for the whole block, not one per session — the trigger folds
+    // siblings from the same series together.
+    const { data, error } = await supabase.rpc("cancel_event_series", {
+      p_series_id: event.series_id,
+      p_from: event.starts_at,
+      p_notify: notifyFamilies,
+    });
     if (error) return notify("Couldn't cancel sessions", error.message);
-    if (!data || data.length === 0) return notify("Couldn't cancel sessions", "You don't have permission to delete these events.");
+    pushCancellationNotices(data as string[] | null);
     goBackOr("/(tabs)/schedule?section=events");
   };
 

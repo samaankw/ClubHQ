@@ -205,15 +205,27 @@ def run():
     if check("club-wide session produces a notice", len(rows) == 1, f"got {len(rows)}"):
         check("target_type is 'everyone'", rows[0][4] == "everyone", rows[0][4])
 
-    # --- 12. Deleting the event keeps the historical notice ---
+    # --- 12. Deleting the event keeps the *historical* notice.
+    #
+    #   0034 narrowed this: a change notice still inside the fold window is
+    #   retracted on delete, because "New time: Thursday" sitting next to
+    #   "Cancelled: Thursday" tells a parent to show up. Anything older is
+    #   history a parent may already have read, and survives with a null
+    #   source_event_id. Backdated here to land on the surviving side; the
+    #   retraction case is asserted in test_cancellation_notices.py.
     e = fx.make_event(future)
     fx.edit(e, future + timedelta(hours=1), "Dunwoody Field 3")
-    cur.execute("select count(*) from announcements where source_event_id = %s", (str(e),))
-    before = cur.fetchone()[0]
-    cur.execute("delete from events where id = %s", (str(e),))
-    cur.execute("select count(*) from announcements where source_event_id is null and auto_generated")
-    check("notice survives event deletion (ON DELETE SET NULL)",
-          before == 1 and cur.fetchone()[0] >= 1)
+    cur.execute("select id from announcements where source_event_id = %s", (str(e),))
+    row = cur.fetchone()
+    if check("edit produced a notice to age out", row is not None):
+        aid = row[0]
+        cur.execute("update announcements set created_at = now() - interval '1 day' where id = %s", (aid,))
+        cur.execute("delete from events where id = %s", (str(e),))
+        cur.execute("select source_event_id from announcements where id = %s", (aid,))
+        survived = cur.fetchone()
+        check("an aged notice survives event deletion (ON DELETE SET NULL)",
+              survived is not None and survived[0] is None,
+              "row deleted" if survived is None else f"source_event_id={survived[0]}")
 
     print()
     failed = [n for n, ok, _ in results if not ok]

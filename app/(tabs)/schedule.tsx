@@ -10,7 +10,7 @@ import { buildFeed, filterFromSectionParam, FEED_FILTERS, FeedFilter, FeedItem }
 import AnnouncementCard from "@/components/AnnouncementCard";
 import EventCard from "@/components/EventCard";
 import SwipeableRow from "@/components/SwipeableRow";
-import { confirmAsync, notify } from "@/lib/alertCompat";
+import { chooseAsync, confirmAsync, notify } from "@/lib/alertCompat";
 
 /**
  * One chronological feed instead of an Events / Announcements toggle.
@@ -93,16 +93,39 @@ export default function Schedule() {
   const canDeleteEvent = (createdBy: string) => profile?.role === "director" || profile?.id === createdBy;
   const canDeleteAnnouncement = (authorId: string) => profile?.role === "director" || profile?.id === authorId;
 
-  const deleteEvent = async (id: string, title: string) => {
-    const ok = await confirmAsync(
-      "Delete session?",
-      `"${title}" will be removed for everyone, including any RSVPs. This can't be undone.`
-    );
-    if (!ok) return;
-    const { data, error } = await supabase.from("events").delete().eq("id", id).select();
+  // Swipe-to-delete goes through the same RPC as the detail screen so a
+  // session cancelled from the feed announces itself identically. Deleting
+  // here used to be the one path that could silently drop an upcoming session.
+  const deleteEvent = async (event: ClubEvent) => {
+    const detail = `"${event.title}" will be removed for everyone, including any RSVPs. This can't be undone.`;
+    const isUpcoming = new Date(event.starts_at).getTime() > Date.now();
+
+    let notifyFamilies = false;
+    if (isUpcoming) {
+      const choice = await chooseAsync("Delete session?", detail, [
+        { key: "notify", label: "Delete and notify families", destructive: true },
+        { key: "quiet", label: "Delete without notifying", destructive: true },
+      ]);
+      if (!choice) return;
+      notifyFamilies = choice === "notify";
+    } else if (!(await confirmAsync("Delete session?", detail))) {
+      return;
+    }
+
+    const { data, error } = await supabase.rpc("delete_event", {
+      p_event_id: event.id,
+      p_notify: notifyFamilies,
+    });
     if (error) return notify("Couldn't delete", error.message);
-    if (!data?.length) return notify("Couldn't delete", "You don't have permission to delete this session.");
+    for (const announcementId of (data as string[] | null) ?? []) {
+      supabase.functions
+        .invoke("send-announcement-push", { body: { announcementId } })
+        .catch((err) => {
+          console.warn("cancellation push failed", err);
+        });
+    }
     loadEvents();
+    refreshAnnouncements();
   };
 
   const deleteAnnouncement = async (id: string, title: string) => {
@@ -127,7 +150,7 @@ export default function Schedule() {
     if (item.kind === "event") {
       const card = <EventCard event={item.event} />;
       return canDeleteEvent(item.event.created_by) ? (
-        <SwipeableRow onDelete={() => deleteEvent(item.event.id, item.event.title)}>{card}</SwipeableRow>
+        <SwipeableRow onDelete={() => deleteEvent(item.event)}>{card}</SwipeableRow>
       ) : (
         card
       );

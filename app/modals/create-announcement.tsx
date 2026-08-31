@@ -3,7 +3,7 @@ import { View, Text, TextInput, Pressable, StyleSheet, Switch, ScrollView } from
 import { Stack, useLocalSearchParams } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
-import { ANNOUNCEMENT_CATEGORIES } from "@/lib/announcementCategories";
+import { ANNOUNCEMENT_CATEGORIES, COMPOSABLE_CATEGORIES } from "@/lib/announcementCategories";
 import { AnnouncementCategory, AnnouncementTargetType, Team } from "@/types/db";
 import { notify } from "@/lib/alertCompat";
 import { teamLabel } from "@/lib/teamLabel";
@@ -15,7 +15,7 @@ interface PlayerOption {
   full_name: string;
 }
 
-const CATEGORY_KEYS = Object.keys(ANNOUNCEMENT_CATEGORIES) as AnnouncementCategory[];
+const CATEGORY_KEYS = COMPOSABLE_CATEGORIES;
 
 const AUDIENCE_LABELS: Record<AnnouncementTargetType, string> = {
   everyone: "Everyone",
