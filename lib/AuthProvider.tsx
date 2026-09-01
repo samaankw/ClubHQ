@@ -19,17 +19,28 @@ const AuthContext = createContext<AuthContextValue>({
   refreshProfile: async () => {},
 });
 
-async function createSessionFromUrl(url: string) {
+// Custom URL schemes (this app registers "clubhq") aren't guaranteed
+// exclusive to one app on iOS/Android, so a deep link's mere arrival proves
+// nothing about who sent it. Before acting on any query param, require the
+// link to match the exact scheme/host/path this app's own auth flow
+// generates (see resetPasswordForEmail's redirectTo) — anything else is
+// ignored rather than trusted.
+function isTrustedAuthCallback(url: string): boolean {
   try {
-    const normalized = url.includes("#") ? url.replace("#", "?") : url;
-    const parsed = new URL(normalized);
-    const accessToken = parsed.searchParams.get("access_token");
-    const refreshToken = parsed.searchParams.get("refresh_token");
-    const code = parsed.searchParams.get("code");
+    const expected = Linking.parse(Linking.createURL("update-password"));
+    const incoming = Linking.parse(url);
+    return incoming.scheme === expected.scheme && incoming.hostname === expected.hostname && incoming.path === expected.path;
+  } catch {
+    return false;
+  }
+}
 
-    if (accessToken && refreshToken) {
-      await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-    } else if (code) {
+export async function createSessionFromUrl(url: string) {
+  try {
+    if (!isTrustedAuthCallback(url)) return;
+
+    const { code } = Linking.parse(url).queryParams ?? {};
+    if (typeof code === "string") {
       await supabase.auth.exchangeCodeForSession(code);
     }
   } catch (error) {

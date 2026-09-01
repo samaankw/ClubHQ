@@ -133,5 +133,11 @@ export const supabase = createClient(SUPABASE_URL, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
+    // PKCE ties the reset-password link's `code` to a verifier stored locally
+    // when the request was made, so a copied/forwarded link can't be
+    // exchanged for a session on a different device. The default ("implicit")
+    // instead puts a live access_token/refresh_token directly in the link,
+    // which lib/AuthProvider.tsx would otherwise have to trust from any URL.
+    flowType: "pkce",
   },
 });

@@ -172,16 +172,31 @@ IDs use the prefix `facecafe-...` (see the legend at the top of the file), so
 confirming nothing leaked after a run is one `count(*) ... like 'facecafe-%'`
 query per table.
 
-**Verification status, read before trusting this file:** of the 29 assertions
-in `plan(29)`, only the first 24 have actually been run end-to-end (against a
-separate development Supabase project, not this app's) and confirmed passing,
-with a deliberately-inverted scratch probe confirming the suite can catch a
-real regression rather than passing unconditionally. The remaining 5 -- the
-`anon` pair under `rate_limit_hits`, the three `parent_link_codes` assertions,
-and the conversion of one positive control from `lives_ok` to an explicit
-`is()` -- were added and reviewed with no database available and have **not**
-been executed. Run the full file for real, against this project's own schema,
-before relying on it -- don't assume it's clean just because it's checked in.
+**Verification status, read before trusting this file:** this file itself
+requires pgTAP (`create extension pgtap;`), which needs either `supabase test
+db` (Docker) or a real hosted Supabase project -- neither is available in
+this repo's own embedded-Postgres harness (no `pg_config`, no compiler
+toolchain to build the extension against it), so the literal file has not
+been executed here.
+
+What *has* been done: every one of the 29 assertions -- fixtures, role
+switches, and expected outcomes -- was translated one-for-one into plain
+Python/psycopg2 checks against this repo's own `run_migrations.py` harness
+(swapping pgTAP's `request.jwt.claims` for the harness's `test.uid` GUC, the
+only difference in how identity is impersonated) and run for real against the
+current schema, immediately after `0039_rls_performance_and_consolidation.sql`
+rewrote most of the policies this suite exercises. All 29 held. That
+includes the assertions an earlier pass through this file never actually
+ran: both `anon`/`rate_limit_hits` checks, all three `parent_link_codes`
+checks, and the `lives_ok`-to-`is()` positive control. A deliberately-inverted
+scratch probe during that same pass confirmed the checks can catch a real
+regression rather than passing unconditionally.
+
+That is real evidence the *logic* is correct against the current schema --
+it is not a substitute for running the actual pgTAP file. Before trusting a
+future change against this suite, run the file for real via `supabase test
+db` or a hosted project; don't assume it's clean just because the translated
+version passed once.
 
 ### Why pgTAP isn't in `supabase/migrations/`
 
