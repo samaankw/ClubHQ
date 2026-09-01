@@ -2,8 +2,8 @@
 
 Applies every migration to a throwaway Postgres and asserts the behavior of
 things that can't be checked by reading the SQL — currently the automatic
-notice triggers from `0033_auto_change_announcements.sql` and
-`0034_event_cancellation_notices.sql`.
+notice triggers from `0034_auto_change_announcements.sql` and
+`0035_event_cancellation_notices.sql`.
 
 These run against a real Postgres, not a mock. A trigger that fires at the
 wrong point in a transaction, targets the wrong families, or trips a check
@@ -25,6 +25,7 @@ $PGBIN/pg_ctl -D /tmp/clubhq-pgdata -o "-p 5439 -k /tmp" -l /tmp/clubhq-pg.log s
 python3 supabase/tests/run_migrations.py     # applies 0001 → latest
 python3 supabase/tests/test_change_notices.py
 python3 supabase/tests/test_cancellation_notices.py
+python3 supabase/tests/test_function_grants.py
 
 $PGBIN/pg_ctl -D /tmp/clubhq-pgdata stop -m fast
 ```
@@ -43,8 +44,24 @@ which devices get pinged — that is `send-announcement-push`, covered in
 
 `run_migrations.py` creates a minimal stand-in for the pieces Supabase
 provides: the `auth`, `extensions`, and `storage` schemas, an `auth.users`
-table, the `authenticated` / `anon` / `service_role` roles, and an `auth.uid()`
-that reads a `test.uid` GUC so tests can act as different users.
+table, the `authenticated` / `anon` / `service_role` roles, an `auth.uid()`
+that reads a `test.uid` GUC so tests can act as different users, and the
+default privileges a hosted project applies to new functions.
+
+That last one is not cosmetic. Supabase ships with
+
+```sql
+alter default privileges in schema public
+  grant all on functions to postgres, anon, authenticated, service_role;
+```
+
+so every function a migration creates is granted to `anon` in its own right,
+on top of the PUBLIC grant Postgres adds by itself. A bare cluster has only
+the PUBLIC grant. That difference is why `0036` — which revoked EXECUTE
+`from public` and nothing else — passed here and changed nothing on the real
+project, where `anon` could still call `delete_event` afterwards. `0037`
+revokes `anon` by name and the harness now grants what production grants, so
+the next migration that gets this wrong fails locally instead of in prod.
 
 Known gap: `0029_club_media_per_club_scope.sql` fails locally because the stub
 has no `storage.foldername()`. It's a storage-path policy and nothing under
@@ -52,7 +69,36 @@ test depends on it. Every other migration applies clean.
 
 ## Coverage
 
-### `test_cancellation_notices.py` (40 assertions)
+### `test_function_grants.py` (27 assertions)
+
+The only test here that checks permissions rather than behavior. Asserts that
+the functions from `0034`/`0035` pin `search_path`, that `anon` cannot execute
+any of them, and that `authenticated` still can — the last one matters because
+an over-broad revoke breaks the app just as thoroughly as a missing one, and
+fails in exactly the same silent way.
+
+The anon check is made twice on purpose: once through
+`has_function_privilege`, and once by actually calling `delete_event` under
+`set local role anon` and asserting the error is Postgres's `permission denied
+for function delete_event` rather than the function's own "not yours to
+delete" exception. Those two failures look identical from the client and only
+one of them means the grant is right.
+
+The assertion the whole migration rests on:
+
+> the deleting role genuinely lacks EXECUTE on the trigger function
+
+`0036` revokes EXECUTE on `announce_event_cancellation()` from every role.
+That is only safe because Postgres checks EXECUTE when `CREATE TRIGGER` runs,
+not on each fire. If that were wrong, every cancellation notice in production
+would stop, with no error anywhere. So the test deletes a real event as a role
+that provably lacks EXECUTE and asserts the notice still appears.
+
+There is also a catch-all asserting no unpinned functions remain in `public`.
+It excludes `uuid_generate_v4()`, which is this harness's own uuid-ossp shim
+(`run_migrations.py`) and lives in the `extensions` schema on Supabase.
+
+### `test_cancellation_notices.py` (44 assertions)
 
 Single and series cancellation; the title/body rendering including the
 eight-session cap; targeting for team, player-targeted, and club-wide
@@ -74,7 +120,7 @@ Service-role deletions (backfills, `delete-account`) are far more likely to be
 data repair than a real cancellation, and "your sessions are cancelled" is not
 a message to send on a guess.
 
-### `test_change_notices.py` (34 assertions)
+### `test_change_notices.py` (35 assertions)
 
 Covers time-only, location-only, and
 combined changes; category and title selection; past sessions and notes-only

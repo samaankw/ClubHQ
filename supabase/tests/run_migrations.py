@@ -22,6 +22,19 @@ do $$ begin
   create role service_role;
 exception when duplicate_object then null; end $$;
 
+-- Reproduce Supabase's default privileges. A hosted project ships with
+--   alter default privileges in schema public
+--     grant all on functions to postgres, anon, authenticated, service_role;
+-- so every function created by a migration is granted to `anon` DIRECTLY, on
+-- top of the PUBLIC grant Postgres adds on its own.
+--
+-- This is not a detail. Without it, a migration that only does
+-- `revoke ... from public` looks like it locked anon out here while leaving
+-- the endpoint wide open on the real project -- which is exactly what
+-- happened with the first version of 0036. The harness has to grant what
+-- production grants or it cannot be used to test that anything was revoked.
+alter default privileges in schema public
+  grant all on functions to anon, authenticated, service_role;
 
 create table if not exists auth.users (
   id uuid primary key,
