@@ -117,6 +117,7 @@ export default function Dashboard() {
     loading: setupLoading,
     teamCount,
     playerCount,
+    refresh: refreshSetup,
   } = useSetupProgress();
 
   // Team/player creation is director-gated in RLS (`teams_write_staff`,
@@ -128,7 +129,7 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = React.useState(false);
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refreshEvent(), refreshCounts(), refreshAnn()]);
+    await Promise.all([refreshEvent(), refreshCounts(), refreshAnn(), refreshSetup()]);
     setRefreshing(false);
   };
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusEffect } from "expo-router";
 import { supabase } from "./supabase";
 import { useAuth } from "./AuthProvider";
 import { dedupeLocations } from "./dedupeLocations";
@@ -370,7 +371,10 @@ export function useSetupProgress() {
         },
         {
           key: "practice",
-          title: "Schedule a practice",
+          // Counts any event, not just type = 'practice', so the label has to
+          // match: a director whose first booking is a game or a club social
+          // has scheduled something and shouldn't still be nagged.
+          title: "Schedule your first session",
           done: (eventResult.count ?? 0) > 0,
           href: "/modals/create-event",
         },
@@ -380,7 +384,16 @@ export function useSetupProgress() {
     }
   }, [profile?.club_id, profile?.role]);
 
-  useEffect(() => { load(); }, [load]);
+  // Focus, not mount: expo-router keeps tab screens mounted, so a director who
+  // creates their first team and comes back would otherwise still be told to
+  // "Setup your first team" until the app was relaunched. Every step in this
+  // checklist is completed on a different screen, so re-deriving on focus is
+  // the whole point. club-management and the Players tab do the same.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   const completed = steps.filter((s) => s.done).length;
   const total = steps.length;
@@ -393,6 +406,7 @@ export function useSetupProgress() {
     loading,
     teamCount,
     playerCount,
+    refresh: load,
   };
 }
 

@@ -67,7 +67,7 @@ begin;
 create temporary table _tap_results (ord int primary key, line text);
 grant insert, select on _tap_results to authenticated; -- needed once you set local role authenticated below
 
-insert into _tap_results values (0, (select plan(24)));
+insert into _tap_results values (0, (select plan(29)));
 
 -- ... paste every fixture INSERT/UPDATE from rls.test.sql, unchanged ...
 
@@ -87,8 +87,8 @@ rollback;
 ```
 
 3. Run that whole block in one `execute_sql` call against project
-   `whrbxptrndmdnlojvhrk`. The result rows are the TAP output: `1..24`, then
-   24 `ok N - ...` / `not ok N - ...` lines, then a `finish()` summary line.
+   `whrbxptrndmdnlojvhrk`. The result rows are the TAP output: `1..29`, then
+   29 `ok N - ...` / `not ok N - ...` lines, then a `finish()` summary line.
 4. **Verify cleanliness.** After the transaction rolls back nothing should
    remain. Confirm with (also against the dev project):
 
@@ -162,11 +162,46 @@ control (`lives_ok`) proving the corresponding action *does* work for a
 legitimately authorized user — so a passing suite means the policy is
 correctly scoped, not that it blocks everything indiscriminately.
 
-## Last verified run (dev project, `whrbxptrndmdnlojvhrk`)
+## What this suite does NOT cover
 
-24 of 24 assertions passed. Zero leftover rows confirmed in every fixture
+26 tables in `public` have RLS enabled. This suite asserts against 10 of
+them: `teams`, `events`, `announcements`, `players`, `profiles`,
+`development_plans`, `rate_limit_hits`, `parent_link_codes`, `messages`,
+`evaluations`.
+
+The remaining 16 have no assertion at all:
+
+`clubs`, `player_payments`, `push_tokens`, `consent_records`,
+`role_change_log`, `attendance_records`, `event_rsvps`, `event_players`,
+`announcement_player_targets`, `announcement_reads`, `homework_items`,
+`drills`, `conversations`, `conversation_participants`, `team_coaches`,
+`report_views`.
+
+Worth doing next, by blast radius: **`player_payments`** (financial; the
+parent read path added in 0032 is untested), **`consent_records`** and
+**`role_change_log`** (legal and audit records — nothing asserts they are
+not client-writable), **`push_tokens`**, and **`clubs`** (the object every
+other policy scopes against). Actors for all of these are already seeded,
+so each is two or three assertions.
+
+## Verification status
+
+**The 24-assertion version of this file was verified.** 24 of 24 passed
+against the dev project. Zero leftover rows were confirmed in every fixture
 table afterwards. A deliberately inverted assertion (run as a separate,
 rolled-back scratch probe — the checked-in file was never altered) was
-confirmed to fail with `not ok`, alongside its correct sibling passing,
-proving this suite can actually catch a regression rather than passing
+confirmed to fail with `not ok` alongside its correct sibling passing,
+proving the suite can catch a regression rather than passing
 unconditionally.
+
+**The five assertions added since then have NOT been executed.** They are
+the `anon` pair in section 4 and the three `parent_link_codes` assertions in
+section 5, plus the conversion of the coach-rename positive control from
+`lives_ok` to an `is()` on the resulting value. They were added in an
+environment with no Docker, no Supabase CLI and no `psql`, so the file as it
+now stands has been reviewed but not run. Run it before relying on it.
+
+Note also that nothing runs this suite automatically — there is no CI, and
+`npm run verify` does not invoke it (it cannot, without a database). Until
+that changes, this file only asserts anything on the day someone chooses to
+run it.

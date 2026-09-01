@@ -93,13 +93,26 @@ describe("weeklyOccurrences", () => {
     expect(occ[1].getHours()).toBe(18);
   });
 
-  it("preserves wall-clock time across a DST transition, when the runtime honours one", () => {
+  it("preserves wall-clock time across a DST transition", () => {
     // US spring-forward in 2026 is March 8th. A practice the week before at
     // 5 PM should still read 5 PM the week after, not 4 or 6.
+    //
+    // This is the test that guards the switch from fixed-millisecond
+    // arithmetic to calendar arithmetic, so it only means anything in a zone
+    // that observes a transition on this date — jest.config.js pins TZ to
+    // America/New_York for exactly that reason. Under UTC the old
+    // implementation satisfies it too.
+    expect(new Date(2026, 2, 1).getTimezoneOffset()).not.toBe(new Date(2026, 2, 15).getTimezoneOffset());
+
     const start = new Date(2026, 2, 1, 17, 0, 0); // Sun Mar 1, 2026, 5 PM
     const [, second] = weeklyOccurrences(start, 2);
     expect(second.getHours()).toBe(17);
     expect(second.getMinutes()).toBe(0);
+
+    // And the arithmetic it replaced would have drifted, which is what makes
+    // the assertion above load-bearing rather than incidental.
+    const naive = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
+    expect(naive.getHours()).toBe(18);
   });
 
   it("returns an empty array for a count of zero", () => {

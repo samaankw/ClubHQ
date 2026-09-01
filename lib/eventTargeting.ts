@@ -25,9 +25,15 @@ export interface TargetingResult {
  * `playerIds` both set — a partial team is still tied to the team for
  * display, but the player list is what actually gets targeted).
  *
- * Mirrors the targeting resolution in create-event.tsx exactly. Getting this
- * wrong sends a private session to the whole club, or an announcement to the
- * wrong parents — do not alter the rule, just call it from both call sites.
+ * Extracted verbatim from create-event.tsx, which is its only caller. Getting
+ * this wrong sends a private session to the whole club, so change the rule
+ * only with the tests in front of you.
+ *
+ * Not shared with create-announcement.tsx, despite the surface similarity:
+ * announcements use a different model (a `target_type` of everyone | team |
+ * players | parents written to the row, plus a separate
+ * announcement_player_targets insert) and have no partial-team concept at
+ * all. Wiring this function into it would be wrong, not merely unnecessary.
  */
 export function resolveTargeting({
   audienceMode,

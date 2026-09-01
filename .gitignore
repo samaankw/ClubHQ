@@ -10,3 +10,8 @@ android/
 ios/
 .DS_Store
 *.log
+
+# Agent git worktrees live at .claude/worktrees/<name>/ inside the repo. They
+# are scratch checkouts of this same repository — never content to commit, and
+# `git add -A` would otherwise stage them as embedded repos.
+.claude/

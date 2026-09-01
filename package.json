@@ -10,10 +10,11 @@
     "typecheck": "tsc --noEmit",
     "doctor": "expo-doctor",
     "prebuild:clean": "expo prebuild --clean",
-    "verify": "npm run verify:static && npm run lint:tokens && npm run typecheck && npx expo-doctor@latest",
+    "verify": "npm run verify:static && npm run lint:tokens && npm run typecheck && npm test -- --ci && npx expo-doctor@latest",
     "verify:static": "node scripts/project-check.mjs",
     "lint:tokens": "node scripts/lint-tokens.mjs",
     "test": "jest",
+    "test:rls": "npx supabase@latest test db",
     "test:watch": "jest --watch"
   },
   "dependencies": {

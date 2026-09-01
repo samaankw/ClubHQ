@@ -17,7 +17,7 @@
 
 begin;
 
-select plan(24);
+select plan(29);
 
 -- ---------------------------------------------------------
 -- Fixture legend (all IDs prefixed facecafe- for easy cleanup verification)
@@ -43,6 +43,7 @@ select plan(24);
 --   plan_reviewed    facecafe-0007-0000-0000-000000000002  (player_a1, status=coach_reviewed)
 --   plan_published   facecafe-0007-0000-0000-000000000003  (player_a1, status=published)
 --   conv_a           facecafe-0008-0000-0000-000000000001  (club_a/team_a, participant = parent_a1 only)
+--   link_code_a1     facecafe-0009-0000-0000-000000000001  (player_a1, created by director_a)
 -- ---------------------------------------------------------
 
 -- ==================== Seed fixtures (runs as the connection's superuser role, bypasses RLS) ====================
@@ -102,6 +103,9 @@ insert into conversations (id, club_id, team_id, type) values
 
 insert into conversation_participants (conversation_id, profile_id) values
   ('facecafe-0008-0000-0000-000000000001', 'facecafe-0001-0000-0000-000000000003'); -- parent_a1 only
+
+insert into parent_link_codes (id, player_id, code, created_by) values
+  ('facecafe-0009-0000-0000-000000000001', 'facecafe-0003-0000-0000-000000000001', 'RLSTESTCODE1', 'facecafe-0001-0000-0000-000000000001');
 
 -- ==================== 1. Cross-club isolation (as director_a) ====================
 set local role authenticated;
@@ -186,13 +190,61 @@ select throws_ok(
   'authenticated user cannot select rate_limit_hits (0033 fix -- a regression here re-opens uncapped AI spend)'
 );
 select throws_ok(
-  $$delete from rate_limit_hits$$,
+  -- Scoped deliberately. An unqualified delete here proves the same permission
+  -- denial, but the day the revoke regresses it stops throwing and becomes a
+  -- full-table wipe of live rate-limit state -- against whatever database the
+  -- suite was pointed at.
+  $$delete from rate_limit_hits where user_id = 'facecafe-0001-0000-0000-000000000001'$$,
   '42501',
   null,
   'authenticated user cannot delete from rate_limit_hits (cannot reset their own AI rate limit)'
 );
 
--- ==================== 5. Role self-promotion blocked; coach cannot create a team ====================
+-- 0033 revokes from anon AND authenticated, and anon is the role the
+-- publishable key maps to -- a key that ships inside the distributed app
+-- bundle, making it the more exposed of the two. Asserting only the
+-- authenticated side would let a `grant ... to anon` regression through with
+-- all assertions green.
+set local role anon;
+-- No jwt claims: this is what an unauthenticated PostgREST request looks like.
+select throws_ok(
+  $$select * from rate_limit_hits$$,
+  '42501',
+  null,
+  'anon cannot select rate_limit_hits (the publishable key ships in the app bundle)'
+);
+select throws_ok(
+  $$delete from rate_limit_hits where user_id = 'facecafe-0001-0000-0000-000000000001'$$,
+  '42501',
+  null,
+  'anon cannot delete from rate_limit_hits'
+);
+set local role authenticated;
+
+-- ==================== 5. Parent link codes readable only by a director of the same club ====================
+-- claim_parent_link_code turns one of these rows into a parent-child link, so
+-- a read regression here is a stranger claiming someone else's child. Codes
+-- are claimed through a SECURITY DEFINER RPC precisely so they are never
+-- enumerable from the client.
+set local request.jwt.claims to '{"sub":"facecafe-0001-0000-0000-000000000001","role":"authenticated"}'; -- director_a
+select is(
+  (select count(*)::int from parent_link_codes where player_id = 'facecafe-0003-0000-0000-000000000001'),
+  1, 'director_a sees the link code for a player in their own club'
+);
+
+set local request.jwt.claims to '{"sub":"facecafe-0001-0000-0000-000000000005","role":"authenticated"}'; -- director_b
+select is(
+  (select count(*)::int from parent_link_codes where player_id = 'facecafe-0003-0000-0000-000000000001'),
+  0, 'director_b cannot read another club''s link codes'
+);
+
+set local request.jwt.claims to '{"sub":"facecafe-0001-0000-0000-000000000003","role":"authenticated"}'; -- parent_a1
+select is(
+  (select count(*)::int from parent_link_codes),
+  0, 'a parent cannot enumerate link codes, not even for their own child'
+);
+
+-- ==================== 6. Role self-promotion blocked; coach cannot create a team ====================
 set local request.jwt.claims to '{"sub":"facecafe-0001-0000-0000-000000000002","role":"authenticated"}';
 
 select throws_ok(
@@ -207,12 +259,18 @@ select throws_ok(
   null,
   'coach_a cannot insert a team (teams_write_staff is director-only)'
 );
-select lives_ok(
-  $$update profiles set full_name = 'RLS Coach A Renamed' where id = 'facecafe-0001-0000-0000-000000000002'$$,
+-- Positive control. Deliberately NOT lives_ok: under RLS an UPDATE whose rows
+-- are filtered out by a policy's USING clause affects zero rows without
+-- raising, so lives_ok here would still pass if profiles_update_self were
+-- dropped outright and the write silently touched nothing. Assert the effect.
+update profiles set full_name = 'RLS Coach A Renamed' where id = 'facecafe-0001-0000-0000-000000000002';
+select is(
+  (select full_name from profiles where id = 'facecafe-0001-0000-0000-000000000002'),
+  'RLS Coach A Renamed',
   'positive control: coach_a CAN update their own full_name (proves the block above is role/column-specific, not a blanket denial)'
 );
 
--- ==================== 6. Messaging authorisation -- cannot post into a conversation you are not in (0007 fix) ====================
+-- ==================== 7. Messaging authorisation -- cannot post into a conversation you are not in (0007 fix) ====================
 set local request.jwt.claims to '{"sub":"facecafe-0001-0000-0000-000000000004","role":"authenticated"}'; -- parent_a2: same club, NOT a participant of conv_a
 
 select throws_ok(
@@ -228,7 +286,7 @@ select lives_ok(
   'positive control: parent_a1 (an actual participant) CAN post into conv_a'
 );
 
--- ==================== 7. Evaluation authorisation -- coach cannot evaluate a player outside their club ====================
+-- ==================== 8. Evaluation authorisation -- coach cannot evaluate a player outside their club ====================
 set local request.jwt.claims to '{"sub":"facecafe-0001-0000-0000-000000000002","role":"authenticated"}'; -- coach_a
 
 select throws_ok(
