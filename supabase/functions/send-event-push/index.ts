@@ -29,7 +29,7 @@ import { corsHeaders, handleCorsPreflight } from "../_shared/cors.ts";
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 const EXPO_PUSH_BATCH_SIZE = 100; // Expo's documented per-request limit
 
-// Fallback only. clubs.timezone (added in migration 0033, so the change-notice
+// Fallback only. clubs.timezone (added in migration 0034, so the change-notice
 // trigger could render wall-clock times without hardcoding a zone inside a
 // trigger) is the real source; this covers a club row that predates it.
 const DEFAULT_TIME_ZONE = "America/New_York";

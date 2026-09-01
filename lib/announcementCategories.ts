@@ -52,7 +52,7 @@ export const ANNOUNCEMENT_CATEGORIES: Record<AnnouncementCategory, CategoryMeta>
 };
 
 // Categories a coach can pick when composing by hand. 'cancellation' is
-// excluded: it's written by the delete trigger (0034), and choosing it in the
+// excluded: it's written by the delete trigger (0035), and choosing it in the
 // composer would post "Cancelled" while the session stays on the schedule —
 // exactly the contradiction the automatic notices exist to remove. To cancel
 // a session, delete the session.

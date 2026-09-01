@@ -1,5 +1,5 @@
 // Push fan-out tests, written against the cancellation notices from
-// migration 0034.
+// migration 0035.
 //
 // Cancellations are the case worth pinning down. Every other announcement is
 // typed by a human who can see who they're addressing before they hit post; a
@@ -331,7 +331,7 @@ Deno.test("a single-session cancellation reads as team then coach then title", a
 });
 
 Deno.test("a folded series cancellation carries the count into the lock screen", async () => {
-  // 0034 folds a cancelled block into one notice titled "N sessions
+  // 0035 folds a cancelled block into one notice titled "N sessions
   // cancelled: X". The count has to survive into the push body, or a parent
   // reads "Cancelled: Thursday Small Group" and assumes it's just the one.
   const messages = buildPushMessages({
@@ -450,7 +450,7 @@ Deno.test("an exact multiple of the batch size produces no trailing empty batch"
 // ---------------------------------------------------------------------------
 
 Deno.test("every target_type the cancellation trigger emits resolves recipients", async () => {
-  // 0034's announce_event_cancellation() mirrors events_read and can emit any
+  // 0035's announce_event_cancellation() mirrors events_read and can emit any
   // of these three. A target_type the push function doesn't handle would fall
   // into the `else` branch and get treated as a team notice.
   const tables = baseTables();

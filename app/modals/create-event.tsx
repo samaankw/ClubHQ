@@ -226,7 +226,7 @@ export default function CreateEvent() {
         p_notes: notes.trim() || null,
         p_team_id: audienceMode === "team" ? teamId : null,
         p_player_ids: playerIds,
-        // Read server-side by announce_event_change() (migration 0033), which
+        // Read server-side by announce_event_change() (migration 0034), which
         // writes the "New time / New location" notice into the feed. Only
         // meaningful when the time or location actually moved.
         p_notify: notifyChange,

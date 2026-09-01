@@ -1,10 +1,10 @@
 -- Cancellation notices.
 --
--- 0033 covered sessions that move. Deleting one still sent nothing at all,
+-- 0034 covered sessions that move. Deleting one still sent nothing at all,
 -- which is the worse gap: a parent who misses a time change shows up an hour
 -- early, a parent who misses a cancellation drives to an empty field.
 --
--- A correction to the note left in 0033: `source_event_id ... on delete set
+-- A correction to the note left in 0034: `source_event_id ... on delete set
 -- null` does NOT by itself make cancellation notices possible. It stops a
 -- notice from being erased when its event goes away, but the reference nulls
 -- itself the moment the event is deleted, so a cancellation notice can never
@@ -117,7 +117,7 @@ declare
   v_notice record;
   v_announcement_id uuid;
 begin
-  -- Same GUC as 0033. One opt-out concept covering every automatic notice,
+  -- Same GUC as 0034. One opt-out concept covering every automatic notice,
   -- rather than a second flag a caller could set inconsistently.
   if coalesce(current_setting('clubhq.suppress_change_notice', true), 'off') = 'on' then
     return old;
@@ -136,7 +136,7 @@ begin
     return old;
   end if;
 
-  -- Unlike 0033, a null auth.uid() is a hard skip rather than a fallback to
+  -- Unlike 0034, a null auth.uid() is a hard skip rather than a fallback to
   -- created_by. An edit arriving from service-role tooling is still a real
   -- schedule change worth announcing; a *deletion* from service-role tooling
   -- is far more likely to be a backfill, a data repair, or account teardown,

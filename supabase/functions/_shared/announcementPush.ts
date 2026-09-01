@@ -4,7 +4,7 @@
 //
 // This logic is worth isolating because it is the part that fails *quietly*.
 // A wrong filter here doesn't error — it just pages the wrong parents, or
-// nobody. That got sharper with the automatic notices in 0033/0034: nobody
+// nobody. That got sharper with the automatic notices in 0034/0035: nobody
 // proof-reads a cancellation before it goes out, so the targeting is the only
 // thing standing between a deleted session and forty misdirected phones.
 //

@@ -64,7 +64,7 @@ export type AnnouncementCategory =
   | "challenge"
   | "what_to_bring"
   | "holiday"
-  // Written only by the announce_event_cancellation() trigger (0034). Not
+  // Written only by the announce_event_cancellation() trigger (0035). Not
   // offered in the compose picker: posting "Cancelled" by hand would leave
   // the session sitting on the schedule contradicting it.
   | "cancellation"
@@ -83,14 +83,14 @@ export interface Announcement {
   category: AnnouncementCategory;
   target_type: AnnouncementTargetType;
   created_at: string;
-  // Set by the announce_event_change() trigger (0033) when a coach edits an
+  // Set by the announce_event_change() trigger (0034) when a coach edits an
   // event's time or location. These rows aren't hand-written, so the card
   // labels them and hides the edit pencil.
   auto_generated?: boolean;
   source_event_id?: string | null;
   source_prev_starts_at?: string | null;
   source_prev_location?: string | null;
-  // Set by announce_event_cancellation() (0034). Deliberately denormalized:
+  // Set by announce_event_cancellation() (0035). Deliberately denormalized:
   // these ids point at events that no longer exist, so source_event_id can't
   // carry them — its FK nulls itself the moment the event is deleted.
   // Multiple entries when a recurring series was cancelled in one go.

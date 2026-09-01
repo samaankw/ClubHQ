@@ -58,7 +58,7 @@ export default function EventDetail() {
     }
   };
 
-  // The delete RPCs (0034) return the ids of the cancellation notices the
+  // The delete RPCs (0035) return the ids of the cancellation notices the
   // trigger wrote. Fire-and-forget, matching every other push call site: a
   // failed notification must not make a completed deletion look failed.
   const pushCancellationNotices = (announcementIds: string[] | null) => {

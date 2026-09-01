@@ -1,4 +1,4 @@
-"""Behavioral tests for migration 0034's cancellation-notice trigger."""
+"""Behavioral tests for migration 0035's cancellation-notice trigger."""
 import uuid, psycopg2
 import psycopg2.extras
 from datetime import datetime, timedelta, timezone
@@ -249,7 +249,7 @@ def run():
     # That function refuses to fan out unless announcement.author_id equals the
     # caller and club_id equals the caller's club (index.ts:55-60). If the
     # trigger ever attributed a notice to events.created_by instead of
-    # auth.uid() -- which is what the *change* trigger in 0033 falls back to --
+    # auth.uid() -- which is what the *change* trigger in 0034 falls back to --
     # every cancellation posted by a coach who didn't create the session would
     # be written correctly and then silently 403 at the push step. The notice
     # would sit in the feed and no phone would ring, which is the exact failure

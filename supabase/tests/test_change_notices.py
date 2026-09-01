@@ -1,4 +1,4 @@
-"""Behavioral tests for migration 0033's auto change-notice trigger."""
+"""Behavioral tests for migration 0034's auto change-notice trigger."""
 import uuid, psycopg2
 import psycopg2.extras
 
@@ -207,7 +207,7 @@ def run():
 
     # --- 12. Deleting the event keeps the *historical* notice.
     #
-    #   0034 narrowed this: a change notice still inside the fold window is
+    #   0035 narrowed this: a change notice still inside the fold window is
     #   retracted on delete, because "New time: Thursday" sitting next to
     #   "Cancelled: Thursday" tells a parent to show up. Anything older is
     #   history a parent may already have read, and survives with a null
