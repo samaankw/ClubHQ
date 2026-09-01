@@ -39,6 +39,7 @@ export interface Team {
 
 export interface Player {
   id: string;
+  club_id: string;
   team_id?: string | null;
   parent_id?: string | null;
   full_name: string;

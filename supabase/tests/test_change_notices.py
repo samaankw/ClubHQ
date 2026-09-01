@@ -49,8 +49,8 @@ class Fixture:
                     (str(self.team), str(self.director)))
         for pid, parent, nm in ((self.p1, self.parent1, "Maya K."), (self.p2, self.parent2, "Jordan T.")):
             cur.execute(
-                "insert into players (id, team_id, full_name, parent_id) values (%s,%s,%s,%s)",
-                (str(pid), str(self.team), nm, str(parent)))
+                "insert into players (id, team_id, club_id, full_name, parent_id) values (%s,%s,%s,%s,%s)",
+                (str(pid), str(self.team), str(self.club), nm, str(parent)))
 
     def act_as(self, uid):
         self.cur.execute("select set_config('test.uid', %s, false)", (str(uid),))

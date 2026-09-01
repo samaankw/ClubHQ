@@ -38,8 +38,8 @@ class Fixture:
                         (tid, self.club, nm))
             cur.execute("insert into team_coaches (team_id, coach_id) values (%s,%s)", (tid, self.director))
         for pid, nm in ((self.p1, "Maya K."), (self.p2, "Jordan T.")):
-            cur.execute("insert into players (id, team_id, full_name) values (%s,%s,%s)",
-                        (pid, self.team, nm))
+            cur.execute("insert into players (id, team_id, club_id, full_name) values (%s,%s,%s,%s)",
+                        (pid, self.team, self.club, nm))
 
     def act_as(self, uid):
         self.cur.execute("select set_config('test.uid', %s, false)", (str(uid) if uid else "",))

@@ -133,7 +133,7 @@ def test_trigger_still_fires_after_revoke(cur):
                 " set club_id=excluded.club_id, role='director'", (director, club))
     cur.execute("insert into teams (id, club_id, name, age_group) values (%s,%s,'Thursday Group','U12')",
                 (team, club))
-    cur.execute("insert into players (id, team_id, full_name) values (%s,%s,'Maya K.')", (player, team))
+    cur.execute("insert into players (id, team_id, club_id, full_name) values (%s,%s,%s,'Maya K.')", (player, team, club))
 
     eid = uuid.uuid4()
     starts = datetime.now(timezone.utc) + timedelta(days=3)
