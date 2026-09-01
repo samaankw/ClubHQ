@@ -5,8 +5,9 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { notify } from "@/lib/alertCompat";
 import { goBackOr } from "@/lib/navigation";
+import { userFacingDbError } from "@/lib/dbErrors";
 import ModalBackButton from "@/components/ModalBackButton";
-import { Screen, Card, Eyebrow, Field, Button } from "@/components/ui";
+import { Screen, Card, Eyebrow, Field, Button, EmptyState } from "@/components/ui";
 import { space } from "@/theme";
 
 export default function CreateTeam() {
@@ -18,7 +19,12 @@ export default function CreateTeam() {
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
-    if (!profile?.club_id || !name.trim()) {
+    // Checked apart from the name so a missing club doesn't get reported as
+    // a missing team name — two different problems with two different fixes.
+    if (!profile?.club_id) {
+      return notify("No club found", "Your profile isn't linked to a club yet.");
+    }
+    if (!name.trim()) {
       setNameError("Enter a team name first.");
       return;
     }
@@ -44,18 +50,37 @@ export default function CreateTeam() {
       if (assignError) console.error("Couldn't self-assign as coach:", assignError.message);
     }
     setSubmitting(false);
-    if (error) return notify("Couldn't create team", error.message);
+    if (error) {
+      console.error("Failed to create team:", error.message);
+      return notify("Couldn't create team", userFacingDbError(error.message, "Try again in a moment."));
+    }
     goBackOr("/club-management");
   };
 
+  const header = (
+    <Stack.Screen
+      options={{
+        title: "New Team",
+        headerLeft: () => <ModalBackButton onPress={() => goBackOr("/club-management")} />,
+      }}
+    />
+  );
+
+  // These modal routes are registered at the root stack, so any signed-in role
+  // can reach them by deep link. RLS refuses the insert regardless; this stops
+  // a coach filling in a form that was never going to submit.
+  if (profile && profile.role !== "director") {
+    return (
+      <Screen>
+        {header}
+        <EmptyState icon="lock-closed" title="Directors only" body="Only club directors can create teams." />
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
-      <Stack.Screen
-        options={{
-          title: "New Team",
-          headerLeft: () => <ModalBackButton onPress={() => goBackOr("/club-management")} />,
-        }}
-      />
+      {header}
 
       <Card style={styles.card}>
         <Eyebrow>Team Details</Eyebrow>

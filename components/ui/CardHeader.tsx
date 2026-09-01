@@ -21,7 +21,16 @@ export function CardHeader({ title, action, onAction }: CardHeaderProps) {
     <View style={styles.row}>
       <Eyebrow>{title}</Eyebrow>
       {action ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={action} onPress={onAction}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={action}
+          onPress={onAction}
+          // The action is often a single glyph ("+"), which as a bare text
+          // node is a ~7pt-wide touch target. hitSlop brings every caller up
+          // to the 44pt minimum without changing the layout.
+          hitSlop={space[3]}
+          style={styles.action}
+        >
           <Text role="label" tone="brand">
             {action}
           </Text>
@@ -33,4 +42,5 @@ export function CardHeader({ title, action, onAction }: CardHeaderProps) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  action: { minWidth: space[6], alignItems: "flex-end", justifyContent: "center" },
 });

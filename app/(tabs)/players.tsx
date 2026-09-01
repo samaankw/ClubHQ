@@ -228,15 +228,17 @@ export default function Players() {
               </View>
             ) : profile?.role === "director" ? (
               // Adding a player is director-gated in RLS (`players_insert_staff`),
-              // and the only add-player path in the app lives on Club Management
-              // — so only a director gets the button here.
+              // so only a director gets the button here. It opens the same
+              // modal as the FAB — the two render at once when the list is
+              // empty, and sending them to different screens made one of them
+              // look like a different feature.
               <View style={styles.linkPrompt}>
                 <EmptyState
                   icon="people"
                   title="No players yet"
                   body="Start building your roster by adding your first player."
                 />
-                <Button label="Add Single Player" onPress={() => router.push("/club-management")} />
+                <Button label="Add a Player" onPress={() => router.push("/modals/add-player")} />
               </View>
             ) : (
               <EmptyState
@@ -388,6 +390,9 @@ const styles = StyleSheet.create({
   listContent: {
     padding: space[4],
     gap: space[4],
+    // Clear the FAB (56pt tall, 24pt from the bottom) so it can't sit on top
+    // of the last card in a full roster.
+    paddingBottom: space[6] + 56 + space[4],
   },
 
   fab: {

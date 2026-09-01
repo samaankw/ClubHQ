@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, findNodeHandle, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { format, addMonths, startOfMonth } from "date-fns";
@@ -9,11 +9,11 @@ import { PaymentStatus, Player, PlayerPayment, Profile, Team } from "@/types/db"
 import { shareText } from "@/lib/shareCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { confirmAsync, notify } from "@/lib/alertCompat";
+import { scheduleScrollIntoView } from "@/lib/scrollIntoView";
 import { Screen, Card, CardHeader, Eyebrow, Text, Button, Badge, Avatar, Field, IconChip, Divider, EmptyState } from "@/components/ui";
 import { color, space, radius, borderWidth } from "@/theme";
 
 type TeamCoach = { team_id: string; coach_id: string };
-type ScrollTarget = "addPlayer" | "roster";
 
 export default function ClubManagement() {
   const { profile } = useAuth();
@@ -35,46 +35,26 @@ export default function ClubManagement() {
   // Scroll-into-view for the team card's Add Player / Invite Parents buttons
   // (Task 31). Tapping either always selects the team, which is what these
   // buttons previously did and nothing else — a no-op when that team was
-  // already selected. `pendingScroll` records which card to reveal; the
-  // effect below waits two animation frames after the state update commits
-  // so the target card (which may only just be mounting) has a settled
-  // native layout before we measure it. Scrolling on the same tick would
-  // race that layout and can land on the wrong offset.
+  // already selected, hence the scroll.
+  //
+  // The scroll is scheduled straight from the handler rather than routed
+  // through state. An earlier version stored the target in `useState` and
+  // cleared it at the top of the effect that scheduled the frame; clearing it
+  // re-rendered, which tore the effect down and ran cancelAnimationFrame in
+  // the same JS task, before the frame could fire. Both buttons stayed the
+  // no-ops this task existed to fix. See __tests__/lib/scrollIntoView.test.ts.
   const scrollRef = useRef<ScrollView>(null);
   const addPlayerCardRef = useRef<View>(null);
   const rosterCardRef = useRef<View>(null);
-  const [pendingScroll, setPendingScroll] = useState<ScrollTarget | null>(null);
-
-  const scrollToCard = useCallback((targetRef: React.RefObject<View | null>) => {
-    const scrollNode = scrollRef.current;
-    const target = targetRef.current;
-    const scrollHandle = scrollNode && findNodeHandle(scrollNode);
-    if (!scrollNode || !target || !scrollHandle) return;
-    target.measureLayout(
-      scrollHandle,
-      (_left, top) => scrollNode.scrollTo({ y: Math.max(top - space[4], 0), animated: true }),
-      () => {}
-    );
-  }, []);
-
-  useEffect(() => {
-    if (!pendingScroll) return;
-    const target = pendingScroll === "addPlayer" ? addPlayerCardRef : rosterCardRef;
-    setPendingScroll(null);
-    const raf1 = requestAnimationFrame(() => {
-      requestAnimationFrame(() => scrollToCard(target));
-    });
-    return () => cancelAnimationFrame(raf1);
-  }, [pendingScroll, scrollToCard]);
 
   const focusAddPlayer = (teamId: string) => {
     setSelectedTeamId(teamId);
-    setPendingScroll("addPlayer");
+    scheduleScrollIntoView(scrollRef, addPlayerCardRef, space[4]);
   };
 
   const focusRoster = (teamId: string) => {
     setSelectedTeamId(teamId);
-    setPendingScroll("roster");
+    scheduleScrollIntoView(scrollRef, rosterCardRef, space[4]);
   };
 
   const load = useCallback(async () => {
