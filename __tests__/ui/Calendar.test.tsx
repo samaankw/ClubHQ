@@ -46,6 +46,27 @@ describe("Calendar", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  // Every other test here passes an explicit minDate, which is why the default
+  // went unexercised: it used to floor at today, so an edit screen could not
+  // reach the date of an event that had already happened.
+  it("has no floor when minDate is omitted, so past days stay selectable", async () => {
+    const onChange = jest.fn();
+    const { getByLabelText } = await render(<Calendar value={FAR_PAST} onChange={onChange} />);
+    const pastDay = getByLabelText("Wednesday, January 1, 2020");
+    expect(pastDay.props.accessibilityState.disabled).toBe(false);
+    await fireEvent.press(getByLabelText("Thursday, January 2, 2020"));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].getDate()).toBe(2);
+  });
+
+  it("still disables past days when minDate is supplied", async () => {
+    const { getByLabelText } = await render(
+      <Calendar value={AUG_15_2026} onChange={() => {}} minDate={new Date(2026, 7, 10)} />
+    );
+    expect(getByLabelText("Wednesday, August 5, 2026").props.accessibilityState.disabled).toBe(true);
+    expect(getByLabelText("Monday, August 10, 2026").props.accessibilityState.disabled).toBe(false);
+  });
+
   it("moves the visible month with prev/next without emitting onChange", async () => {
     const onChange = jest.fn();
     const { getByText, getByLabelText } = await render(

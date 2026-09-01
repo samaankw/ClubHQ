@@ -20,7 +20,11 @@ export interface CalendarProps {
   /** Currently selected day, or null. */
   value: Date | null;
   onChange: (date: Date) => void;
-  /** Days before this are not selectable. Defaults to today. */
+  /**
+   * Days before this are not selectable. Omit for no floor at all — an edit
+   * screen needs to reach dates in the past to correct an event that already
+   * happened, and this grid is the only date input on that form.
+   */
   minDate?: Date;
 }
 
@@ -43,7 +47,7 @@ export function Calendar({ value, onChange, minDate }: CalendarProps) {
     if (value) setVisibleMonth(startOfMonth(value));
   }, [value ? value.getTime() : null]);
 
-  const floor = startOfDay(minDate ?? new Date());
+  const floor = minDate ? startOfDay(minDate) : null;
   const monthStart = startOfMonth(visibleMonth);
   const monthEnd = endOfMonth(visibleMonth);
   const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
@@ -57,6 +61,7 @@ export function Calendar({ value, onChange, minDate }: CalendarProps) {
           accessibilityRole="button"
           accessibilityLabel="Previous month"
           onPress={() => setVisibleMonth((m) => subMonths(m, 1))}
+          hitSlop={8}
           style={styles.navButton}
         >
           <Ionicons name="chevron-back" size={20} color={color.icon.default} />
@@ -66,6 +71,7 @@ export function Calendar({ value, onChange, minDate }: CalendarProps) {
           accessibilityRole="button"
           accessibilityLabel="Next month"
           onPress={() => setVisibleMonth((m) => addMonths(m, 1))}
+          hitSlop={8}
           style={styles.navButton}
         >
           <Ionicons name="chevron-forward" size={20} color={color.icon.default} />
@@ -89,7 +95,7 @@ export function Calendar({ value, onChange, minDate }: CalendarProps) {
         {days.map((day) => {
           const selected = !!value && isSameDay(day, value);
           const isToday = isSameDay(day, new Date());
-          const disabled = isBefore(startOfDay(day), floor);
+          const disabled = !!floor && isBefore(startOfDay(day), floor);
           return (
             <View key={day.toISOString()} style={styles.cell}>
               <Pressable
@@ -130,8 +136,9 @@ const styles = StyleSheet.create({
   grid: { flexDirection: "row", flexWrap: "wrap" },
   cell: { width: `${100 / 7}%`, alignItems: "center", justifyContent: "center", paddingVertical: space[1] },
   day: {
-    width: CELL_SIZE,
-    height: CELL_SIZE,
+    width: "100%",
+    maxWidth: CELL_SIZE,
+    aspectRatio: 1,
     borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",

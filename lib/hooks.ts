@@ -260,7 +260,12 @@ export function useRecentLocations(limit = 6) {
         .select("location")
         .eq("club_id", profile.club_id)
         .not("location", "is", null)
-        .order("starts_at", { ascending: false });
+        // "Recent" means recently entered, not furthest in the future — a club
+        // with a season already on the calendar would otherwise be offered the
+        // venues of its most distant fixtures. The cap keeps this from pulling
+        // a whole season's rows to derive a handful of strings.
+        .order("created_at", { ascending: false })
+        .limit(200);
       if (error) console.error("Failed to load recent locations:", error.message);
 
       const rows = (data as { location: string | null }[]) ?? [];

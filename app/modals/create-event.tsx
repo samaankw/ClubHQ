@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Pressable, StyleSheet, ScrollView } from "react-native";
+import { View, Pressable, StyleSheet, ScrollView, LayoutChangeEvent, AccessibilityInfo } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
-import { addDays, format, nextSaturday, parse } from "date-fns";
+import { addDays, format, nextSaturday, parse, startOfDay } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { useRecentLocations } from "@/lib/hooks";
@@ -124,6 +124,25 @@ export default function CreateEvent() {
   const [playerError, setPlayerError] = useState<string | undefined>();
   const [repeatError, setRepeatError] = useState<string | undefined>();
   const scrollRef = useRef<ScrollView>(null);
+  // Y offset of each section inside the scroll column, recorded as it lays out.
+  // A failed submit scrolls to the section that actually errored. Scrolling to
+  // the top instead would push the Time and Repeat errors — which sit near the
+  // bottom of this long form, right above the button the user just pressed —
+  // off screen, making a failed submit look like nothing happened at all.
+  const sectionY = useRef<Record<string, number>>({});
+  const onSectionLayout = (key: string) => (e: LayoutChangeEvent) => {
+    sectionY.current[key] = e.nativeEvent.layout.y;
+  };
+  const scrollToSection = (key: string, message: string) => {
+    // Scrolling moves the error into a sighted user's view; it does nothing
+    // for a screen-reader user, who otherwise gets no feedback at all from a
+    // failed submit. Announcing the message covers both.
+    AccessibilityInfo.announceForAccessibility(message);
+    const y = sectionY.current[key];
+    if (y === undefined) return;
+    // Leave a gutter above the section so its label isn't flush to the edge.
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - space[4]), animated: true });
+  };
 
   const togglePlayer = (id: string) => {
     setSelectedPlayerIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
@@ -254,7 +273,12 @@ export default function CreateEvent() {
       setTitleError(!title.trim() ? "Add a title." : undefined);
       setDateError(!dateStr ? "Pick a date." : undefined);
       setTimeError(!hourStr || !minuteStr ? "Pick a time." : undefined);
-      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      // Several fields can fail at once; land on the topmost one so the user
+      // works downward through the form rather than jumping around it.
+      scrollToSection(
+        !title.trim() ? "title" : !dateStr ? "date" : "time",
+        !title.trim() ? "Add a title." : !dateStr ? "Pick a date." : "Pick a time."
+      );
       return;
     }
     setTitleError(undefined);
@@ -262,19 +286,19 @@ export default function CreateEvent() {
     if (!profile?.club_id) return notify("No club found", "Your profile isn't linked to a club yet.");
     if (audienceMode === "team" && !teamId) {
       setTeamError("Pick a training group for this event.");
-      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      scrollToSection("team", "Pick a training group for this event.");
       return;
     }
     setTeamError(undefined);
     if (audienceMode === "team" && teamRoster.length > 0 && !attendingIds.length) {
       setAttendingError("Pick at least one player training that day, or switch groups.");
-      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      scrollToSection("attending", "Pick at least one player training that day, or switch groups.");
       return;
     }
     setAttendingError(undefined);
     if (audienceMode === "player" && !selectedPlayerIds.length) {
       setPlayerError("Pick who this session is for.");
-      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      scrollToSection("player", "Pick who this session is for.");
       return;
     }
     setPlayerError(undefined);
@@ -283,14 +307,14 @@ export default function CreateEvent() {
     const minute = parseInt(minuteStr, 10);
     if (isNaN(hour12) || hour12 < 1 || hour12 > 12 || isNaN(minute) || minute < 0 || minute > 59) {
       setTimeError("Hour must be 1–12 and minutes 0–59.");
-      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      scrollToSection("time", "Hour must be 1–12 and minutes 0–59.");
       return;
     }
     setTimeError(undefined);
     const startsAt = buildStartsAt(dateStr, hour12, minute, meridiem);
     if (isNaN(startsAt.getTime())) {
       setDateError("Use YYYY-MM-DD for the date.");
-      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      scrollToSection("date", "Use YYYY-MM-DD for the date.");
       return;
     }
     setDateError(undefined);
@@ -306,7 +330,7 @@ export default function CreateEvent() {
     const occurrenceCount = !isEditing && repeatWeekly ? parseInt(repeatWeeksStr, 10) : 1;
     if (!isEditing && repeatWeekly && (isNaN(occurrenceCount) || occurrenceCount < 2 || occurrenceCount > 52)) {
       setRepeatError("Enter a number of weeks between 2 and 52.");
-      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      scrollToSection("repeat", "Enter a number of weeks between 2 and 52.");
       return;
     }
     setRepeatError(undefined);
@@ -432,7 +456,7 @@ export default function CreateEvent() {
       </View>
 
       {audienceMode === "team" && (
-        <View style={styles.section}>
+        <View style={styles.section} onLayout={onSectionLayout("team")}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
             {teams.map((team) => (
               <Chip
@@ -456,11 +480,16 @@ export default function CreateEvent() {
       )}
 
       {audienceMode === "team" && teamId && teamRoster.length > 0 && (
-        <Card style={styles.rosterCard}>
+        <Card style={styles.rosterCard} onLayout={onSectionLayout("attending")}>
           <CardHeader
             title={`Who's training today? (${attendingIds.length}/${teamRoster.length})`}
             action={attendingIds.length === teamRoster.length ? "Clear all" : "Select all"}
-            onAction={() => setAttendingIds(attendingIds.length === teamRoster.length ? [] : teamRoster.map((p) => p.id))}
+            onAction={() => {
+              setAttendingIds(attendingIds.length === teamRoster.length ? [] : teamRoster.map((p) => p.id));
+              // "Select all" is the fastest way to fix this exact error, so it
+              // has to clear it the same way tapping a single player does.
+              if (attendingError) setAttendingError(undefined);
+            }}
           />
           {teamRoster.map((p) => (
             <CheckRow
@@ -482,7 +511,7 @@ export default function CreateEvent() {
       )}
 
       {audienceMode === "player" && (
-        <Card style={styles.rosterCard}>
+        <Card style={styles.rosterCard} onLayout={onSectionLayout("player")}>
           <Eyebrow>Pick anyone, from any group ({selectedPlayerIds.length} selected)</Eyebrow>
           {players.map((p) => (
             <CheckRow
@@ -505,7 +534,7 @@ export default function CreateEvent() {
         </Card>
       )}
 
-      <View style={styles.section}>
+      <View style={styles.section} onLayout={onSectionLayout("title")}>
         <Field
           placeholder="Title (e.g. U10 vs Northside FC)"
           value={title}
@@ -531,7 +560,7 @@ export default function CreateEvent() {
         <Field placeholder="Location" value={location} onChangeText={setLocation} />
       </View>
 
-      <View style={styles.section}>
+      <View style={styles.section} onLayout={onSectionLayout("date")}>
         <Eyebrow>Date</Eyebrow>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
           {quickDates.map((q) => (
@@ -548,6 +577,10 @@ export default function CreateEvent() {
         </ScrollView>
         <Calendar
           value={selectedDate}
+          // New events can't be scheduled into the past, but an edit has to be
+          // able to reach a past date to correct an event that already
+          // happened — this grid is the only date input on the form.
+          minDate={isEditing ? undefined : startOfDay(new Date())}
           onChange={(d) => {
             setDateStr(format(d, "yyyy-MM-dd"));
             if (dateError) setDateError(undefined);
@@ -560,7 +593,7 @@ export default function CreateEvent() {
         ) : null}
       </View>
 
-      <View style={styles.section}>
+      <View style={styles.section} onLayout={onSectionLayout("time")}>
         <Eyebrow>Time</Eyebrow>
         <FilterChipRow
           options={TIME_OPTIONS}
@@ -610,7 +643,7 @@ export default function CreateEvent() {
       </View>
 
       {!isEditing && (
-        <Card style={styles.rosterCard}>
+        <Card style={styles.rosterCard} onLayout={onSectionLayout("repeat")}>
           <Toggle label="Repeats weekly" value={repeatWeekly} onValueChange={setRepeatWeekly} />
           {repeatWeekly && (
             <View style={styles.repeatWeeksRow}>

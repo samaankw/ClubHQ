@@ -86,6 +86,10 @@ export default function ManageDrills() {
     setTitle(drill.title);
     setDescription(drill.description);
     setVideoUrl(drill.video_url ?? "");
+    // The fields are being overwritten with real values, so any error left
+    // over from a previous empty submit no longer describes what's on screen.
+    setTitleError(undefined);
+    setDescriptionError(undefined);
     setShowForm(true);
   };
 
@@ -157,7 +161,13 @@ export default function ManageDrills() {
   }, [load]);
 
   const submit = async () => {
-    if (!title.trim() || !description.trim() || !profile?.club_id) {
+    // Checked separately from the field validation below: folding it into the
+    // same condition meant a null club_id set both errors to undefined and
+    // returned, so the button did nothing at all with nothing to explain it.
+    if (!profile?.club_id) {
+      return notify("No club found", "Your profile isn't linked to a club yet.");
+    }
+    if (!title.trim() || !description.trim()) {
       setTitleError(!title.trim() ? "Add a drill title." : undefined);
       setDescriptionError(!description.trim() ? "Add instructions a parent/player can follow." : undefined);
       return;

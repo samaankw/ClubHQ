@@ -11,7 +11,7 @@ export interface FieldProps extends TextInputProps {
 
 let idCounter = 0;
 
-export function Field({ label, style, multiline, error, id, testID, ...rest }: FieldProps) {
+export function Field({ label, style, multiline, error, id, testID, accessibilityHint, ...rest }: FieldProps) {
   const errorId = React.useMemo(() => id ?? `field-error-${++idCounter}`, [id]);
 
   return (
@@ -22,8 +22,14 @@ export function Field({ label, style, multiline, error, id, testID, ...rest }: F
         placeholderTextColor={color.text.tertiary}
         multiline={multiline}
         style={[styles.input, multiline && styles.multiline, error && styles.inputError, style]}
+        // `aria-invalid`/`aria-errormessage` are honoured by react-native-web
+        // but React Native maps neither on iOS or Android — they are dropped
+        // silently, so on a device the error text renders as an unattached
+        // caption a screen reader never associates with this input. The hint
+        // is the one channel RN does announce, so the message goes there too.
         aria-invalid={error ? true : undefined}
         aria-errormessage={error ? errorId : undefined}
+        accessibilityHint={error ?? accessibilityHint}
         {...rest}
       />
       {error ? (
