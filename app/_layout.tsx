@@ -4,6 +4,10 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Stack, router, useSegments } from "expo-router";
 import * as Notifications from "expo-notifications";
 import { AuthProvider, useAuth } from "@/lib/AuthProvider";
+import ErrorBoundary from "@/components/ErrorBoundary";
+import { initErrorReporting } from "@/lib/errorReporting";
+
+initErrorReporting();
 
 function RootNavigator() {
   const { session, loading } = useAuth();
@@ -68,11 +72,25 @@ function RootNavigator() {
           dark theme — these are about legibility and trust, not branding. */}
       <Stack.Screen
         name="legal/terms"
-        options={{ headerShown: true, title: "Terms of Service", headerStyle: { backgroundColor: "#fff" }, headerTintColor: "#0F4C81", headerTitleStyle: { color: "#1a1a1a" }, contentStyle: { backgroundColor: "#fff" } }}
+        options={{
+          headerShown: true,
+          title: "Terms of Service",
+          headerStyle: { backgroundColor: "#fff" },
+          headerTintColor: "#0F4C81",
+          headerTitleStyle: { color: "#1a1a1a" },
+          contentStyle: { backgroundColor: "#fff" },
+        }}
       />
       <Stack.Screen
         name="legal/privacy"
-        options={{ headerShown: true, title: "Privacy Policy", headerStyle: { backgroundColor: "#fff" }, headerTintColor: "#0F4C81", headerTitleStyle: { color: "#1a1a1a" }, contentStyle: { backgroundColor: "#fff" } }}
+        options={{
+          headerShown: true,
+          title: "Privacy Policy",
+          headerStyle: { backgroundColor: "#fff" },
+          headerTintColor: "#0F4C81",
+          headerTitleStyle: { color: "#1a1a1a" },
+          contentStyle: { backgroundColor: "#fff" },
+        }}
       />
     </Stack>
   );
@@ -80,10 +98,12 @@ function RootNavigator() {
 
 export default function RootLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <RootNavigator />
-      </AuthProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <AuthProvider>
+          <RootNavigator />
+        </AuthProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }

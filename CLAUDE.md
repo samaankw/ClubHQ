@@ -103,6 +103,48 @@ migration failing is real. If the failure list ever contains anything besides
   `purity`, `refs`) to `warn` and turns off `react/no-unescaped-entities`
   entirely. Both are documented inline in that file with the reasoning —
   read the comments there before "fixing" the config back to all-errors.
+- A custom hook that takes a caller-supplied dependency array (e.g.
+  `lib/asyncData.ts`'s `useAsyncData`) can't hand that array straight to
+  `useCallback`/`useEffect` — the React Compiler-era `react-hooks/use-memo`
+  rule hard-errors unless the second argument is an array _literal_, not a
+  variable. Collapse the caller's deps into one key (e.g.
+  `JSON.stringify(deps)`) and pass `[key]` instead.
+
+## Testing gotchas (read before assuming a test is flaky)
+
+- `@testing-library/react-native` is on the v14 line, which requires React
+  19 / RN 0.78+ and made `render`, `renderHook`, `fireEvent`, and `act` all
+  **async** — every call needs `await`, and the test function itself needs
+  to be `async`. Skipping the `await` doesn't error; it just leaves `screen`
+  in its pre-render "`render` function has not been called" state, which
+  reads like a config problem when it's actually a missing `await`. See
+  `docs/guides/migration-v14.md` in the package for the full list.
+  - One narrow exception: don't `await fireEvent.press(...)` on a press
+    whose handler won't resolve yet (e.g. a mocked network call your test
+    is deliberately holding open) — v14's `fireEvent` awaits the handler's
+    own returned promise, so awaiting it there deadlocks the test against
+    itself. Fire it without `await` and assert via `waitFor` instead.
+- `@sentry/react-native` starts a background timer (its tracing
+  integration's `AsyncExpiringMap`) the moment the module is _imported_,
+  before `Sentry.init()` is ever called — a static top-level import would
+  leak that timer into every test run and dev/CI process, DSN or not.
+  `lib/errorReporting.ts` loads it with a `require()` inside
+  `initErrorReporting()`, gated on a DSN actually being configured, so
+  dev/CI/tests (which never set one) never touch the package at all. Don't
+  "clean up" that `require` into a top-level `import`.
+
+## Error reporting (Sentry)
+
+- `lib/errorReporting.ts` is a no-op until `EXPO_PUBLIC_SENTRY_DSN` (or
+  `extra.sentryDsn` in `app.json`) is set — no Sentry account is required to
+  build, test, or run the app. Route new caught errors through
+  `reportError()` rather than a raw `console.error`/`Sentry.captureException`
+  call site; it redacts JWT-shaped tokens and email addresses out of the
+  message, and its `extra` param only accepts primitives (no arbitrary
+  object), which is what actually keeps player names, message bodies, and
+  evaluation notes out of crash reports — not a runtime PII scan.
+- The root `ErrorBoundary` (`components/ErrorBoundary.tsx`, wrapping
+  `RootLayout` in `app/_layout.tsx`) reports through the same function.
 
 ## Working protocol
 

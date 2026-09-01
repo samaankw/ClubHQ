@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useState } from "react";
 import { View, Text, FlatList, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
 import { Stack } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
@@ -7,6 +7,8 @@ import { useAuth } from "@/lib/AuthProvider";
 import { confirmAsync, notify } from "@/lib/alertCompat";
 import { Drill } from "@/types/db";
 import DrillVideoModal from "@/components/DrillVideoModal";
+import { useAsyncData } from "@/lib/asyncData";
+import ListState from "@/components/ListState";
 
 async function uploadDrillVideo(clubId: string, localUri: string): Promise<string> {
   const extMatch = /\.(\w+)$/.exec(localUri);
@@ -44,7 +46,26 @@ const SKILLS: { key: string; label: string }[] = [
 
 export default function ManageDrills() {
   const { profile } = useAuth();
-  const [drills, setDrills] = useState<Drill[]>([]);
+  const clubId = profile?.club_id;
+  const {
+    data: drills,
+    loading: drillsLoading,
+    error: drillsError,
+    retry: load,
+  } = useAsyncData<Drill[]>(
+    async () => {
+      if (!clubId) return [];
+      const { data, error } = await supabase
+        .from("drills")
+        .select("*")
+        .or(`club_id.is.null,club_id.eq.${clubId}`)
+        .order("skill", { ascending: true });
+      if (error) throw error;
+      return (data as Drill[]) ?? [];
+    },
+    [clubId],
+    [],
+  );
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [skill, setSkill] = useState("first_touch");
@@ -57,8 +78,7 @@ export default function ManageDrills() {
 
   const canManageDrills = profile?.role === "coach" || profile?.role === "director";
 
-  const canEdit = (drill: Drill) =>
-    canManageDrills && !!drill.club_id && (profile?.role === "director" || drill.added_by === profile?.id);
+  const canEdit = (drill: Drill) => canManageDrills && !!drill.club_id && (profile?.role === "director" || drill.added_by === profile?.id);
 
   const resetForm = () => {
     setEditingId(null);
@@ -130,20 +150,6 @@ export default function ManageDrills() {
     await uploadPickedVideo(result);
   };
 
-  const load = useCallback(async () => {
-    if (!profile?.club_id) return;
-    const { data } = await supabase
-      .from("drills")
-      .select("*")
-      .or(`club_id.is.null,club_id.eq.${profile.club_id}`)
-      .order("skill", { ascending: true });
-    setDrills((data as Drill[]) ?? []);
-  }, [profile?.club_id]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
   const submit = async () => {
     if (!title.trim() || !description.trim() || !profile?.club_id) {
       notify("Missing info", "Add at least a title and description.");
@@ -204,7 +210,13 @@ export default function ManageDrills() {
                   </Pressable>
                 ))}
               </View>
-              <TextInput style={styles.input} placeholder="Drill title" placeholderTextColor="#6B6F76" value={title} onChangeText={setTitle} />
+              <TextInput
+                style={styles.input}
+                placeholder="Drill title"
+                placeholderTextColor="#6B6F76"
+                value={title}
+                onChangeText={setTitle}
+              />
               <TextInput
                 style={[styles.input, styles.textarea]}
                 placeholder="Instructions a parent/player can follow"
@@ -218,7 +230,9 @@ export default function ManageDrills() {
                   <Text style={styles.uploadButtonText}>Video uploaded ✓ — replace it</Text>
                 </Pressable>
               ) : uploadingVideo ? (
-                <View style={styles.uploadButton}><ActivityIndicator color="#0A6CFF" /></View>
+                <View style={styles.uploadButton}>
+                  <ActivityIndicator color="#0A6CFF" />
+                </View>
               ) : (
                 <View style={styles.uploadRow}>
                   <Pressable style={[styles.uploadButton, styles.uploadButtonHalf]} onPress={recordAndUploadVideo}>
@@ -230,7 +244,14 @@ export default function ManageDrills() {
                 </View>
               )}
               <Text style={styles.orDivider}>— or paste a link (YouTube, Vimeo, etc.) —</Text>
-              <TextInput style={styles.input} placeholder="Video URL (optional)" placeholderTextColor="#6B6F76" value={videoUrl} onChangeText={setVideoUrl} autoCapitalize="none" />
+              <TextInput
+                style={styles.input}
+                placeholder="Video URL (optional)"
+                placeholderTextColor="#6B6F76"
+                value={videoUrl}
+                onChangeText={setVideoUrl}
+                autoCapitalize="none"
+              />
               <Pressable style={styles.submitButton} onPress={submit} disabled={submitting}>
                 <Text style={styles.submitButtonText}>{submitting ? "Saving…" : editingId ? "Save Changes" : "Save Drill"}</Text>
               </Pressable>
@@ -242,18 +263,29 @@ export default function ManageDrills() {
       <FlatList
         data={drills}
         keyExtractor={(d) => d.id}
+        onRefresh={load}
+        refreshing={drillsLoading}
         initialNumToRender={10}
         maxToRenderPerBatch={10}
         windowSize={7}
         contentContainerStyle={{ paddingTop: 8 }}
+        ListEmptyComponent={
+          <ListState loading={drillsLoading} error={drillsError} isEmpty={false} onRetry={load} emptyTitle="">
+            <Text style={styles.sharedTag}>No drills yet.</Text>
+          </ListState>
+        }
         renderItem={({ item }) => (
           <View style={styles.drillCard}>
             <View style={styles.drillHeaderRow}>
               <Text style={styles.drillSkill}>{item.skill.replace(/_/g, " ")}</Text>
               {canEdit(item) && (
                 <View style={styles.drillActions}>
-                  <Pressable onPress={() => startEdit(item)}><Text style={styles.drillActionText}>Edit</Text></Pressable>
-                  <Pressable onPress={() => deleteDrill(item)}><Text style={[styles.drillActionText, styles.drillActionTextDanger]}>Delete</Text></Pressable>
+                  <Pressable onPress={() => startEdit(item)}>
+                    <Text style={styles.drillActionText}>Edit</Text>
+                  </Pressable>
+                  <Pressable onPress={() => deleteDrill(item)}>
+                    <Text style={[styles.drillActionText, styles.drillActionTextDanger]}>Delete</Text>
+                  </Pressable>
                 </View>
               )}
             </View>
@@ -286,7 +318,16 @@ const styles = StyleSheet.create({
   addButtonText: { color: "#fff", fontWeight: "700" },
   form: { backgroundColor: "#141416", borderRadius: 12, padding: 14, marginBottom: 16, maxHeight: 420 },
   uploadRow: { flexDirection: "row", gap: 8, marginBottom: 6 },
-  uploadButton: { flex: 1, borderWidth: 1.5, borderColor: "#0A6CFF", borderStyle: "dashed", borderRadius: 10, padding: 14, alignItems: "center", marginBottom: 6 },
+  uploadButton: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: "#0A6CFF",
+    borderStyle: "dashed",
+    borderRadius: 10,
+    padding: 14,
+    alignItems: "center",
+    marginBottom: 6,
+  },
   uploadButtonHalf: { marginBottom: 0 },
   uploadButtonText: { color: "#0A6CFF", fontWeight: "700", fontSize: 14, textAlign: "center" },
   orDivider: { textAlign: "center", color: "#6B6F76", fontSize: 12, marginBottom: 10 },
@@ -295,7 +336,16 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: "#0A6CFF" },
   chipText: { color: "#0A6CFF", fontSize: 12, fontWeight: "600" },
   chipTextActive: { color: "#fff" },
-  input: { borderWidth: 1, borderColor: "#242424", borderRadius: 10, padding: 12, marginBottom: 10, fontSize: 15, color: "#F2F2F3", backgroundColor: "#0B0B0D" },
+  input: {
+    borderWidth: 1,
+    borderColor: "#242424",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    fontSize: 15,
+    color: "#F2F2F3",
+    backgroundColor: "#0B0B0D",
+  },
   textarea: { height: 80, textAlignVertical: "top" },
   submitButton: { backgroundColor: "#0A6CFF", borderRadius: 10, padding: 14, alignItems: "center" },
   submitButtonText: { color: "#fff", fontWeight: "700" },
@@ -309,6 +359,13 @@ const styles = StyleSheet.create({
   drillTitle: { fontSize: 15, fontWeight: "700", color: "#F2F2F3", marginTop: 2 },
   drillDesc: { fontSize: 13, color: "#9A9DA3", marginTop: 4 },
   sharedTag: { fontSize: 11, color: "#6B6F76", marginTop: 6, fontStyle: "italic" },
-  watchButton: { marginTop: 8, alignSelf: "flex-start", backgroundColor: "#17181B", borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
+  watchButton: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    backgroundColor: "#17181B",
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
   watchButtonText: { color: "#0A6CFF", fontWeight: "700", fontSize: 13 },
 });

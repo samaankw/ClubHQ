@@ -28,7 +28,8 @@
       ],
       "expo-video",
       "expo-font",
-      "expo-splash-screen"
+      "expo-splash-screen",
+      "@sentry/react-native"
     ],
     "ios": {
       "supportsTablet": true,

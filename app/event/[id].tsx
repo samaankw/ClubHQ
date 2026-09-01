@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { format } from "date-fns";
@@ -9,6 +9,8 @@ import { chooseAsync, confirmAsync, notify } from "@/lib/alertCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { goBackOr } from "@/lib/navigation";
 import { addEventToDeviceCalendar } from "@/lib/calendarExport";
+import { useAsyncData } from "@/lib/asyncData";
+import ListState from "@/components/ListState";
 
 function audienceLabel(event: ClubEvent): string {
   const targets = event.event_players ?? [];
@@ -31,22 +33,131 @@ const ATTENDANCE_OPTIONS: { value: AttendanceStatus; label: string }[] = [
   { value: "excused", label: "Excused" },
 ];
 
+interface EventDetailData {
+  event: ClubEvent;
+  players: Player[];
+  rsvps: EventRSVP[];
+  attendance: AttendanceRecord[];
+  payments: PlayerPayment[];
+  hasFutureInSeries: boolean;
+}
+
 export default function EventDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuth();
-  const [event, setEvent] = useState<ClubEvent | null>(null);
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [rsvps, setRsvps] = useState<EventRSVP[]>([]);
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
-  const [payments, setPayments] = useState<PlayerPayment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [hasFutureInSeries, setHasFutureInSeries] = useState(false);
   const [addingToCalendar, setAddingToCalendar] = useState(false);
   const isStaff = profile?.role === "coach" || profile?.role === "director";
-  const canEdit = !!event && (profile?.role === "director" || event.created_by === profile?.id);
+
+  const {
+    data,
+    loading,
+    error,
+    retry: load,
+    setData,
+  } = useAsyncData<EventDetailData | null>(
+    async () => {
+      if (!id) return null;
+      const { data: eventData, error: eventError } = await supabase
+        .from("events")
+        .select("*, teams(name, age_group), event_players(players(id, full_name))")
+        .eq("id", id)
+        .single();
+      if (eventError) throw eventError;
+      if (!eventData) throw { message: "Event not found." };
+      const ev = eventData as ClubEvent;
+
+      let hasFutureInSeries = false;
+      if (ev.series_id) {
+        const { count, error: countError } = await supabase
+          .from("events")
+          .select("id", { count: "exact", head: true })
+          .eq("series_id", ev.series_id)
+          .gt("starts_at", ev.starts_at);
+        if (countError) throw countError;
+        hasFutureInSeries = (count ?? 0) > 0;
+      }
+
+      const targetPlayerIds = (ev.event_players ?? []).map((t) => t.players.id);
+
+      let playerQuery = supabase.from("players").select("*").is("archived_at", null);
+      if (targetPlayerIds.length) {
+        playerQuery = playerQuery.in("id", targetPlayerIds);
+      } else if (isStaff) {
+        if (ev.team_id) {
+          playerQuery = playerQuery.eq("team_id", ev.team_id);
+        } else {
+          const { data: clubTeams, error: clubTeamsError } = await supabase
+            .from("teams")
+            .select("id")
+            .eq("club_id", ev.club_id)
+            .is("archived_at", null);
+          if (clubTeamsError) throw clubTeamsError;
+          const teamIds = (clubTeams ?? []).map((t) => t.id);
+          if (!teamIds.length) {
+            return { event: ev, players: [], rsvps: [], attendance: [], payments: [], hasFutureInSeries };
+          }
+          playerQuery = playerQuery.in("team_id", teamIds);
+        }
+      } else if (profile?.id) {
+        playerQuery = playerQuery.eq("parent_id", profile.id);
+        if (ev.team_id) playerQuery = playerQuery.eq("team_id", ev.team_id);
+      }
+
+      // Payment status is keyed by the event's own month, not today's — so
+      // marking payment on a session you're reviewing after the fact still
+      // credits the month that session actually happened in.
+      const period = format(new Date(ev.starts_at), "yyyy-MM");
+
+      // No isStaff branch here — RLS itself scopes the result (staff see every
+      // club row, a parent only their own children's), so this single query
+      // is what actually lets a parent see their own payment status at all.
+      const [playerResult, rsvpResult, attendanceResult, paymentResult] = await Promise.all([
+        playerQuery,
+        supabase.from("event_rsvps").select("*").eq("event_id", id),
+        supabase.from("attendance_records").select("*").eq("event_id", id),
+        supabase.from("player_payments").select("*").eq("club_id", ev.club_id).eq("period", period),
+      ]);
+      if (playerResult.error) throw playerResult.error;
+      if (rsvpResult.error) throw rsvpResult.error;
+      if (attendanceResult.error) throw attendanceResult.error;
+      if (paymentResult.error) throw paymentResult.error;
+
+      return {
+        event: ev,
+        players: (playerResult.data as Player[]) ?? [],
+        rsvps: (rsvpResult.data as EventRSVP[]) ?? [],
+        attendance: (attendanceResult.data as AttendanceRecord[]) ?? [],
+        payments: (paymentResult.data as PlayerPayment[]) ?? [],
+        hasFutureInSeries,
+      };
+    },
+    [id, isStaff, profile?.id],
+    null,
+  );
+
+  const rsvps = data?.rsvps ?? [];
+  const counts = useMemo(
+    () => ({
+      yes: rsvps.filter((r) => r.status === "yes").length,
+      no: rsvps.filter((r) => r.status === "no").length,
+      maybe: rsvps.filter((r) => r.status === "maybe").length,
+    }),
+    [rsvps],
+  );
+
+  if (loading || error || !data) {
+    return (
+      <View style={styles.center}>
+        <ListState loading={loading} error={error} isEmpty={!loading && !error} onRetry={load} emptyTitle="Event not found." />
+      </View>
+    );
+  }
+
+  const { event, players, attendance, payments, hasFutureInSeries } = data;
+  const canEdit = profile?.role === "director" || event.created_by === profile?.id;
+  const isUpcoming = new Date(event.starts_at).getTime() > Date.now();
 
   const handleAddToCalendar = async () => {
-    if (!event) return;
     setAddingToCalendar(true);
     try {
       await addEventToDeviceCalendar(event);
@@ -63,22 +174,17 @@ export default function EventDetail() {
   // failed notification must not make a completed deletion look failed.
   const pushCancellationNotices = (announcementIds: string[] | null) => {
     for (const announcementId of announcementIds ?? []) {
-      supabase.functions
-        .invoke("send-announcement-push", { body: { announcementId } })
-        .catch((err) => {
-          console.warn("cancellation push failed", err);
-        });
+      supabase.functions.invoke("send-announcement-push", { body: { announcementId } }).catch((err) => {
+        console.warn("cancellation push failed", err);
+      });
     }
   };
 
-  // Deleting a session that already happened is record-keeping; the trigger
-  // skips it too, so offering a notification choice would be a lie.
-  const isUpcoming = !!event && new Date(event.starts_at).getTime() > Date.now();
-
   const deleteEvent = async () => {
-    if (!event) return;
     const detail = `"${event.title}" will be removed for everyone, including any RSVPs. This can't be undone.`;
 
+    // Deleting a session that already happened is record-keeping; the
+    // trigger skips it too, so offering a notification choice would be a lie.
     let notifyFamilies = false;
     if (isUpcoming) {
       const choice = await chooseAsync("Delete session?", detail, [
@@ -91,19 +197,18 @@ export default function EventDetail() {
       return;
     }
 
-    const { data, error } = await supabase.rpc("delete_event", {
+    const { data: cancelledIds, error } = await supabase.rpc("delete_event", {
       p_event_id: event.id,
       p_notify: notifyFamilies,
     });
     if (error) return notify("Couldn't delete", error.message);
-    pushCancellationNotices(data as string[] | null);
+    pushCancellationNotices(cancelledIds as string[] | null);
     goBackOr("/(tabs)/schedule?section=events");
   };
 
   const cancelRemainingSeries = async () => {
-    if (!event?.series_id) return;
-    const detail =
-      "This deletes this session and every later one in the series (past sessions are untouched). This can't be undone.";
+    if (!event.series_id) return;
+    const detail = "This deletes this session and every later one in the series (past sessions are untouched). This can't be undone.";
 
     let notifyFamilies = false;
     if (isUpcoming) {
@@ -119,129 +224,82 @@ export default function EventDetail() {
 
     // One notice for the whole block, not one per session — the trigger folds
     // siblings from the same series together.
-    const { data, error } = await supabase.rpc("cancel_event_series", {
+    const { data: cancelledIds, error } = await supabase.rpc("cancel_event_series", {
       p_series_id: event.series_id,
       p_from: event.starts_at,
       p_notify: notifyFamilies,
     });
     if (error) return notify("Couldn't cancel sessions", error.message);
-    pushCancellationNotices(data as string[] | null);
+    pushCancellationNotices(cancelledIds as string[] | null);
     goBackOr("/(tabs)/schedule?section=events");
   };
 
-  const load = useCallback(async () => {
-    if (!id) return;
-    setLoading(true);
-    const { data: eventData, error: eventError } = await supabase.from("events").select("*, teams(name, age_group), event_players(players(id, full_name))").eq("id", id).single();
-    if (eventError || !eventData) {
-      notify("Couldn't load event", eventError?.message ?? "Event not found.");
-      setLoading(false);
-      return;
-    }
-    const ev = eventData as ClubEvent;
-    setEvent(ev);
-
-    if (ev.series_id) {
-      const { count } = await supabase
-        .from("events")
-        .select("id", { count: "exact", head: true })
-        .eq("series_id", ev.series_id)
-        .gt("starts_at", ev.starts_at);
-      setHasFutureInSeries((count ?? 0) > 0);
-    } else {
-      setHasFutureInSeries(false);
-    }
-
-    const targetPlayerIds = (ev.event_players ?? []).map((t) => t.players.id);
-
-    let playerQuery = supabase.from("players").select("*").is("archived_at", null);
-    if (targetPlayerIds.length) {
-      playerQuery = playerQuery.in("id", targetPlayerIds);
-    } else if (isStaff) {
-      if (ev.team_id) playerQuery = playerQuery.eq("team_id", ev.team_id);
-      else {
-        const { data: clubTeams } = await supabase.from("teams").select("id").eq("club_id", ev.club_id).is("archived_at", null);
-        const teamIds = (clubTeams ?? []).map((t) => t.id);
-        if (!teamIds.length) { setPlayers([]); setRsvps([]); setAttendance([]); setLoading(false); return; }
-        playerQuery = playerQuery.in("team_id", teamIds);
-      }
-    } else if (profile?.id) {
-      playerQuery = playerQuery.eq("parent_id", profile.id);
-      if (ev.team_id) playerQuery = playerQuery.eq("team_id", ev.team_id);
-    }
-
-    // Payment status is keyed by the event's own month, not today's — so
-    // marking payment on a session you're reviewing after the fact still
-    // credits the month that session actually happened in.
-    const period = format(new Date(ev.starts_at), "yyyy-MM");
-
-    // No isStaff branch here — RLS itself scopes the result (staff see every
-    // club row, a parent only their own children's), so this single query
-    // is what actually lets a parent see their own payment status at all.
-    const [{ data: playerData }, { data: rsvpData }, { data: attendanceData }, { data: paymentData }] = await Promise.all([
-      playerQuery,
-      supabase.from("event_rsvps").select("*").eq("event_id", id),
-      supabase.from("attendance_records").select("*").eq("event_id", id),
-      supabase.from("player_payments").select("*").eq("club_id", ev.club_id).eq("period", period),
-    ]);
-    setPlayers((playerData as Player[]) ?? []);
-    setRsvps((rsvpData as EventRSVP[]) ?? []);
-    setAttendance((attendanceData as AttendanceRecord[]) ?? []);
-    setPayments((paymentData as PlayerPayment[]) ?? []);
-    setLoading(false);
-  }, [id, isStaff, profile?.id]);
-
-  useEffect(() => { load(); }, [load]);
-
   const setRsvp = async (playerId: string, status: RSVPStatus) => {
-    const previous = rsvps;
-    setRsvps((current) => [...current.filter((r) => r.player_id !== playerId), { event_id: id!, player_id: playerId, status }]);
-    const { error } = await supabase.from("event_rsvps").upsert({ event_id: id, player_id: playerId, status }, { onConflict: "event_id,player_id" });
+    const previous = data;
+    setData(
+      (prev) =>
+        prev && {
+          ...prev,
+          rsvps: [...prev.rsvps.filter((r) => r.player_id !== playerId), { event_id: id!, player_id: playerId, status }],
+        },
+    );
+    const { error } = await supabase
+      .from("event_rsvps")
+      .upsert({ event_id: id, player_id: playerId, status }, { onConflict: "event_id,player_id" });
     if (error) {
-      setRsvps(previous);
+      setData(previous);
       notify("Couldn't save RSVP", error.message);
     }
   };
 
   const setAttendanceStatus = async (playerId: string, status: AttendanceStatus) => {
     if (!profile?.id) return;
-    const previous = attendance;
-    const record: AttendanceRecord = { event_id: id!, player_id: playerId, status, marked_by: profile.id, marked_at: new Date().toISOString() };
-    setAttendance((current) => [...current.filter((r) => r.player_id !== playerId), record]);
-    const { error } = await supabase.from("attendance_records").upsert(
-      { event_id: id, player_id: playerId, status, marked_by: profile.id, marked_at: record.marked_at },
-      { onConflict: "event_id,player_id" }
-    );
+    const previous = data;
+    const record: AttendanceRecord = {
+      event_id: id!,
+      player_id: playerId,
+      status,
+      marked_by: profile.id,
+      marked_at: new Date().toISOString(),
+    };
+    setData((prev) => prev && { ...prev, attendance: [...prev.attendance.filter((r) => r.player_id !== playerId), record] });
+    const { error } = await supabase
+      .from("attendance_records")
+      .upsert(
+        { event_id: id, player_id: playerId, status, marked_by: profile.id, marked_at: record.marked_at },
+        { onConflict: "event_id,player_id" },
+      );
     if (error) {
-      setAttendance(previous);
+      setData(previous);
       notify("Couldn't save attendance", error.message);
     }
   };
 
   const togglePayment = async (playerId: string) => {
-    if (!event || !profile?.id) return;
+    if (!profile?.id) return;
     const period = format(new Date(event.starts_at), "yyyy-MM");
     const current: PaymentStatus = payments.find((p) => p.player_id === playerId)?.status ?? "unpaid";
     const nextStatus: PaymentStatus = current === "paid" ? "unpaid" : "paid";
-    const { data, error } = await supabase
+    const { data: paymentRow, error } = await supabase
       .from("player_payments")
       .upsert(
-        { player_id: playerId, club_id: event.club_id, period, status: nextStatus, marked_by: profile.id, marked_at: new Date().toISOString() },
-        { onConflict: "player_id,period" }
+        {
+          player_id: playerId,
+          club_id: event.club_id,
+          period,
+          status: nextStatus,
+          marked_by: profile.id,
+          marked_at: new Date().toISOString(),
+        },
+        { onConflict: "player_id,period" },
       )
       .select()
       .single();
     if (error) return notify("Couldn't update payment status", error.message);
-    setPayments((prev) => [...prev.filter((p) => p.player_id !== playerId), data as PlayerPayment]);
+    setData(
+      (prev) => prev && { ...prev, payments: [...prev.payments.filter((p) => p.player_id !== playerId), paymentRow as PlayerPayment] },
+    );
   };
-
-  const counts = useMemo(() => ({
-    yes: rsvps.filter((r) => r.status === "yes").length,
-    no: rsvps.filter((r) => r.status === "no").length,
-    maybe: rsvps.filter((r) => r.status === "maybe").length,
-  }), [rsvps]);
-
-  if (loading || !event) return <View style={styles.center}><Text style={{ color: "#9A9DA3" }}>Loading…</Text></View>;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -249,7 +307,9 @@ export default function EventDetail() {
       <View style={styles.hero}>
         <View style={styles.typeRow}>
           <Text style={styles.type}>{event.type.replace("_", " ").toUpperCase()}</Text>
-          <View style={styles.audienceTag}><Text style={styles.audienceTagText}>{audienceLabel(event)}</Text></View>
+          <View style={styles.audienceTag}>
+            <Text style={styles.audienceTagText}>{audienceLabel(event)}</Text>
+          </View>
         </View>
         <Text style={styles.title}>{event.title}</Text>
         <Text style={styles.meta}>{format(new Date(event.starts_at), "EEEE, MMMM d · h:mm a")}</Text>
@@ -280,7 +340,10 @@ export default function EventDetail() {
       {isStaff && (
         <View style={styles.summaryCard}>
           <Text style={styles.sectionLabel}>AVAILABILITY</Text>
-          <Text style={styles.summaryText}>✅ {counts.yes} yes   ❌ {counts.no} no   🤔 {counts.maybe} maybe   · {Math.max(0, players.length - counts.yes - counts.no - counts.maybe)} no response</Text>
+          <Text style={styles.summaryText}>
+            ✅ {counts.yes} yes ❌ {counts.no} no 🤔 {counts.maybe} maybe ·{" "}
+            {Math.max(0, players.length - counts.yes - counts.no - counts.maybe)} no response
+          </Text>
         </View>
       )}
 
@@ -288,49 +351,65 @@ export default function EventDetail() {
         {event.event_players?.length
           ? event.team_id
             ? "Attending Today"
-            : event.event_players.length > 1 ? "Players" : "Player"
-          : isStaff ? "Roster" : "Your Players"}
+            : event.event_players.length > 1
+              ? "Players"
+              : "Player"
+          : isStaff
+            ? "Roster"
+            : "Your Players"}
       </Text>
-      {players.length === 0 ? <Text style={styles.muted}>No eligible players for this event.</Text> : players.map((player) => {
-        const rsvp = rsvps.find((r) => r.player_id === player.id)?.status ?? "no_response";
-        const att = attendance.find((r) => r.player_id === player.id)?.status;
-        const isPaid = (payments.find((p) => p.player_id === player.id)?.status ?? "unpaid") === "paid";
-        return (
-          <View key={player.id} style={styles.card}>
-            <Text style={styles.playerName}>{player.full_name}</Text>
-            <Text style={styles.smallLabel}>RSVP</Text>
-            <View style={styles.optionRow}>
-              {RSVP_OPTIONS.map((option) => (
-                <Pressable key={option.value} onPress={() => setRsvp(player.id, option.value)} style={[styles.chip, rsvp === option.value && styles.chipActive]}>
-                  <Text style={[styles.chipText, rsvp === option.value && styles.chipTextActive]}>{option.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-            {isStaff && (
-              <>
-                <Text style={styles.smallLabel}>ATTENDANCE</Text>
-                <View style={styles.optionRow}>
-                  {ATTENDANCE_OPTIONS.map((option) => (
-                    <Pressable key={option.value} onPress={() => setAttendanceStatus(player.id, option.value)} style={[styles.chip, att === option.value && styles.chipActive]}>
-                      <Text style={[styles.chipText, att === option.value && styles.chipTextActive]}>{option.label}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </>
-            )}
-            <Text style={styles.smallLabel}>PAYMENT ({format(new Date(event.starts_at), "MMMM")})</Text>
-            {isStaff ? (
-              <Pressable style={[styles.paymentPill, isPaid && styles.paymentPillPaid]} onPress={() => togglePayment(player.id)}>
-                <Text style={[styles.paymentPillText, isPaid && styles.paymentPillTextPaid]}>{isPaid ? "Paid" : "Unpaid"}</Text>
-              </Pressable>
-            ) : (
-              <View style={[styles.paymentPill, isPaid && styles.paymentPillPaid]}>
-                <Text style={[styles.paymentPillText, isPaid && styles.paymentPillTextPaid]}>{isPaid ? "Paid" : "Unpaid"}</Text>
+      {players.length === 0 ? (
+        <Text style={styles.muted}>No eligible players for this event.</Text>
+      ) : (
+        players.map((player) => {
+          const rsvp = rsvps.find((r) => r.player_id === player.id)?.status ?? "no_response";
+          const att = attendance.find((r) => r.player_id === player.id)?.status;
+          const isPaid = (payments.find((p) => p.player_id === player.id)?.status ?? "unpaid") === "paid";
+          return (
+            <View key={player.id} style={styles.card}>
+              <Text style={styles.playerName}>{player.full_name}</Text>
+              <Text style={styles.smallLabel}>RSVP</Text>
+              <View style={styles.optionRow}>
+                {RSVP_OPTIONS.map((option) => (
+                  <Pressable
+                    key={option.value}
+                    onPress={() => setRsvp(player.id, option.value)}
+                    style={[styles.chip, rsvp === option.value && styles.chipActive]}
+                  >
+                    <Text style={[styles.chipText, rsvp === option.value && styles.chipTextActive]}>{option.label}</Text>
+                  </Pressable>
+                ))}
               </View>
-            )}
-          </View>
-        );
-      })}
+              {isStaff && (
+                <>
+                  <Text style={styles.smallLabel}>ATTENDANCE</Text>
+                  <View style={styles.optionRow}>
+                    {ATTENDANCE_OPTIONS.map((option) => (
+                      <Pressable
+                        key={option.value}
+                        onPress={() => setAttendanceStatus(player.id, option.value)}
+                        style={[styles.chip, att === option.value && styles.chipActive]}
+                      >
+                        <Text style={[styles.chipText, att === option.value && styles.chipTextActive]}>{option.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              )}
+              <Text style={styles.smallLabel}>PAYMENT ({format(new Date(event.starts_at), "MMMM")})</Text>
+              {isStaff ? (
+                <Pressable style={[styles.paymentPill, isPaid && styles.paymentPillPaid]} onPress={() => togglePayment(player.id)}>
+                  <Text style={[styles.paymentPillText, isPaid && styles.paymentPillTextPaid]}>{isPaid ? "Paid" : "Unpaid"}</Text>
+                </Pressable>
+              ) : (
+                <View style={[styles.paymentPill, isPaid && styles.paymentPillPaid]}>
+                  <Text style={[styles.paymentPillText, isPaid && styles.paymentPillTextPaid]}>{isPaid ? "Paid" : "Unpaid"}</Text>
+                </View>
+              )}
+            </View>
+          );
+        })
+      )}
     </ScrollView>
   );
 }
@@ -346,7 +425,14 @@ const styles = StyleSheet.create({
   title: { color: "#fff", fontSize: 23, fontWeight: "800", marginTop: 4 },
   meta: { color: "#DCE8F2", marginTop: 6 },
   notes: { color: "#fff", marginTop: 12, lineHeight: 20 },
-  calendarButton: { marginTop: 14, alignSelf: "flex-start", backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 10, paddingVertical: 9, paddingHorizontal: 14 },
+  calendarButton: {
+    marginTop: 14,
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+  },
   calendarButtonText: { color: "#fff", fontWeight: "700", fontSize: 13 },
   heroActions: { flexDirection: "row", gap: 10, marginTop: 16 },
   heroButton: { flex: 1, backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 10, paddingVertical: 10, alignItems: "center" },

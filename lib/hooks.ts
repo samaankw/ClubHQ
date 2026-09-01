@@ -1,91 +1,86 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { supabase } from "./supabase";
 import { useAuth } from "./AuthProvider";
 import { Announcement, ClubEvent, DevelopmentPlan, Player } from "@/types/db";
+import { useAsyncData } from "./asyncData";
+// Defined in ./feed so the pure feed-building module stays free of React
+// and Supabase imports; re-exported here for existing call sites.
+import type { AnnouncementWithRead } from "./feed";
+export type { AnnouncementWithRead } from "./feed";
 
 export function useNextEvent() {
   const { profile } = useAuth();
-  const [event, setEvent] = useState<ClubEvent | null>(null);
-  const [loading, setLoading] = useState(true);
+  const clubId = profile?.club_id;
 
-  const load = useCallback(async () => {
-    if (!profile?.club_id) {
-      setEvent(null);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    try {
+  const {
+    data: event,
+    loading,
+    error,
+    retry,
+  } = useAsyncData<ClubEvent | null>(
+    async () => {
+      if (!clubId) return null;
       const { data, error } = await supabase
         .from("events")
         .select("*")
-        .eq("club_id", profile.club_id)
+        .eq("club_id", clubId)
         .gte("starts_at", new Date().toISOString())
         .order("starts_at", { ascending: true })
         .limit(1)
         .maybeSingle();
-      if (error) console.error("Failed to load next event:", error.message);
-      setEvent((data as ClubEvent | null) ?? null);
-    } finally {
-      setLoading(false);
-    }
-  }, [profile?.club_id]);
+      if (error) throw error;
+      return (data as ClubEvent | null) ?? null;
+    },
+    [clubId],
+    null,
+  );
 
-  useEffect(() => { load(); }, [load]);
-  return { event, loading, refresh: load };
+  return { event, loading, error, refresh: retry };
 }
+
+const EMPTY_WEEK_COUNTS = { games: 0, practices: 0, tournaments: 0, clubEvents: 0 };
 
 export function useWeekCounts() {
   const { profile } = useAuth();
-  const [counts, setCounts] = useState({ games: 0, practices: 0, tournaments: 0, clubEvents: 0 });
-  const [loading, setLoading] = useState(true);
+  const clubId = profile?.club_id;
 
-  const load = useCallback(async () => {
-    if (!profile?.club_id) {
-      setCounts({ games: 0, practices: 0, tournaments: 0, clubEvents: 0 });
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    try {
+  const {
+    data: counts,
+    loading,
+    error,
+    retry,
+  } = useAsyncData(
+    async () => {
+      if (!clubId) return EMPTY_WEEK_COUNTS;
       const now = new Date();
       const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
       const { data, error } = await supabase
         .from("events")
         .select("type")
-        .eq("club_id", profile.club_id)
+        .eq("club_id", clubId)
         .gte("starts_at", now.toISOString())
         .lte("starts_at", weekFromNow.toISOString());
-
-      if (error) console.error("Failed to load weekly event counts:", error.message);
-      const tally = { games: 0, practices: 0, tournaments: 0, clubEvents: 0 };
+      if (error) throw error;
+      const tally = { ...EMPTY_WEEK_COUNTS };
       (data ?? []).forEach((e: { type: string }) => {
         if (e.type === "game") tally.games++;
         else if (e.type === "practice") tally.practices++;
         else if (e.type === "tournament") tally.tournaments++;
         else tally.clubEvents++;
       });
-      setCounts(tally);
-    } finally {
-      setLoading(false);
-    }
-  }, [profile?.club_id]);
+      return tally;
+    },
+    [clubId],
+    EMPTY_WEEK_COUNTS,
+  );
 
-  useEffect(() => { load(); }, [load]);
-  return { counts, loading, refresh: load };
+  return { counts, loading, error, refresh: retry };
 }
-
-// Defined in ./feed so the pure feed-building module stays free of React
-// and Supabase imports; re-exported here for existing call sites.
-export type { AnnouncementWithRead } from "./feed";
-import type { AnnouncementWithRead } from "./feed";
 
 export function useRecentAnnouncements(limit = 5) {
   const { profile } = useAuth();
-  const [announcements, setAnnouncements] = useState<AnnouncementWithRead[]>([]);
-  const [loading, setLoading] = useState(true);
+  const clubId = profile?.club_id;
+  const userId = profile?.id;
   // Dashboard and the Announcements section both use this hook and can be
   // mounted at the same time (tabs stay mounted in the background), so the
   // realtime channel name needs a per-instance suffix — otherwise two
@@ -93,163 +88,156 @@ export function useRecentAnnouncements(limit = 5) {
   // Supabase throws "cannot add postgres_changes callbacks after subscribe()".
   const instanceId = useRef(Math.random().toString(36).slice(2)).current;
 
-  const load = useCallback(async () => {
-    if (!profile?.club_id) {
-      setAnnouncements([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    try {
+  const {
+    data: announcements,
+    loading,
+    error,
+    retry,
+    setData: setAnnouncements,
+  } = useAsyncData<AnnouncementWithRead[]>(
+    async () => {
+      if (!clubId) return [];
       const { data, error } = await supabase
         .from("announcements")
         .select("*")
-        .eq("club_id", profile.club_id)
+        .eq("club_id", clubId)
         .order("created_at", { ascending: false })
         .limit(limit);
-      if (error) console.error("Failed to load announcements:", error.message);
+      if (error) throw error;
       const rows = (data as Announcement[]) ?? [];
 
       let readIds = new Set<string>();
-      if (rows.length && profile?.id) {
-        const { data: reads } = await supabase
+      if (rows.length && userId) {
+        const { data: reads, error: readsError } = await supabase
           .from("announcement_reads")
           .select("announcement_id")
-          .eq("user_id", profile.id)
-          .in("announcement_id", rows.map((r) => r.id));
+          .eq("user_id", userId)
+          .in(
+            "announcement_id",
+            rows.map((r) => r.id),
+          );
+        if (readsError) throw readsError;
         readIds = new Set((reads ?? []).map((r) => r.announcement_id));
       }
 
-      setAnnouncements(rows.map((r) => ({ ...r, isRead: readIds.has(r.id) })));
-    } finally {
-      setLoading(false);
-    }
-  }, [profile?.club_id, profile?.id, limit]);
-
-  useEffect(() => { load(); }, [load]);
+      return rows.map((r) => ({ ...r, isRead: readIds.has(r.id) }));
+    },
+    [clubId, userId, limit],
+    [],
+  );
 
   // Realtime: a newly posted announcement shows up (as unread) without a
   // manual pull-to-refresh, same as a new message landing in GroupMe/TeamSnap.
   useEffect(() => {
-    if (!profile?.club_id) return;
+    if (!clubId) return;
     const channel = supabase
-      .channel(`announcements-${profile.club_id}-${instanceId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "announcements", filter: `club_id=eq.${profile.club_id}` },
-        () => load()
-      )
+      .channel(`announcements-${clubId}-${instanceId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "announcements", filter: `club_id=eq.${clubId}` }, () => retry())
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [profile?.club_id, load, instanceId]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [clubId, retry, instanceId]);
 
-  const markAsRead = useCallback(async (announcementId: string) => {
-    if (!profile?.id) return;
-    setAnnouncements((prev) => prev.map((a) => (a.id === announcementId ? { ...a, isRead: true } : a)));
-    await supabase
-      .from("announcement_reads")
-      .upsert({ announcement_id: announcementId, user_id: profile.id }, { onConflict: "announcement_id,user_id" });
-  }, [profile?.id]);
+  const markAsRead = useCallback(
+    async (announcementId: string) => {
+      if (!userId) return;
+      setAnnouncements((prev) => prev.map((a) => (a.id === announcementId ? { ...a, isRead: true } : a)));
+      await supabase
+        .from("announcement_reads")
+        .upsert({ announcement_id: announcementId, user_id: userId }, { onConflict: "announcement_id,user_id" });
+    },
+    [userId, setAnnouncements],
+  );
 
   const markAllAsRead = useCallback(async () => {
-    if (!profile?.id) return;
+    if (!userId) return;
     const unreadIds = announcements.filter((a) => !a.isRead).map((a) => a.id);
     if (!unreadIds.length) return;
     setAnnouncements((prev) => prev.map((a) => ({ ...a, isRead: true })));
-    await supabase
-      .from("announcement_reads")
-      .upsert(
-        unreadIds.map((id) => ({ announcement_id: id, user_id: profile.id })),
-        { onConflict: "announcement_id,user_id" }
-      );
-  }, [profile?.id, announcements]);
+    await supabase.from("announcement_reads").upsert(
+      unreadIds.map((id) => ({ announcement_id: id, user_id: userId })),
+      { onConflict: "announcement_id,user_id" },
+    );
+  }, [userId, announcements, setAnnouncements]);
 
-  return { announcements, loading, refresh: load, markAsRead, markAllAsRead };
+  return { announcements, loading, error, refresh: retry, markAsRead, markAllAsRead };
 }
 
 // Lightweight unread count for the tab bar badge — fetches just ids, not full
-// announcement rows, and stays live via the same realtime pattern.
-export function useUnreadAnnouncementsCount() {
+// announcement rows, and stays live via the same realtime pattern. A failed
+// fetch here just leaves the badge at 0 rather than surfacing an error state
+// -- a stale/missing badge count is low-stakes compared to the data losses
+// this phase targets, so it's not worth a dedicated error UI.
+export function useUnreadAnnouncementsCount(): number {
   const { profile } = useAuth();
-  const [count, setCount] = useState(0);
+  const clubId = profile?.club_id;
+  const userId = profile?.id;
   const instanceId = useRef(Math.random().toString(36).slice(2)).current;
 
-  const load = useCallback(async () => {
-    if (!profile?.club_id || !profile?.id) {
-      setCount(0);
-      return;
-    }
-    const [{ data: all }, { data: reads }] = await Promise.all([
-      supabase.from("announcements").select("id").eq("club_id", profile.club_id),
-      supabase.from("announcement_reads").select("announcement_id").eq("user_id", profile.id),
-    ]);
-    const readIds = new Set((reads ?? []).map((r) => r.announcement_id));
-    setCount((all ?? []).filter((a) => !readIds.has(a.id)).length);
-  }, [profile?.club_id, profile?.id]);
-
-  useEffect(() => { load(); }, [load]);
+  const { data: count, retry } = useAsyncData<number>(
+    async () => {
+      if (!clubId || !userId) return 0;
+      const [{ data: all, error: allError }, { data: reads, error: readsError }] = await Promise.all([
+        supabase.from("announcements").select("id").eq("club_id", clubId),
+        supabase.from("announcement_reads").select("announcement_id").eq("user_id", userId),
+      ]);
+      if (allError) throw allError;
+      if (readsError) throw readsError;
+      const readIds = new Set((reads ?? []).map((r) => r.announcement_id));
+      return (all ?? []).filter((a) => !readIds.has(a.id)).length;
+    },
+    [clubId, userId],
+    0,
+  );
 
   useEffect(() => {
-    if (!profile?.club_id) return;
+    if (!clubId) return;
     const channel = supabase
-      .channel(`announcements-badge-${profile.club_id}-${instanceId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "announcements", filter: `club_id=eq.${profile.club_id}` },
-        () => load()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "announcement_reads", filter: `user_id=eq.${profile.id}` },
-        () => load()
-      )
+      .channel(`announcements-badge-${clubId}-${instanceId}`)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "announcements", filter: `club_id=eq.${clubId}` }, () => retry())
+      .on("postgres_changes", { event: "*", schema: "public", table: "announcement_reads", filter: `user_id=eq.${userId}` }, () => retry())
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [profile?.club_id, profile?.id, load, instanceId]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [clubId, userId, retry, instanceId]);
 
   return count;
 }
 
 export function useMyPlayers() {
   const { profile } = useAuth();
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [loading, setLoading] = useState(true);
+  const userId = profile?.id;
 
-  const load = useCallback(async () => {
-    if (!profile?.id) {
-      setPlayers([]);
-      setLoading(false);
-      return;
-    }
+  const {
+    data: players,
+    loading,
+    error,
+    retry,
+  } = useAsyncData<Player[]>(
+    async () => {
+      if (!userId) return [];
+      const { data, error } = await supabase.from("players").select("*").eq("parent_id", userId).is("archived_at", null);
+      if (error) throw error;
+      return (data as Player[]) ?? [];
+    },
+    [userId],
+    [],
+  );
 
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.from("players").select("*").eq("parent_id", profile.id).is("archived_at", null);
-      if (error) console.error("Failed to load players:", error.message);
-      setPlayers((data as Player[]) ?? []);
-    } finally {
-      setLoading(false);
-    }
-  }, [profile?.id]);
-
-  useEffect(() => { load(); }, [load]);
-  return { players, loading, refresh: load };
+  return { players, loading, error, refresh: retry };
 }
 
 export function useLatestDevelopmentPlan(playerId?: string) {
-  const [plan, setPlan] = useState<DevelopmentPlan | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    if (!playerId) {
-      setPlan(null);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    try {
+  const {
+    data: plan,
+    loading,
+    error,
+    retry,
+  } = useAsyncData<DevelopmentPlan | null>(
+    async () => {
+      if (!playerId) return null;
       const { data, error } = await supabase
         .from("development_plans")
         .select("*")
@@ -257,13 +245,12 @@ export function useLatestDevelopmentPlan(playerId?: string) {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (error) console.error("Failed to load development plan:", error.message);
-      setPlan((data as DevelopmentPlan | null) ?? null);
-    } finally {
-      setLoading(false);
-    }
-  }, [playerId]);
+      if (error) throw error;
+      return (data as DevelopmentPlan | null) ?? null;
+    },
+    [playerId],
+    null,
+  );
 
-  useEffect(() => { load(); }, [load]);
-  return { plan, loading, refresh: load };
+  return { plan, loading, error, refresh: retry };
 }

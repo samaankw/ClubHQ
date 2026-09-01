@@ -100,7 +100,11 @@ export default function Profile() {
   useEffect(() => {
     (async () => {
       if (!profile?.club_id || profile.role !== "director") return;
-      const { data } = await supabase.from("clubs").select("name, join_code").eq("id", profile.club_id).single();
+      const { data, error } = await supabase.from("clubs").select("name, join_code").eq("id", profile.club_id).single();
+      if (error) {
+        notify("Couldn't load club info", error.message);
+        return;
+      }
       setClubName(data?.name ?? null);
       setJoinCode(data?.join_code ?? null);
     })();
@@ -108,7 +112,10 @@ export default function Profile() {
 
   const setNotifyPref = async (key: "notify_events" | "notify_announcements", value: boolean) => {
     if (!profile?.id) return;
-    const { error } = await supabase.from("profiles").update({ [key]: value }).eq("id", profile.id);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ [key]: value })
+      .eq("id", profile.id);
     if (error) {
       notify("Couldn't update", error.message);
       return;
@@ -120,7 +127,7 @@ export default function Profile() {
     const ok = await confirmAsync(
       "Delete your ClubHQ account?",
       "This permanently deletes your adult account. If you're a director, transfer club ownership before deleting. This cannot be undone.",
-      "Delete account"
+      "Delete account",
     );
     if (!ok) return;
     setDeleting(true);
@@ -197,7 +204,9 @@ export default function Profile() {
         <View style={styles.codeCard}>
           <Text style={styles.codeLabel}>INVITE CODE FOR {clubName?.toUpperCase()}</Text>
           <Text style={styles.codeValue}>{joinCode}</Text>
-          <Text style={styles.codeHint}>Share this club code with adult members. Parents still link each child with a separate player code.</Text>
+          <Text style={styles.codeHint}>
+            Share this club code with adult members. Parents still link each child with a separate player code.
+          </Text>
           <Pressable style={styles.shareButton} onPress={() => shareText(`Join ${clubName} on ClubHQ! Use club invite code: ${joinCode}`)}>
             <Text style={styles.shareButtonText}>Share Club Code</Text>
           </Pressable>
@@ -280,12 +289,28 @@ export default function Profile() {
 
 const styles = StyleSheet.create({
   container: { alignItems: "center", paddingTop: 60, backgroundColor: "#0B0B0D", paddingHorizontal: 24, paddingBottom: 50 },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: "#0A6CFF", alignItems: "center", justifyContent: "center", marginBottom: 12 },
+  avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#0A6CFF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
   avatarText: { color: "#fff", fontSize: 32, fontWeight: "800" },
   avatarEditBadge: {
-    position: "absolute", bottom: 8, right: -2, width: 26, height: 26, borderRadius: 13,
-    backgroundColor: "#0A6CFF", alignItems: "center", justifyContent: "center",
-    borderWidth: 2, borderColor: "#0B0B0D",
+    position: "absolute",
+    bottom: 8,
+    right: -2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#0A6CFF",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#0B0B0D",
   },
   avatarEditBadgeText: { fontSize: 12 },
   name: { fontSize: 20, fontWeight: "700", color: "#F2F2F3" },
@@ -293,7 +318,16 @@ const styles = StyleSheet.create({
   bioCard: { backgroundColor: "#141416", borderRadius: 14, padding: 16, marginBottom: 16, width: "100%" },
   bioHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
   editLink: { color: "#0A6CFF", fontWeight: "700", fontSize: 13 },
-  bioInput: { borderWidth: 1, borderColor: "#242424", borderRadius: 10, padding: 12, marginBottom: 10, fontSize: 14, color: "#F2F2F3", backgroundColor: "#0B0B0D" },
+  bioInput: {
+    borderWidth: 1,
+    borderColor: "#242424",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    fontSize: 14,
+    color: "#F2F2F3",
+    backgroundColor: "#0B0B0D",
+  },
   bioTextarea: { height: 90, textAlignVertical: "top" },
   bioPreviewTitle: { fontSize: 12, fontWeight: "700", color: "#0A6CFF", textTransform: "uppercase", letterSpacing: 0.3 },
   bioPreviewText: { fontSize: 14, color: "#B5B8BE", marginTop: 6, lineHeight: 20 },
@@ -306,7 +340,15 @@ const styles = StyleSheet.create({
   codeHint: { fontSize: 12, color: "#9A9DA3", marginTop: 8, textAlign: "center" },
   shareButton: { backgroundColor: "#0A6CFF", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20, marginTop: 12 },
   shareButtonText: { color: "#fff", fontWeight: "700", fontSize: 13 },
-  menuButton: { backgroundColor: "#17181B", borderRadius: 10, paddingVertical: 12, paddingHorizontal: 24, marginBottom: 12, width: "100%", alignItems: "center" },
+  menuButton: {
+    backgroundColor: "#17181B",
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    marginBottom: 12,
+    width: "100%",
+    alignItems: "center",
+  },
   menuButtonText: { color: "#0A6CFF", fontWeight: "700" },
   signOutButton: { borderWidth: 1, borderColor: "#0A6CFF", borderRadius: 10, paddingVertical: 12, paddingHorizontal: 32, marginTop: 6 },
   signOutText: { color: "#0A6CFF", fontWeight: "700" },

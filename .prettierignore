@@ -17,7 +17,6 @@ supabase/.temp/
 # this list as files get genuinely touched in later phases (format them
 # as you go), not to leave it here permanently. New files added after
 # Phase 1 are NOT covered by this list and are checked by default.
-app/_layout.tsx
 app/index.tsx
 app/create-club.tsx
 app/claim-player.tsx
@@ -31,27 +30,17 @@ app/(auth)/signup.tsx
 app/(auth)/update-password.tsx
 app/(tabs)/_layout.tsx
 app/(tabs)/copilot.tsx
-app/(tabs)/dashboard.tsx
-app/(tabs)/messages.tsx
-app/(tabs)/players.tsx
-app/(tabs)/profile.tsx
-app/(tabs)/schedule.tsx
-app/conversation/\[id\].tsx
-app/event/\[id\].tsx
 app/legal/privacy.tsx
 app/legal/terms.tsx
-app/manage-drills.tsx
 app/modals/create-announcement.tsx
 app/modals/create-event.tsx
 app/modals/evaluate-player.tsx
 app/modals/new-conversation.tsx
 app/modals/search-messages.tsx
 app/modals/voice-evaluation.tsx
-app/player/\[id\].tsx
 lib/alertCompat.ts
 lib/announcementCategories.ts
 lib/AuthProvider.tsx
-lib/hooks.ts
 lib/index.tsx
 lib/notifications.ts
 lib/supabase.ts

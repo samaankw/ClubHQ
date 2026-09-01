@@ -5,11 +5,13 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { useRecentAnnouncements } from "@/lib/hooks";
+import { useAsyncData } from "@/lib/asyncData";
 import { ClubEvent } from "@/types/db";
 import { buildFeed, filterFromSectionParam, FEED_FILTERS, FeedFilter, FeedItem } from "@/lib/feed";
 import AnnouncementCard from "@/components/AnnouncementCard";
 import EventCard from "@/components/EventCard";
 import SwipeableRow from "@/components/SwipeableRow";
+import ListState from "@/components/ListState";
 import { chooseAsync, confirmAsync, notify } from "@/lib/alertCompat";
 
 /**
@@ -26,8 +28,6 @@ export default function Schedule() {
   const { profile } = useAuth();
   const { section: sectionParam } = useLocalSearchParams<{ section?: string }>();
 
-  const [events, setEvents] = useState<ClubEvent[]>([]);
-  const [eventsLoading, setEventsLoading] = useState(true);
   const [filter, setFilter] = useState<FeedFilter>(() => filterFromSectionParam(sectionParam));
   const [query, setQuery] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
@@ -35,8 +35,7 @@ export default function Schedule() {
   // while the app sits backgrounded on someone's phone.
   const [now, setNow] = useState(() => new Date());
 
-  const { announcements, loading: annLoading, refresh: refreshAnnouncements, markAllAsRead } =
-    useRecentAnnouncements(50);
+  const { announcements, loading: annLoading, error: annError, refresh: refreshAnnouncements, markAllAsRead } = useRecentAnnouncements(50);
 
   const isStaff = profile?.role === "coach" || profile?.role === "director";
 
@@ -46,30 +45,27 @@ export default function Schedule() {
     if (sectionParam) setFilter(filterFromSectionParam(sectionParam));
   }, [sectionParam]);
 
-  const loadEvents = useCallback(async () => {
-    if (!profile?.club_id) {
-      setEvents([]);
-      setEventsLoading(false);
-      return;
-    }
-    setEventsLoading(true);
-    try {
+  const clubId = profile?.club_id;
+  const {
+    data: events,
+    loading: eventsLoading,
+    error: eventsError,
+    retry: loadEvents,
+  } = useAsyncData<ClubEvent[]>(
+    async () => {
+      if (!clubId) return [];
       const { data, error } = await supabase
         .from("events")
         .select("*, teams(name, age_group), event_players(players(id, full_name))")
-        .eq("club_id", profile.club_id)
+        .eq("club_id", clubId)
         .gte("starts_at", new Date().toISOString())
         .order("starts_at", { ascending: true });
-      if (error) console.error("Failed to load events:", error.message);
-      setEvents((data as ClubEvent[]) ?? []);
-    } finally {
-      setEventsLoading(false);
-    }
-  }, [profile?.club_id]);
-
-  useEffect(() => {
-    loadEvents();
-  }, [loadEvents]);
+      if (error) throw error;
+      return (data as ClubEvent[]) ?? [];
+    },
+    [clubId],
+    [],
+  );
 
   // Opening the tab clears the unread badge. This is now correct by
   // construction: everything the badge counts is visible on this screen.
@@ -77,7 +73,7 @@ export default function Schedule() {
     useCallback(() => {
       setNow(new Date());
       markAllAsRead();
-    }, [markAllAsRead])
+    }, [markAllAsRead]),
   );
 
   const refreshAll = useCallback(() => {
@@ -85,10 +81,7 @@ export default function Schedule() {
     refreshAnnouncements();
   }, [loadEvents, refreshAnnouncements]);
 
-  const feed = useMemo(
-    () => buildFeed({ events, announcements, filter, query, now }),
-    [events, announcements, filter, query, now]
-  );
+  const feed = useMemo(() => buildFeed({ events, announcements, filter, query, now }), [events, announcements, filter, query, now]);
 
   const canDeleteEvent = (createdBy: string) => profile?.role === "director" || profile?.id === createdBy;
   const canDeleteAnnouncement = (authorId: string) => profile?.role === "director" || profile?.id === authorId;
@@ -118,11 +111,9 @@ export default function Schedule() {
     });
     if (error) return notify("Couldn't delete", error.message);
     for (const announcementId of (data as string[] | null) ?? []) {
-      supabase.functions
-        .invoke("send-announcement-push", { body: { announcementId } })
-        .catch((err) => {
-          console.warn("cancellation push failed", err);
-        });
+      supabase.functions.invoke("send-announcement-push", { body: { announcementId } }).catch((err) => {
+        console.warn("cancellation push failed", err);
+      });
     }
     loadEvents();
     refreshAnnouncements();
@@ -149,26 +140,19 @@ export default function Schedule() {
 
     if (item.kind === "event") {
       const card = <EventCard event={item.event} />;
-      return canDeleteEvent(item.event.created_by) ? (
-        <SwipeableRow onDelete={() => deleteEvent(item.event)}>{card}</SwipeableRow>
-      ) : (
-        card
-      );
+      return canDeleteEvent(item.event.created_by) ? <SwipeableRow onDelete={() => deleteEvent(item.event)}>{card}</SwipeableRow> : card;
     }
 
     const editable = canDeleteAnnouncement(item.announcement.author_id);
     const card = <AnnouncementCard announcement={item.announcement} canEdit={editable} />;
     return editable ? (
-      <SwipeableRow onDelete={() => deleteAnnouncement(item.announcement.id, item.announcement.title)}>
-        {card}
-      </SwipeableRow>
+      <SwipeableRow onDelete={() => deleteAnnouncement(item.announcement.id, item.announcement.title)}>{card}</SwipeableRow>
     ) : (
       card
     );
   };
 
-  const emptyMessage =
-    query.trim() || filter !== "all" ? "Nothing matches that." : "Nothing scheduled or posted yet.";
+  const emptyMessage = query.trim() || filter !== "all" ? "Nothing matches that." : "Nothing scheduled or posted yet.";
 
   return (
     <View style={styles.container}>
@@ -196,13 +180,8 @@ export default function Schedule() {
           keyExtractor={(f) => f.key}
           contentContainerStyle={{ flexDirection: "row", alignItems: "flex-start", paddingHorizontal: 16, gap: 8 }}
           renderItem={({ item }) => (
-            <Pressable
-              style={[styles.filterChip, filter === item.key && styles.filterChipActive]}
-              onPress={() => setFilter(item.key)}
-            >
-              <Text style={[styles.filterChipText, filter === item.key && styles.filterChipTextActive]}>
-                {item.label}
-              </Text>
+            <Pressable style={[styles.filterChip, filter === item.key && styles.filterChipActive]} onPress={() => setFilter(item.key)}>
+              <Text style={[styles.filterChipText, filter === item.key && styles.filterChipTextActive]}>{item.label}</Text>
             </Pressable>
           )}
         />
@@ -219,7 +198,17 @@ export default function Schedule() {
         windowSize={7}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 120 }}
-        ListEmptyComponent={<Text style={styles.muted}>{emptyMessage}</Text>}
+        ListEmptyComponent={
+          <ListState
+            loading={eventsLoading || annLoading}
+            error={eventsError || annError}
+            isEmpty={false}
+            onRetry={refreshAll}
+            emptyTitle=""
+          >
+            <Text style={styles.muted}>{emptyMessage}</Text>
+          </ListState>
+        }
       />
 
       {isStaff && (
