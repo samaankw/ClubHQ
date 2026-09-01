@@ -1,4 +1,4 @@
-"""Apply ClubHQ's migrations to a throwaway Postgres to prove 0033 actually runs."""
+"""Apply ClubHQ's migrations to a throwaway Postgres to prove 0034 actually runs."""
 import glob, os, sys, psycopg2
 
 MIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "migrations")
@@ -21,6 +21,7 @@ exception when duplicate_object then null; end $$;
 do $$ begin
   create role service_role;
 exception when duplicate_object then null; end $$;
+
 
 create table if not exists auth.users (
   id uuid primary key,
@@ -88,6 +89,22 @@ def main():
     return failures
 
 
+# 0029 needs storage.foldername(), which ships with Supabase's storage
+# extension and isn't worth reimplementing in the shim -- it's a storage RLS
+# policy, nothing the notice triggers touch. Anything else failing is real.
+EXPECTED_FAILURES = {"0029_club_media_per_club_scope.sql"}
+
+
 if __name__ == "__main__":
     f = main()
-    sys.exit(1 if any(n.startswith("0033") for n, _ in f) else 0)
+    unexpected = [n for n, _ in f if n not in EXPECTED_FAILURES]
+    if unexpected:
+        # Previously this only checked the one migration under development,
+        # so a failure in any later one exited 0 and the suite looked green.
+        print("Unexpected failures: " + ", ".join(unexpected))
+    missing = EXPECTED_FAILURES - {n for n, _ in f}
+    if missing:
+        # If the shim grows enough to apply 0029, this list is stale and the
+        # next person shouldn't inherit a lie about what's covered.
+        print("No longer failing, remove from EXPECTED_FAILURES: " + ", ".join(sorted(missing)))
+    sys.exit(1 if unexpected else 0)
