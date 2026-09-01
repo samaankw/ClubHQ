@@ -2,8 +2,10 @@ import React, { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Stack, router, useSegments } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import * as Notifications from "expo-notifications";
 import { AuthProvider, useAuth } from "@/lib/AuthProvider";
+import { color } from "@/theme";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { initErrorReporting } from "@/lib/errorReporting";
 
@@ -36,8 +38,8 @@ function RootNavigator() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#0B0B0D" }}>
-        <ActivityIndicator size="large" color="#0A6CFF" />
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: color.bg.page }}>
+        <ActivityIndicator size="large" color={color.icon.brand} />
       </View>
     );
   }
@@ -46,10 +48,10 @@ function RootNavigator() {
     <Stack
       screenOptions={{
         headerShown: false,
-        headerStyle: { backgroundColor: "#0B0B0D" },
-        headerTintColor: "#F2F2F3",
-        headerTitleStyle: { color: "#F2F2F3" },
-        contentStyle: { backgroundColor: "#0B0B0D" },
+        headerStyle: { backgroundColor: color.bg.surface },
+        headerTintColor: color.text.primary,
+        headerTitleStyle: { color: color.text.primary },
+        contentStyle: { backgroundColor: color.bg.page },
       }}
     >
       <Stack.Screen name="(auth)" />
@@ -60,6 +62,8 @@ function RootNavigator() {
       <Stack.Screen name="event/[id]" options={{ headerShown: true, title: "Event" }} />
       <Stack.Screen name="modals/create-announcement" options={{ presentation: "modal", headerShown: true, title: "New Announcement" }} />
       <Stack.Screen name="modals/create-event" options={{ presentation: "modal", headerShown: true, title: "New Event" }} />
+      <Stack.Screen name="modals/add-player" options={{ presentation: "modal", headerShown: true, title: "Add Player" }} />
+      <Stack.Screen name="modals/create-team" options={{ presentation: "modal", headerShown: true, title: "New Team" }} />
       <Stack.Screen name="modals/evaluate-player" options={{ presentation: "modal", headerShown: true, title: "Evaluate Player" }} />
       <Stack.Screen name="modals/voice-evaluation" options={{ presentation: "modal", headerShown: true, title: "Voice Evaluation" }} />
       <Stack.Screen name="modals/new-conversation" options={{ presentation: "modal", headerShown: true, title: "New Message" }} />
@@ -68,30 +72,8 @@ function RootNavigator() {
       <Stack.Screen name="player/[id]" options={{ headerShown: true }} />
       <Stack.Screen name="manage-drills" options={{ headerShown: true }} />
       <Stack.Screen name="pilot-metrics" options={{ headerShown: true }} />
-      {/* Legal pages deliberately stay light/neutral regardless of the app's
-          dark theme — these are about legibility and trust, not branding. */}
-      <Stack.Screen
-        name="legal/terms"
-        options={{
-          headerShown: true,
-          title: "Terms of Service",
-          headerStyle: { backgroundColor: "#fff" },
-          headerTintColor: "#0F4C81",
-          headerTitleStyle: { color: "#1a1a1a" },
-          contentStyle: { backgroundColor: "#fff" },
-        }}
-      />
-      <Stack.Screen
-        name="legal/privacy"
-        options={{
-          headerShown: true,
-          title: "Privacy Policy",
-          headerStyle: { backgroundColor: "#fff" },
-          headerTintColor: "#0F4C81",
-          headerTitleStyle: { color: "#1a1a1a" },
-          contentStyle: { backgroundColor: "#fff" },
-        }}
-      />
+      <Stack.Screen name="legal/terms" options={{ headerShown: true, title: "Terms of Service" }} />
+      <Stack.Screen name="legal/privacy" options={{ headerShown: true, title: "Privacy Policy" }} />
     </Stack>
   );
 }
@@ -100,6 +82,10 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
+        {/* The design is deliberately light-only (no dark mode), so the status
+            bar must not follow the device's dark-mode setting — otherwise a
+            device in dark mode renders white glyphs on this near-white page. */}
+        <StatusBar style="dark" />
         <AuthProvider>
           <RootNavigator />
         </AuthProvider>

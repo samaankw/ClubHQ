@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, FlatList, TextInput, Pressable, StyleSheet, KeyboardAvoidingView, Platform } from "react-native";
+import { View, FlatList, Pressable, StyleSheet, KeyboardAvoidingView, Platform } from "react-native";
 import { useLocalSearchParams, Stack } from "expo-router";
 import { format } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { teamLabel } from "@/lib/teamLabel";
 import { notify } from "@/lib/alertCompat";
+import { Screen, Text, Field, Button } from "@/components/ui";
+import { color, space, radius, borderWidth } from "@/theme";
 
 type MessageStatus = "sending" | "failed";
 
@@ -136,106 +138,88 @@ export default function Conversation() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: "#0B0B0D" }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={90}
-    >
+    <Screen scroll={false}>
       <Stack.Screen options={{ title }} />
-      <FlatList
-        ref={listRef}
-        data={allMessages}
-        keyExtractor={(m) => m.id}
-        initialNumToRender={15}
-        maxToRenderPerBatch={15}
-        windowSize={7}
-        contentContainerStyle={{ padding: 16 }}
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-        renderItem={({ item }) => {
-          const mine = item.sender_id === profile?.id;
-          const bubble = (
-            <View style={[styles.bubbleRow, mine && styles.bubbleRowMine]}>
-              <View
-                style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs, item.status === "failed" && styles.bubbleFailed]}
-              >
-                {!mine && <Text style={styles.senderName}>{item.sender_name}</Text>}
-                <Text style={[styles.bubbleText, mine && styles.bubbleTextMine]}>{item.body}</Text>
-                <Text style={[styles.time, mine && styles.timeMine, item.status === "failed" && styles.timeFailed]}>
-                  {item.status === "sending"
-                    ? "Sending…"
-                    : item.status === "failed"
-                      ? "Not sent · tap to retry"
-                      : format(new Date(item.created_at), "h:mm a")}
-                </Text>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={90}>
+        <FlatList
+          ref={listRef}
+          data={allMessages}
+          keyExtractor={(m) => m.id}
+          initialNumToRender={15}
+          maxToRenderPerBatch={15}
+          windowSize={7}
+          contentContainerStyle={styles.listContent}
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+          renderItem={({ item }) => {
+            const mine = item.sender_id === profile?.id;
+            const bubble = (
+              <View style={[styles.bubbleRow, mine && styles.bubbleRowMine]}>
+                <View
+                  style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs, item.status === "failed" && styles.bubbleFailed]}
+                >
+                  {!mine && (
+                    <Text role="label" tone="brand" style={styles.senderName}>
+                      {item.sender_name}
+                    </Text>
+                  )}
+                  <Text role="body" tone={mine ? "inverse" : "primary"}>
+                    {item.body}
+                  </Text>
+                  <Text
+                    role="caption"
+                    tone={item.status === "failed" ? "danger" : mine ? "inverse" : "tertiary"}
+                    style={[styles.time, mine && styles.timeMine]}
+                  >
+                    {item.status === "sending"
+                      ? "Sending…"
+                      : item.status === "failed"
+                        ? "Not sent · tap to retry"
+                        : format(new Date(item.created_at), "h:mm a")}
+                  </Text>
+                </View>
               </View>
-            </View>
-          );
-          return item.status === "failed" ? (
-            <Pressable onPress={() => retrySend(item)} accessibilityRole="button" accessibilityLabel="Retry sending message">
-              {bubble}
-            </Pressable>
-          ) : (
-            bubble
-          );
-        }}
-      />
-      <View style={styles.inputRow}>
-        <TextInput
-          style={styles.input}
-          value={draft}
-          onChangeText={setDraft}
-          placeholder="Message…"
-          placeholderTextColor="#6B6F76"
-          multiline
+            );
+            return item.status === "failed" ? (
+              <Pressable onPress={() => retrySend(item)} accessibilityRole="button" accessibilityLabel="Retry sending message">
+                {bubble}
+              </Pressable>
+            ) : (
+              bubble
+            );
+          }}
         />
-        <Pressable
-          style={styles.sendButton}
-          onPress={send}
-          disabled={!draft.trim() || isSending}
-          accessibilityRole="button"
-          accessibilityLabel="Send message"
-        >
-          <Text style={styles.sendText}>{isSending ? "Sending…" : "Send"}</Text>
-        </Pressable>
-      </View>
-    </KeyboardAvoidingView>
+        <View style={styles.inputRow}>
+          <View style={styles.inputWrap}>
+            <Field value={draft} onChangeText={setDraft} placeholder="Message…" multiline style={styles.composerInput} />
+          </View>
+          <Button label={isSending ? "Sending…" : "Send"} onPress={send} disabled={!draft.trim() || isSending} />
+        </View>
+      </KeyboardAvoidingView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  bubbleRow: { marginBottom: 10, alignItems: "flex-start" },
+  flex: { flex: 1 },
+  listContent: { padding: space[4], gap: space[3] },
+  bubbleRow: { alignItems: "flex-start" },
   bubbleRowMine: { alignItems: "flex-end" },
-  bubble: { maxWidth: "78%", borderRadius: 14, padding: 10 },
-  bubbleTheirs: { backgroundColor: "#17181B" },
-  bubbleMine: { backgroundColor: "#0A6CFF" },
-  bubbleFailed: { backgroundColor: "#3A1616" },
-  senderName: { fontSize: 11, fontWeight: "700", color: "#0A6CFF", marginBottom: 2 },
-  bubbleText: { fontSize: 15, color: "#F2F2F3" },
-  bubbleTextMine: { color: "#fff" },
-  time: { fontSize: 10, color: "#6B6F76", marginTop: 4, alignSelf: "flex-end" },
-  timeMine: { color: "#CFE0F0" },
-  timeFailed: { color: "#FF8A80", fontWeight: "700" },
+  bubble: { maxWidth: "78%", borderRadius: radius.card, padding: space[3] },
+  bubbleTheirs: { backgroundColor: color.bg.sunken },
+  bubbleMine: { backgroundColor: color.bg.brand },
+  bubbleFailed: { backgroundColor: color.bg.dangerSubtle },
+  senderName: { marginBottom: space[1] },
+  time: { marginTop: space[1], alignSelf: "flex-end" },
+  timeMine: { opacity: 0.75 },
   inputRow: {
     flexDirection: "row",
-    padding: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#1C1D20",
-    backgroundColor: "#0B0B0D",
+    padding: space[3],
+    borderTopWidth: borderWidth.thin,
+    borderTopColor: color.border.subtle,
+    backgroundColor: color.bg.page,
     alignItems: "flex-end",
-    gap: 8,
+    gap: space[2],
   },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#242424",
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    maxHeight: 100,
-    fontSize: 15,
-    color: "#F2F2F3",
-    backgroundColor: "#141416",
-  },
-  sendButton: { backgroundColor: "#0A6CFF", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10 },
-  sendText: { color: "#fff", fontWeight: "700" },
+  inputWrap: { flex: 1 },
+  composerInput: { maxHeight: 100 },
 });

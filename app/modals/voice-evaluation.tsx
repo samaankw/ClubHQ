@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
+import { View, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import { supabase, SUPABASE_URL } from "@/lib/supabase";
@@ -7,6 +7,8 @@ import { useAuth } from "@/lib/AuthProvider";
 import { notify } from "@/lib/alertCompat";
 import { goBackOr } from "@/lib/navigation";
 import ModalBackButton from "@/components/ModalBackButton";
+import { Screen, Card, Text, Eyebrow, Button, Badge } from "@/components/ui";
+import { color, space, radius, borderWidth, opacity } from "@/theme";
 
 type Stage = "idle" | "listening" | "extracting" | "reviewing" | "saving";
 
@@ -45,7 +47,6 @@ export default function VoiceEvaluation() {
     }
   });
 
-
   const startListening = async () => {
     applyTranscript("");
     try {
@@ -66,7 +67,7 @@ export default function VoiceEvaluation() {
       setStage("idle");
       notify(
         "Couldn't start listening",
-        "Speech recognition requires a ClubHQ development or production build. Rebuild the native app after installing dependencies."
+        "Speech recognition requires a ClubHQ development or production build. Rebuild the native app after installing dependencies.",
       );
     }
   };
@@ -178,7 +179,10 @@ export default function VoiceEvaluation() {
 
       if (Object.keys(skillValues).length === 0) continue;
 
-      const combinedNotes = playerUpdates.map((u) => u.note).filter(Boolean).join(" ");
+      const combinedNotes = playerUpdates
+        .map((u) => u.note)
+        .filter(Boolean)
+        .join(" ");
       const { data: evaluation, error } = await supabase
         .from("evaluations")
         .insert({
@@ -218,108 +222,114 @@ export default function VoiceEvaluation() {
       return;
     }
 
-    notify("Saved", `Updated ${savedCount} player${savedCount === 1 ? "" : "s"}. New AI plans are drafts until a coach or director publishes them.`);
+    notify(
+      "Saved",
+      `Updated ${savedCount} player${savedCount === 1 ? "" : "s"}. New AI plans are drafts until a coach or director publishes them.`,
+    );
     goBackOr("/(tabs)/players");
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <Screen>
       <Stack.Screen options={{ headerLeft: () => <ModalBackButton onPress={() => goBackOr("/(tabs)/players")} /> }} />
+
       {stage === "idle" && (
         <View style={styles.center}>
-          <Text style={styles.prompt}>
-            Press record and talk through today's practice — mention players by name and what you noticed. Transcription happens
-            right on your phone, nothing is uploaded until you confirm.
+          <Text tone="secondary" style={styles.centerText}>
+            Press record and talk through today's practice — mention players by name and what you noticed. Transcription happens right on
+            your phone, nothing is uploaded until you confirm.
           </Text>
-          <Pressable style={styles.recordButton} onPress={startListening}>
-            <Text style={styles.recordButtonText}>🎙️ Start Recording</Text>
-          </Pressable>
+          <Button label="Start Recording" size="lg" onPress={startListening} />
         </View>
       )}
 
       {stage === "listening" && (
         <View style={styles.center}>
-          <Text style={styles.recordingIndicator}>● Listening…</Text>
-          <Text style={styles.liveTranscript}>{transcript || "Start talking…"}</Text>
-          <Pressable style={[styles.recordButton, styles.stopButton]} onPress={stopAndExtract}>
-            <Text style={styles.recordButtonText}>Stop & Review</Text>
-          </Pressable>
+          <Badge label="● Listening…" tone="danger" />
+          <Text tone="secondary" style={styles.centerText}>
+            {transcript || "Start talking…"}
+          </Text>
+          <Button label="Stop & Review" size="lg" variant="danger" onPress={stopAndExtract} />
         </View>
       )}
 
       {stage === "extracting" && (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#0A6CFF" />
-          <Text style={styles.prompt}>Matching players and skills…</Text>
+          <ActivityIndicator size="large" color={color.icon.brand} />
+          <Text tone="secondary">Matching players and skills…</Text>
         </View>
       )}
 
       {stage === "reviewing" && (
-        <View>
-          <Text style={styles.sectionLabel}>TRANSCRIPT</Text>
-          <Text style={styles.transcript}>{transcript}</Text>
+        <View style={styles.section}>
+          <View style={styles.section}>
+            <Eyebrow>Transcript</Eyebrow>
+            <Card>
+              <Text tone="secondary">{transcript}</Text>
+            </Card>
+          </View>
 
-          <Text style={styles.sectionLabel}>REVIEW UPDATES ({updates.filter((u) => u.include).length} selected)</Text>
-          {updates.map((u, idx) => (
-            <Pressable
-              key={idx}
-              style={[styles.updateCard, !u.include && styles.updateCardExcluded]}
-              onPress={() => toggleInclude(idx)}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.updateName}>
-                  {u.player_name} {!u.player_id && <Text style={styles.noMatch}>(no roster match)</Text>}
-                </Text>
-                <Text style={styles.updateSkill}>
-                  {u.skill.replace(/_/g, " ")} {u.direction === "up" ? "↑" : u.direction === "down" ? "↓" : "→"}
-                </Text>
-                <Text style={styles.updateNote}>{u.note}</Text>
-              </View>
-              <View style={[styles.checkbox, u.include && styles.checkboxOn]}>{u.include && <Text style={styles.checkmark}>✓</Text>}</View>
-            </Pressable>
-          ))}
+          <View style={styles.section}>
+            <Eyebrow>Review updates ({updates.filter((u) => u.include).length} selected)</Eyebrow>
+            {updates.map((u, idx) => (
+              <Pressable key={idx} onPress={() => toggleInclude(idx)}>
+                <Card style={[styles.updateCard, !u.include && styles.updateCardExcluded]}>
+                  <View style={styles.updateCardBody}>
+                    <Text role="h3">
+                      {u.player_name}{" "}
+                      {!u.player_id && (
+                        <Text role="bodySm" tone="danger">
+                          (no roster match)
+                        </Text>
+                      )}
+                    </Text>
+                    <Text role="label" tone="brand">
+                      {u.skill.replace(/_/g, " ")} {u.direction === "up" ? "↑" : u.direction === "down" ? "↓" : "→"}
+                    </Text>
+                    <Text tone="secondary">{u.note}</Text>
+                  </View>
+                  <View style={[styles.checkbox, u.include && styles.checkboxOn]}>
+                    {u.include && (
+                      <Text role="caption" tone="inverse">
+                        ✓
+                      </Text>
+                    )}
+                  </View>
+                </Card>
+              </Pressable>
+            ))}
+          </View>
 
-          <Pressable style={styles.button} onPress={confirmAndSave}>
-            <Text style={styles.buttonText}>Confirm & Update Players</Text>
-          </Pressable>
-          <Pressable style={styles.cancelButton} onPress={() => setStage("idle")}>
-            <Text style={styles.cancelText}>Record Again</Text>
-          </Pressable>
+          <Button label="Confirm & Update Players" size="lg" fullWidth onPress={confirmAndSave} />
+          <Button label="Record Again" variant="ghost" onPress={() => setStage("idle")} />
         </View>
       )}
 
       {stage === "saving" && (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#0A6CFF" />
-          <Text style={styles.prompt}>Saving evaluations and generating development plans…</Text>
+          <ActivityIndicator size="large" color={color.icon.brand} />
+          <Text tone="secondary">Saving evaluations and generating development plans…</Text>
         </View>
       )}
-    </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, flexGrow: 1, backgroundColor: "#0B0B0D" },
-  center: { alignItems: "center", justifyContent: "center", paddingTop: 60, gap: 20 },
-  prompt: { fontSize: 15, color: "#B5B8BE", textAlign: "center", lineHeight: 21, paddingHorizontal: 10 },
-  recordButton: { backgroundColor: "#0A6CFF", borderRadius: 30, paddingVertical: 16, paddingHorizontal: 32 },
-  stopButton: { backgroundColor: "#FF453A" },
-  recordButtonText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-  recordingIndicator: { color: "#FF6B6B", fontWeight: "700", fontSize: 16 },
-  liveTranscript: { fontSize: 15, color: "#B5B8BE", textAlign: "center", paddingHorizontal: 16, fontStyle: "italic" },
-  sectionLabel: { fontSize: 12, fontWeight: "700", color: "#9A9DA3", marginTop: 16, marginBottom: 8, letterSpacing: 0.5 },
-  transcript: { fontSize: 14, color: "#B5B8BE", fontStyle: "italic", backgroundColor: "#141416", padding: 12, borderRadius: 10 },
-  updateCard: { flexDirection: "row", backgroundColor: "#141416", borderRadius: 12, padding: 12, marginBottom: 8, alignItems: "center" },
-  updateCardExcluded: { opacity: 0.4 },
-  updateName: { fontSize: 15, fontWeight: "700", color: "#F2F2F3" },
-  noMatch: { fontSize: 12, color: "#FF6B6B", fontWeight: "400" },
-  updateSkill: { fontSize: 13, fontWeight: "600", color: "#0A6CFF", textTransform: "capitalize", marginTop: 2 },
-  updateNote: { fontSize: 13, color: "#9A9DA3", marginTop: 4 },
-  checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: "#0A6CFF", alignItems: "center", justifyContent: "center", marginLeft: 10 },
-  checkboxOn: { backgroundColor: "#0A6CFF" },
-  checkmark: { color: "#fff", fontWeight: "800" },
-  button: { backgroundColor: "#0A6CFF", borderRadius: 10, padding: 16, alignItems: "center", marginTop: 16 },
-  buttonText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-  cancelButton: { alignItems: "center", padding: 12 },
-  cancelText: { color: "#9A9DA3" },
+  center: { alignItems: "center", justifyContent: "center", paddingTop: space[10], gap: space[5] },
+  centerText: { textAlign: "center" },
+  section: { gap: space[3] },
+  updateCard: { flexDirection: "row", alignItems: "center", gap: space[3] },
+  updateCardExcluded: { opacity: opacity.disabled },
+  updateCardBody: { flex: 1, gap: space[1] },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: radius.xs,
+    borderWidth: borderWidth.thin,
+    borderColor: color.border.brand,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxOn: { backgroundColor: color.bg.brand },
 });

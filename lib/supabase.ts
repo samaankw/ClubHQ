@@ -2,7 +2,6 @@ import "react-native-url-polyfill/auto";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { createClient } from "@supabase/supabase-js";
-import Constants from "expo-constants";
 
 // SecureStore has historically had practical per-value size constraints on some
 // platforms. Supabase sessions can be larger than one safe value, so split the
@@ -59,9 +58,7 @@ class ChunkedSecureStore {
       return null;
     }
 
-    const chunks = await Promise.all(
-      Array.from({ length: count }, (_, index) => platformStorage.getItemAsync(this.chunkKey(key, index)))
-    );
+    const chunks = await Promise.all(Array.from({ length: count }, (_, index) => platformStorage.getItemAsync(this.chunkKey(key, index))));
 
     if (chunks.some((chunk) => chunk == null)) {
       await this.removeItem(key);
@@ -79,17 +76,15 @@ class ChunkedSecureStore {
     }
     if (chunks.length === 0) chunks.push("");
 
-    await Promise.all(
-      chunks.map((chunk, index) => platformStorage.setItemAsync(this.chunkKey(key, index), chunk))
-    );
+    await Promise.all(chunks.map((chunk, index) => platformStorage.setItemAsync(this.chunkKey(key, index), chunk)));
     await platformStorage.setItemAsync(this.metaKey(key), String(chunks.length));
 
     // Clean up stale chunks if the new value is shorter than the old value.
     if (Number.isInteger(previousCount) && previousCount > chunks.length) {
       await Promise.all(
         Array.from({ length: previousCount - chunks.length }, (_, offset) =>
-          platformStorage.deleteItemAsync(this.chunkKey(key, chunks.length + offset))
-        )
+          platformStorage.deleteItemAsync(this.chunkKey(key, chunks.length + offset)),
+        ),
       );
     }
   }
@@ -99,24 +94,36 @@ class ChunkedSecureStore {
     const count = Number(rawCount ?? "0");
 
     if (Number.isInteger(count) && count > 0) {
-      await Promise.all(
-        Array.from({ length: count }, (_, index) => platformStorage.deleteItemAsync(this.chunkKey(key, index)))
-      );
+      await Promise.all(Array.from({ length: count }, (_, index) => platformStorage.deleteItemAsync(this.chunkKey(key, index))));
     }
     await platformStorage.deleteItemAsync(this.metaKey(key));
   }
 }
 
-const configUrl = Constants.expoConfig?.extra?.supabaseUrl as string | undefined;
-const configAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey as string | undefined;
+export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "";
 
-export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || configUrl || "";
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || configAnonKey || "";
-
+// Fail loudly and specifically. Without this, an unconfigured checkout dies
+// inside createClient() with "Invalid supabaseUrl: Must be a valid HTTP or
+// HTTPS URL" — technically accurate, but it names no env var and no file, so
+// a fresh clone just white-screens with no route to the actual problem.
 const isPlaceholder = (value: string) => !value || value.includes("_HERE");
 if (isPlaceholder(SUPABASE_URL) || isPlaceholder(supabaseAnonKey)) {
-  console.warn(
-    "ClubHQ Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in .env."
+  const missing = [
+    isPlaceholder(SUPABASE_URL) ? "EXPO_PUBLIC_SUPABASE_URL" : null,
+    isPlaceholder(supabaseAnonKey) ? "EXPO_PUBLIC_SUPABASE_ANON_KEY" : null,
+  ].filter(Boolean);
+
+  throw new Error(
+    [
+      `ClubHQ Supabase is not configured — missing ${missing.join(" and ")}.`,
+      "",
+      "Create a .env file in the project root (see .env.example):",
+      "  EXPO_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co",
+      "  EXPO_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY",
+      "",
+      "Then restart the dev server — Expo only reads .env at startup.",
+    ].join("\n"),
   );
 }
 

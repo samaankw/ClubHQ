@@ -1,20 +1,38 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet } from "react-native";
+import { View, Pressable, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { notify } from "@/lib/alertCompat";
+import { Screen, Text, Field, Button } from "@/components/ui";
+import { color, space, radius, borderWidth } from "@/theme";
 
 export default function ClaimPlayer() {
   const { profile } = useAuth();
   const [code, setCode] = useState("");
   const [consent, setConsent] = useState(false);
   const [working, setWorking] = useState(false);
+  const [roleError, setRoleError] = useState<string | undefined>();
+  const [codeError, setCodeError] = useState<string | undefined>();
+  const [consentError, setConsentError] = useState<string | undefined>();
 
   const claim = async () => {
-    if (profile?.role !== "parent") return notify("Parent account required", "Player links can only be claimed by a parent account.");
-    if (!code.trim()) return notify("Code required", "Enter the 8-character player link code from your club director.");
-    if (!consent) return notify("Consent required", "Confirm your parental authority and consent for this player's ClubHQ development record.");
+    if (profile?.role !== "parent") {
+      setRoleError("Player links can only be claimed by a parent account.");
+      return;
+    }
+    if (!code.trim()) {
+      setCodeError("Enter the 8-character player link code from your club director.");
+      return;
+    }
+    if (!consent) {
+      setConsentError("Confirm your parental authority and consent for this player's ClubHQ development record.");
+      return;
+    }
+    setRoleError(undefined);
+    setCodeError(undefined);
+    setConsentError(undefined);
     setWorking(true);
     const { data, error } = await supabase.rpc("claim_parent_link_code", { p_code: code.trim(), p_confirm_parental_consent: true });
     setWorking(false);
@@ -24,33 +42,77 @@ export default function ClaimPlayer() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Link your child</Text>
-      <Text style={styles.copy}>Your director creates a one-time player link code. This keeps player records separate from the general club invite code.</Text>
-      <TextInput style={styles.input} placeholder="Player link code" placeholderTextColor="#6B6F76" autoCapitalize="characters" value={code} onChangeText={setCode} />
-      <Pressable style={styles.consentRow} onPress={() => setConsent((v) => !v)}>
-        <View style={[styles.checkbox, consent && styles.checkboxOn]}>{consent && <Text style={styles.check}>✓</Text>}</View>
-        <Text style={styles.consentText}>I confirm I am this player's parent or legal guardian and consent to ClubHQ processing this player's development data, including AI-assisted coaching reports.</Text>
-      </Pressable>
-      <Pressable style={styles.button} onPress={claim} disabled={working}><Text style={styles.buttonText}>{working ? "Linking…" : "Link Player"}</Text></Pressable>
+    <Screen>
+      <Text role="h1" tone="brand">
+        Link your child
+      </Text>
+      <Text tone="secondary">
+        Your director creates a one-time player link code. This keeps player records separate from the general club invite code.
+      </Text>
+      {roleError ? (
+        <Text role="caption" tone="danger">
+          {roleError}
+        </Text>
+      ) : null}
+      <Field
+        placeholder="Player link code"
+        autoCapitalize="characters"
+        value={code}
+        onChangeText={(v) => {
+          setCode(v);
+          if (codeError) setCodeError(undefined);
+        }}
+        style={styles.codeInput}
+        error={codeError}
+      />
+      <View style={{ gap: space[2] }}>
+        <Pressable
+          style={styles.consentRow}
+          onPress={() => {
+            setConsent((v) => !v);
+            if (consentError) setConsentError(undefined);
+          }}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: consent }}
+        >
+          <View style={[styles.checkbox, consent && styles.checkboxOn]}>
+            {consent && <Ionicons name="checkmark" size={14} color={color.text.inverse} />}
+          </View>
+          <Text role="bodySm" tone="secondary" style={styles.consentText}>
+            I confirm I am this player's parent or legal guardian and consent to ClubHQ processing this player's development data, including
+            AI-assisted coaching reports.
+          </Text>
+        </Pressable>
+        {consentError ? (
+          <Text role="caption" tone="danger">
+            {consentError}
+          </Text>
+        ) : null}
+      </View>
+      <Button label={working ? "Linking…" : "Link Player"} onPress={claim} disabled={working} fullWidth />
       <Pressable style={styles.skipLink} onPress={() => router.replace("/(tabs)/dashboard")}>
-        <Text style={styles.skipLinkText}>Don't have the code yet? Skip for now</Text>
+        <Text role="label" tone="secondary" style={styles.skipLinkText}>
+          Don't have the code yet? Skip for now
+        </Text>
       </Pressable>
-    </View>
+    </Screen>
   );
 }
+
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: "#0B0B0D" },
-  title: { fontSize: 24, fontWeight: "800", color: "#0A6CFF" },
-  copy: { color: "#9A9DA3", lineHeight: 20, marginTop: 8, marginBottom: 20 },
-  input: { borderWidth: 1, borderColor: "#242424", borderRadius: 10, padding: 14, fontSize: 17, letterSpacing: 2, marginBottom: 18, color: "#F2F2F3", backgroundColor: "#141416" },
-  consentRow: { flexDirection: "row", gap: 10, alignItems: "flex-start", marginBottom: 20 },
-  checkbox: { width: 22, height: 22, borderWidth: 2, borderColor: "#0A6CFF", borderRadius: 6, alignItems: "center", justifyContent: "center" },
-  checkboxOn: { backgroundColor: "#0A6CFF" },
-  check: { color: "#fff", fontWeight: "800" },
-  consentText: { flex: 1, color: "#B5B8BE", fontSize: 13, lineHeight: 19 },
-  button: { backgroundColor: "#0A6CFF", borderRadius: 10, padding: 16, alignItems: "center" },
-  buttonText: { color: "#fff", fontWeight: "700" },
-  skipLink: { marginTop: 16, alignItems: "center" },
-  skipLinkText: { color: "#9A9DA3", fontSize: 13, fontWeight: "600", textDecorationLine: "underline" },
+  codeInput: { letterSpacing: 2 },
+  consentRow: { flexDirection: "row", gap: space[2], alignItems: "flex-start" },
+  checkbox: {
+    width: space[5],
+    height: space[5],
+    borderRadius: radius.xs,
+    borderWidth: borderWidth.thin,
+    borderColor: color.border.brand,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxOn: { backgroundColor: color.bg.brand, borderColor: color.bg.brand },
+  consentText: { flex: 1 },
+  skipLink: { alignSelf: "center" },
+  skipLinkText: { textDecorationLine: "underline" },
 });

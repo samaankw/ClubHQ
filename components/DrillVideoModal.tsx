@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo } from "react";
-import { Modal, View, Text, Pressable, StyleSheet, SafeAreaView } from "react-native";
+import { Modal, View, Pressable, StyleSheet, SafeAreaView } from "react-native";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { WebView } from "react-native-webview";
+import { Text } from "@/components/ui";
+import { color, space } from "@/theme";
 
 interface Props {
   visible: boolean;
@@ -41,19 +43,18 @@ export default function DrillVideoModal({ visible, onClose, videoUrl, title }: P
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.title} numberOfLines={1}>{title ?? "Drill Video"}</Text>
-          <Pressable onPress={onClose} hitSlop={10}>
-            <Text style={styles.closeText}>Close</Text>
+          <Text role="h3" tone="onSpotlight" numberOfLines={1} style={styles.title}>
+            {title ?? "Drill Video"}
+          </Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} hitSlop={10}>
+            <Text role="h3" tone="brand">
+              Close
+            </Text>
           </Pressable>
         </View>
         <View style={styles.playerWrap}>
           {!videoUrl ? null : embedUrl ? (
-            <WebView
-              source={{ uri: embedUrl }}
-              style={styles.media}
-              allowsFullscreenVideo
-              mediaPlaybackRequiresUserAction={false}
-            />
+            <WebView source={{ uri: embedUrl }} style={styles.media} allowsFullscreenVideo mediaPlaybackRequiresUserAction={false} />
           ) : (
             <VideoView style={styles.media} player={player} allowsPictureInPicture contentFit="contain" />
           )}
@@ -64,10 +65,9 @@ export default function DrillVideoModal({ visible, onClose, videoUrl, title }: P
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#000" },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16 },
-  title: { flex: 1, color: "#F2F2F3", fontSize: 16, fontWeight: "700", marginRight: 12 },
-  closeText: { color: "#0A6CFF", fontWeight: "700", fontSize: 15 },
-  playerWrap: { flex: 1, backgroundColor: "#000" },
+  container: { flex: 1, backgroundColor: color.bg.spotlight },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: space[4] },
+  title: { flex: 1, marginRight: space[3] },
+  playerWrap: { flex: 1, backgroundColor: color.bg.spotlight },
   media: { flex: 1 },
 });

@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { router, useFocusEffect } from "expo-router";
 import { format, addMonths, startOfMonth } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
@@ -7,6 +9,9 @@ import { PaymentStatus, Player, PlayerPayment, Profile, Team } from "@/types/db"
 import { shareText } from "@/lib/shareCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { confirmAsync, notify } from "@/lib/alertCompat";
+import { scheduleScrollIntoView } from "@/lib/scrollIntoView";
+import { Screen, Card, CardHeader, Eyebrow, Text, Button, Badge, Avatar, Field, IconChip, Divider, EmptyState } from "@/components/ui";
+import { color, space, radius, borderWidth } from "@/theme";
 
 type TeamCoach = { team_id: string; coach_id: string };
 
@@ -16,23 +21,52 @@ export default function ClubManagement() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [staff, setStaff] = useState<Profile[]>([]);
   const [teamCoaches, setTeamCoaches] = useState<TeamCoach[]>([]);
-  const [teamName, setTeamName] = useState("");
-  const [ageGroup, setAgeGroup] = useState("");
-  const [season, setSeason] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [position, setPosition] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [playerNameError, setPlayerNameError] = useState<string | undefined>();
+  const [birthDateError, setBirthDateError] = useState<string | undefined>();
   const [selectedMonth, setSelectedMonth] = useState(() => startOfMonth(new Date()));
   const [payments, setPayments] = useState<PlayerPayment[]>([]);
   const period = format(selectedMonth, "yyyy-MM");
+
+  // Scroll-into-view for the team card's Add Player / Invite Parents buttons
+  // (Task 31). Tapping either always selects the team, which is what these
+  // buttons previously did and nothing else — a no-op when that team was
+  // already selected, hence the scroll.
+  //
+  // The scroll is scheduled straight from the handler rather than routed
+  // through state. An earlier version stored the target in `useState` and
+  // cleared it at the top of the effect that scheduled the frame; clearing it
+  // re-rendered, which tore the effect down and ran cancelAnimationFrame in
+  // the same JS task, before the frame could fire. Both buttons stayed the
+  // no-ops this task existed to fix. See __tests__/lib/scrollIntoView.test.ts.
+  const scrollRef = useRef<ScrollView>(null);
+  const addPlayerCardRef = useRef<View>(null);
+  const rosterCardRef = useRef<View>(null);
+
+  const focusAddPlayer = (teamId: string) => {
+    setSelectedTeamId(teamId);
+    scheduleScrollIntoView(scrollRef, addPlayerCardRef, space[4]);
+  };
+
+  const focusRoster = (teamId: string) => {
+    setSelectedTeamId(teamId);
+    scheduleScrollIntoView(scrollRef, rosterCardRef, space[4]);
+  };
 
   const load = useCallback(async () => {
     if (!profile?.club_id || profile.role !== "director") return;
     const [teamResult, playerResult, staffResult, coachResult] = await Promise.all([
       supabase.from("teams").select("*").eq("club_id", profile.club_id).is("archived_at", null).order("name"),
-      supabase.from("players").select("*, teams!inner(club_id)").eq("teams.club_id", profile.club_id).is("archived_at", null).order("full_name"),
+      supabase
+        .from("players")
+        .select("*, teams!inner(club_id)")
+        .eq("teams.club_id", profile.club_id)
+        .is("archived_at", null)
+        .order("full_name"),
       supabase.from("profiles").select("*").eq("club_id", profile.club_id).in("role", ["coach", "director"]).order("full_name"),
       supabase.from("team_coaches").select("team_id, coach_id"),
     ]);
@@ -45,10 +79,17 @@ export default function ClubManagement() {
     setStaff((staffResult.data as Profile[]) ?? []);
     setTeamCoaches((coachResult.data as TeamCoach[]) ?? []);
     const nextTeams = (teamResult.data as Team[]) ?? [];
-    setSelectedTeamId((current) => current && nextTeams.some((t) => t.id === current) ? current : nextTeams[0]?.id ?? null);
+    setSelectedTeamId((current) => (current && nextTeams.some((t) => t.id === current) ? current : (nextTeams[0]?.id ?? null)));
   }, [profile?.club_id, profile?.role]);
 
-  useEffect(() => { void load(); }, [load]);
+  // useFocusEffect (not a plain mount useEffect) so returning from the
+  // create-team modal — which lands back on this already-mounted screen —
+  // still reloads the team list and shows the new team.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   useEffect(() => {
     (async () => {
@@ -62,27 +103,46 @@ export default function ClubManagement() {
   const selectedTeam = useMemo(() => teams.find((t) => t.id === selectedTeamId) ?? null, [teams, selectedTeamId]);
   const selectedPlayers = players.filter((p) => p.team_id === selectedTeamId);
 
+  const setupSteps = useMemo(
+    () => [
+      { label: "Create your first team", done: teams.length > 0 },
+      { label: "Add players to a roster", done: players.length > 0 },
+      { label: "Assign a coach to a team", done: teamCoaches.length > 0 },
+      { label: "Link a parent to a player", done: players.some((p) => !!p.parent_id) },
+    ],
+    [teams, players, teamCoaches],
+  );
+  const completedSteps = setupSteps.filter((s) => s.done).length;
+
   if (profile?.role !== "director") {
-    return <View style={styles.center}><Text style={{ color: "#9A9DA3" }}>Only club directors can manage club operations.</Text></View>;
+    return (
+      <Screen>
+        <EmptyState icon="lock-closed" title="Directors only" body="Only club directors can manage club operations." />
+      </Screen>
+    );
   }
 
-  const createTeam = async () => {
-    if (!profile.club_id || !teamName.trim()) return notify("Team name required", "Enter a team name first.");
-    setBusy(true);
-    const { error } = await supabase.from("teams").insert({ club_id: profile.club_id, name: teamName.trim(), age_group: ageGroup.trim() || null, season: season.trim() || null });
-    setBusy(false);
-    if (error) return notify("Couldn't create team", error.message);
-    setTeamName(""); setAgeGroup(""); setSeason(""); await load();
-  };
-
   const addPlayer = async () => {
-    if (!selectedTeamId || !playerName.trim()) return notify("Missing info", "Choose a team and enter the player's name.");
-    if (birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return notify("Birth date format", "Use YYYY-MM-DD or leave it blank.");
+    if (!selectedTeamId || !playerName.trim()) {
+      setPlayerNameError(!playerName.trim() ? "Enter the player's name." : "Choose a team first.");
+      return;
+    }
+    if (birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+      setBirthDateError("Use YYYY-MM-DD or leave it blank.");
+      return;
+    }
+    setPlayerNameError(undefined);
+    setBirthDateError(undefined);
     setBusy(true);
-    const { error } = await supabase.from("players").insert({ team_id: selectedTeamId, full_name: playerName.trim(), position: position.trim() || null, birth_date: birthDate || null });
+    const { error } = await supabase
+      .from("players")
+      .insert({ team_id: selectedTeamId, full_name: playerName.trim(), position: position.trim() || null, birth_date: birthDate || null });
     setBusy(false);
     if (error) return notify("Couldn't add player", error.message);
-    setPlayerName(""); setPosition(""); setBirthDate(""); await load();
+    setPlayerName("");
+    setPosition("");
+    setBirthDate("");
+    await load();
   };
 
   const toggleCoach = async (coachId: string) => {
@@ -114,8 +174,15 @@ export default function ClubManagement() {
     const { data, error } = await supabase
       .from("player_payments")
       .upsert(
-        { player_id: playerId, club_id: profile.club_id, period, status: nextStatus, marked_by: profile.id, marked_at: new Date().toISOString() },
-        { onConflict: "player_id,period" }
+        {
+          player_id: playerId,
+          club_id: profile.club_id,
+          period,
+          status: nextStatus,
+          marked_by: profile.id,
+          marked_at: new Date().toISOString(),
+        },
+        { onConflict: "player_id,period" },
       )
       .select()
       .single();
@@ -124,7 +191,11 @@ export default function ClubManagement() {
   };
 
   const archivePlayer = async (player: Player) => {
-    const ok = await confirmAsync(`Archive ${player.full_name}?`, "The player's history stays in the database but they disappear from the active roster.", "Archive");
+    const ok = await confirmAsync(
+      `Archive ${player.full_name}?`,
+      "Their history is kept — they just come off the active roster.",
+      "Archive",
+    );
     if (!ok) return;
     const { error } = await supabase.from("players").update({ archived_at: new Date().toISOString() }).eq("id", player.id);
     if (error) notify("Couldn't archive player", error.message);
@@ -133,7 +204,11 @@ export default function ClubManagement() {
 
   const archiveTeam = async () => {
     if (!selectedTeam) return;
-    const ok = await confirmAsync(`Archive ${teamLabel(selectedTeam)}?`, "Players and history stay intact. Move active players first if needed.", "Archive");
+    const ok = await confirmAsync(
+      `Archive ${teamLabel(selectedTeam)}?`,
+      "Players and history stay intact. Move active players first if needed.",
+      "Archive",
+    );
     if (!ok) return;
     const { error } = await supabase.from("teams").update({ archived_at: new Date().toISOString() }).eq("id", selectedTeam.id);
     if (error) notify("Couldn't archive team", error.message);
@@ -141,86 +216,257 @@ export default function ClubManagement() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.pageTitle}>Run the club without opening Supabase</Text>
-      <Text style={styles.pageCopy}>Create teams, build rosters, assign coaches, and generate one-time parent link codes.</Text>
+    <Screen ref={scrollRef}>
+      <Text tone="secondary">Set up your teams, build rosters, and invite parents.</Text>
 
-      <View style={styles.card}>
-        <Text style={styles.heading}>Create Team</Text>
-        <TextInput style={styles.input} placeholder="Team name, e.g. U10 Boys Red" value={teamName} onChangeText={setTeamName} />
-        <View style={styles.row}><TextInput style={[styles.input, styles.flex]} placeholder="Age group" value={ageGroup} onChangeText={setAgeGroup} /><TextInput style={[styles.input, styles.flex]} placeholder="Season" value={season} onChangeText={setSeason} /></View>
-        <Pressable style={styles.primary} onPress={createTeam} disabled={busy}><Text style={styles.primaryText}>Create Team</Text></Pressable>
+      <Card style={{ gap: space[3] }}>
+        <View style={styles.headerRow}>
+          <Eyebrow>Setup Progress</Eyebrow>
+          <Text role="label" tone="brand">
+            {completedSteps}/{setupSteps.length} Steps
+          </Text>
+        </View>
+        <View style={styles.progressSegments}>
+          {setupSteps.map((step, i) => (
+            <View key={i} style={[styles.progressSegment, step.done && styles.progressSegmentDone]} />
+          ))}
+        </View>
+        <View style={{ gap: space[2] }}>
+          {setupSteps.map((step, i) => (
+            <View key={i} style={styles.stepRow}>
+              <Ionicons
+                name={step.done ? "checkmark-circle" : "ellipse-outline"}
+                size={16}
+                color={step.done ? color.icon.success : color.icon.muted}
+              />
+              <Text tone={step.done ? "primary" : "secondary"} role="bodySm">
+                {step.label}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </Card>
+
+      <View style={{ gap: space[3] }}>
+        <CardHeader title="Active Teams" action="+" onAction={() => router.push("/modals/create-team")} />
+        {teams.length === 0 ? (
+          <Card>
+            <Text tone="secondary">No active teams yet — tap + to create one.</Text>
+          </Card>
+        ) : (
+          teams.map((team) => {
+            const count = players.filter((p) => p.team_id === team.id).length;
+            const coaches = staff.filter((s) => teamCoaches.some((tc) => tc.team_id === team.id && tc.coach_id === s.id));
+            const isSelected = team.id === selectedTeamId;
+            return (
+              <Pressable key={team.id} onPress={() => setSelectedTeamId(team.id)}>
+                <Card style={[styles.teamCard, isSelected && styles.teamCardActive]}>
+                  <View style={styles.headerRow}>
+                    <View style={{ flex: 1, gap: space[1] }}>
+                      <Text role="h3">{team.name}</Text>
+                      <Text tone="secondary" role="bodySm">
+                        {team.season || "No season"}
+                      </Text>
+                    </View>
+                    {team.age_group ? <Badge label={team.age_group} tone="brand" /> : null}
+                  </View>
+
+                  <Text tone="secondary" role="bodySm">
+                    {count} {count === 1 ? "player" : "players"}
+                  </Text>
+
+                  {coaches.length > 0 ? (
+                    <View style={styles.avatarRow}>
+                      {coaches.map((c) => (
+                        <Avatar key={c.id} uri={c.avatar_url} name={c.full_name} size={28} />
+                      ))}
+                    </View>
+                  ) : (
+                    <Text tone="tertiary" role="caption">
+                      No coach assigned
+                    </Text>
+                  )}
+
+                  <Divider />
+
+                  <View style={styles.row}>
+                    <View style={{ flex: 1 }}>
+                      <Button label="Add Player" variant="secondary" size="sm" fullWidth onPress={() => focusAddPlayer(team.id)} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Button label="Invite Parents" variant="ghost" size="sm" fullWidth onPress={() => focusRoster(team.id)} />
+                    </View>
+                  </View>
+                </Card>
+              </Pressable>
+            );
+          })
+        )}
       </View>
 
-      <Text style={styles.sectionLabel}>ACTIVE TEAMS</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-        {teams.map((team) => <Pressable key={team.id} style={[styles.chip, selectedTeamId === team.id && styles.chipActive]} onPress={() => setSelectedTeamId(team.id)}><Text style={[styles.chipText, selectedTeamId === team.id && styles.chipTextActive]}>{teamLabel(team)}</Text></Pressable>)}
-      </ScrollView>
+      {selectedTeam && (
+        <>
+          {/* A one-person club has nobody to assign, so the picker is pure
+              ceremony — the director already coaches every team they make.
+              The whole card appears only once a second coach joins the club;
+              otherwise there is nothing to show, so nothing renders. */}
+          {staff.length > 1 && (
+            <Card style={{ gap: space[3] }}>
+              <Eyebrow>Assigned Coaches — {teamLabel(selectedTeam)}</Eyebrow>
+              {staff.map((coach) => {
+                const assigned = teamCoaches.some((tc) => tc.team_id === selectedTeam.id && tc.coach_id === coach.id);
+                return (
+                  <Pressable key={coach.id} style={styles.coachRow} onPress={() => toggleCoach(coach.id)}>
+                    <Avatar uri={coach.avatar_url} name={coach.full_name} size={32} />
+                    <Text style={{ flex: 1 }}>
+                      {coach.full_name} · {coach.role}
+                    </Text>
+                    <Ionicons
+                      name={assigned ? "checkmark-circle" : "ellipse-outline"}
+                      size={20}
+                      color={assigned ? color.icon.brand : color.icon.muted}
+                    />
+                  </Pressable>
+                );
+              })}
+            </Card>
+          )}
 
-      {selectedTeam && <>
-        <View style={styles.card}>
-          <View style={styles.headerRow}><View><Text style={styles.heading}>{teamLabel(selectedTeam)}</Text><Text style={styles.muted}>{selectedTeam.name} · {selectedTeam.season || "No season"}</Text></View><Pressable onPress={archiveTeam}><Text style={styles.dangerLink}>Archive team</Text></Pressable></View>
-          <Text style={styles.subheading}>Assigned Coaches</Text>
-          {staff.map((coach) => {
-            const assigned = teamCoaches.some((tc) => tc.team_id === selectedTeam.id && tc.coach_id === coach.id);
-            return <Pressable key={coach.id} style={styles.selectRow} onPress={() => toggleCoach(coach.id)}><View style={[styles.checkBox, assigned && styles.checkBoxOn]}>{assigned && <Text style={styles.check}>✓</Text>}</View><Text style={styles.selectText}>{coach.full_name} · {coach.role}</Text></Pressable>;
-          })}
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.heading}>Add Player to {teamLabel(selectedTeam)}</Text>
-          <TextInput style={styles.input} placeholder="Player full name" value={playerName} onChangeText={setPlayerName} />
-          <View style={styles.row}><TextInput style={[styles.input, styles.flex]} placeholder="Position" value={position} onChangeText={setPosition} /><TextInput style={[styles.input, styles.flex]} placeholder="Birth date YYYY-MM-DD" value={birthDate} onChangeText={setBirthDate} /></View>
-          <Pressable style={styles.primary} onPress={addPlayer} disabled={busy}><Text style={styles.primaryText}>Add Player</Text></Pressable>
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.headerRow}>
-            <Text style={styles.heading}>Roster ({selectedPlayers.length})</Text>
-            <View style={styles.monthNav}>
-              <Pressable onPress={() => setSelectedMonth((m) => addMonths(m, -1))}><Text style={styles.monthNavArrow}>‹</Text></Pressable>
-              <Text style={styles.monthNavLabel}>{format(selectedMonth, "MMM yyyy")}</Text>
-              <Pressable onPress={() => setSelectedMonth((m) => addMonths(m, 1))}><Text style={styles.monthNavArrow}>›</Text></Pressable>
-            </View>
-          </View>
-          <Text style={[styles.muted, styles.paymentHint]}>Tap Paid/Unpaid to record training fees for {format(selectedMonth, "MMMM")} — no money moves through the app.</Text>
-          {selectedPlayers.length === 0 ? <Text style={styles.muted}>No players on this team yet.</Text> : selectedPlayers.map((player) => {
-            const status: PaymentStatus = payments.find((p) => p.player_id === player.id)?.status ?? "unpaid";
-            const isPaid = status === "paid";
-            return (
-              <View key={player.id} style={styles.playerRow}>
-                <View style={styles.flex}>
-                  <Text style={styles.playerName}>{player.full_name}</Text>
-                  <Text style={styles.muted}>{player.position || "Position not set"}{player.parent_id ? " · Parent linked" : " · Parent not linked"}</Text>
+          <View ref={addPlayerCardRef} collapsable={false}>
+            <Card style={{ gap: space[3] }}>
+              <Eyebrow>Add Player to {teamLabel(selectedTeam)}</Eyebrow>
+              <Field
+                placeholder="Player full name"
+                value={playerName}
+                onChangeText={(v) => {
+                  setPlayerName(v);
+                  if (playerNameError) setPlayerNameError(undefined);
+                }}
+                error={playerNameError}
+              />
+              <View style={styles.row}>
+                <View style={{ flex: 1 }}>
+                  <Field placeholder="Position" value={position} onChangeText={setPosition} />
                 </View>
-                <Pressable style={[styles.paymentPill, isPaid && styles.paymentPillPaid]} onPress={() => togglePayment(player.id)}>
-                  <Text style={[styles.paymentPillText, isPaid && styles.paymentPillTextPaid]}>{isPaid ? "Paid" : "Unpaid"}</Text>
-                </Pressable>
-                <Pressable style={styles.smallButton} onPress={() => createParentCode(player)}><Text style={styles.smallButtonText}>Parent code</Text></Pressable>
-                <Pressable onPress={() => archivePlayer(player)}><Text style={styles.dangerLink}>Archive</Text></Pressable>
+                <View style={{ flex: 1 }}>
+                  <Field
+                    placeholder="Birth date YYYY-MM-DD"
+                    value={birthDate}
+                    onChangeText={(v) => {
+                      setBirthDate(v);
+                      if (birthDateError) setBirthDateError(undefined);
+                    }}
+                    error={birthDateError}
+                  />
+                </View>
               </View>
-            );
-          })}
-        </View>
-      </>}
-    </ScrollView>
+              <Button label="Add Player" onPress={addPlayer} disabled={busy} fullWidth />
+            </Card>
+          </View>
+
+          <View ref={rosterCardRef} collapsable={false}>
+            <Card style={{ gap: space[3] }}>
+              <Eyebrow>Roster ({selectedPlayers.length})</Eyebrow>
+              {selectedPlayers.length === 0 ? (
+                <EmptyState title="No players yet" body="Add players to this team to start building the roster." />
+              ) : (
+                selectedPlayers.map((player, i) => (
+                  <React.Fragment key={player.id}>
+                    {i > 0 && <Divider />}
+                    <View style={styles.playerRow}>
+                      <View style={{ flex: 1, gap: space[1] }}>
+                        <Text role="h3">{player.full_name}</Text>
+                        <Text tone="secondary" role="bodySm">
+                          {player.position || "Position not set"}
+                          {player.parent_id ? " · Parent linked" : " · Parent not linked"}
+                        </Text>
+                      </View>
+                      <Button label="Parent code" variant="secondary" size="sm" onPress={() => createParentCode(player)} />
+                      <Pressable onPress={() => archivePlayer(player)} hitSlop={8}>
+                        <Text role="caption" tone="danger">
+                          Archive
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </React.Fragment>
+                ))
+              )}
+            </Card>
+          </View>
+
+          <Card style={{ gap: space[3] }}>
+            <View style={styles.headerRow}>
+              <Eyebrow>Training Fees</Eyebrow>
+              <View style={styles.monthNav}>
+                <Pressable onPress={() => setSelectedMonth((m) => addMonths(m, -1))} hitSlop={8}>
+                  <Ionicons name="chevron-back" size={18} color={color.icon.brand} />
+                </Pressable>
+                <Text role="label">{format(selectedMonth, "MMM yyyy")}</Text>
+                <Pressable onPress={() => setSelectedMonth((m) => addMonths(m, 1))} hitSlop={8}>
+                  <Ionicons name="chevron-forward" size={18} color={color.icon.brand} />
+                </Pressable>
+              </View>
+            </View>
+            <Text tone="secondary" role="bodySm">
+              Tap Paid/Unpaid to record training fees for {format(selectedMonth, "MMMM")} — no money moves through the app.
+            </Text>
+            {selectedPlayers.length === 0 ? (
+              <EmptyState title="No players yet" body="Add players to this team to start tracking training fees." />
+            ) : (
+              selectedPlayers.map((player, i) => {
+                const status: PaymentStatus = payments.find((p) => p.player_id === player.id)?.status ?? "unpaid";
+                const isPaid = status === "paid";
+                return (
+                  <React.Fragment key={player.id}>
+                    {i > 0 && <Divider />}
+                    <View style={styles.playerRow}>
+                      <Text style={{ flex: 1 }}>{player.full_name}</Text>
+                      <Pressable onPress={() => togglePayment(player.id)}>
+                        <Badge label={isPaid ? "Paid" : "Unpaid"} tone={isPaid ? "success" : "danger"} />
+                      </Pressable>
+                    </View>
+                  </React.Fragment>
+                );
+              })
+            )}
+          </Card>
+
+          <Card style={{ gap: space[3] }}>
+            <Eyebrow tone="danger">Archive Team</Eyebrow>
+            <Button label="Archive team" variant="danger" fullWidth onPress={archiveTeam} />
+          </Card>
+        </>
+      )}
+
+      <View style={styles.infoCallout}>
+        <IconChip name="information-circle" tone="brand" />
+        <Text tone="secondary" style={{ flex: 1 }}>
+          Archiving a team or player keeps their history intact — nothing is deleted, and you can always reference past rosters later.
+        </Text>
+      </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, backgroundColor: "#0B0B0D", paddingBottom: 40 }, center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: "#0B0B0D" },
-  pageTitle: { fontSize: 22, fontWeight: "800", color: "#F2F2F3" }, pageCopy: { color: "#9A9DA3", lineHeight: 19, marginTop: 5, marginBottom: 16 },
-  card: { backgroundColor: "#141416", borderRadius: 14, padding: 16, marginBottom: 14 }, heading: { fontSize: 17, fontWeight: "800", color: "#0A6CFF", marginBottom: 10 }, subheading: { fontSize: 12, color: "#9A9DA3", fontWeight: "700", marginTop: 16, marginBottom: 8, textTransform: "uppercase" },
-  input: { borderWidth: 1, borderColor: "#242424", borderRadius: 10, padding: 12, fontSize: 14, marginBottom: 10, color: "#F2F2F3", backgroundColor: "#0B0B0D" }, row: { flexDirection: "row", gap: 8 }, flex: { flex: 1 }, primary: { backgroundColor: "#0A6CFF", borderRadius: 9, padding: 13, alignItems: "center" }, primaryText: { color: "#fff", fontWeight: "700" },
-  sectionLabel: { fontSize: 11, fontWeight: "700", color: "#9A9DA3", letterSpacing: .5, marginBottom: 8 }, chips: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingBottom: 14 }, chip: { borderWidth: 1, borderColor: "#0A6CFF", paddingVertical: 8, paddingHorizontal: 12, borderRadius: 18 }, chipActive: { backgroundColor: "#0A6CFF" }, chipText: { color: "#0A6CFF", fontWeight: "600" }, chipTextActive: { color: "#fff" },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }, muted: { color: "#9A9DA3", fontSize: 12 }, selectRow: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 7 }, checkBox: { width: 20, height: 20, borderRadius: 5, borderWidth: 2, borderColor: "#0A6CFF", alignItems: "center", justifyContent: "center" }, checkBoxOn: { backgroundColor: "#0A6CFF" }, check: { color: "#fff", fontWeight: "800", fontSize: 12 }, selectText: { color: "#F2F2F3", fontWeight: "600" },
-  playerRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#242424" }, playerName: { fontWeight: "700", color: "#F2F2F3" }, smallButton: { backgroundColor: "#17181B", borderRadius: 8, paddingVertical: 7, paddingHorizontal: 9 }, smallButtonText: { color: "#0A6CFF", fontSize: 11, fontWeight: "700" }, dangerLink: { color: "#FF6B6B", fontSize: 11, fontWeight: "700" },
-  monthNav: { flexDirection: "row", alignItems: "center", gap: 10 },
-  monthNavArrow: { color: "#0A6CFF", fontSize: 20, fontWeight: "800", paddingHorizontal: 4 },
-  monthNavLabel: { color: "#F2F2F3", fontWeight: "700", fontSize: 13, minWidth: 68, textAlign: "center" },
-  paymentHint: { marginBottom: 6 },
-  paymentPill: { backgroundColor: "#3A1616", borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10 },
-  paymentPillPaid: { backgroundColor: "#173A22" },
-  paymentPillText: { color: "#FF8A80", fontSize: 11, fontWeight: "700" },
-  paymentPillTextPaid: { color: "#6FDB8F" },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  row: { flexDirection: "row", gap: space[3], alignItems: "center" },
+  progressSegments: { flexDirection: "row", gap: space[2] },
+  progressSegment: { flex: 1, height: space[2], borderRadius: radius.full, backgroundColor: color.bg.sunken },
+  progressSegmentDone: { backgroundColor: color.bg.brand },
+  stepRow: { flexDirection: "row", alignItems: "center", gap: space[2] },
+  teamCard: { gap: space[3] },
+  teamCardActive: { borderWidth: borderWidth.thin, borderColor: color.border.brand },
+  avatarRow: { flexDirection: "row", gap: space[2] },
+  coachRow: { flexDirection: "row", alignItems: "center", gap: space[3], paddingVertical: space[2] },
+  playerRow: { flexDirection: "row", alignItems: "center", gap: space[2], paddingVertical: space[2], flexWrap: "wrap" },
+  monthNav: { flexDirection: "row", alignItems: "center", gap: space[2] },
+  infoCallout: {
+    flexDirection: "row",
+    gap: space[3],
+    padding: space[4],
+    borderRadius: radius.card,
+    backgroundColor: color.bg.brandSubtle,
+    alignItems: "flex-start",
+  },
 });

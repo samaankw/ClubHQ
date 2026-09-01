@@ -60,7 +60,7 @@ describe("Conversation send", () => {
 
     const input = await screen.findByPlaceholderText("Message…");
     await fireEvent.changeText(input, "field is closed tomorrow");
-    await fireEvent.press(screen.getByLabelText("Send message"));
+    await fireEvent.press(screen.getByLabelText("Send"));
 
     await waitFor(() => expect(screen.getByText("Not sent · tap to retry")).toBeTruthy());
     expect(screen.getByText("field is closed tomorrow")).toBeTruthy();
@@ -72,7 +72,7 @@ describe("Conversation send", () => {
 
     const input = await screen.findByPlaceholderText("Message…");
     await fireEvent.changeText(input, "trying again");
-    await fireEvent.press(screen.getByLabelText("Send message"));
+    await fireEvent.press(screen.getByLabelText("Send"));
     await waitFor(() => expect(screen.getByText("Not sent · tap to retry")).toBeTruthy());
 
     mockInsertShouldFail = false;
@@ -95,16 +95,17 @@ describe("Conversation send", () => {
     // Not awaited: RNTL v14's fireEvent.press awaits the handler's own
     // returned promise, which won't resolve until releaseInsert() runs below
     // -- awaiting it here would deadlock the test against itself.
-    fireEvent.press(screen.getByLabelText("Send message"));
+    fireEvent.press(screen.getByLabelText("Send"));
     // Two "Sending…" nodes once the optimistic message lands: the button's
     // own label, and the pending message bubble's timestamp line.
     await waitFor(() => expect(screen.getAllByText("Sending…")).toHaveLength(2));
 
     // The draft cleared after the first send; type a second message and try
-    // to send it while the first is still unresolved. The button is disabled
-    // while sending, so this press is a no-op.
+    // to send it while the first is still unresolved. The button's own label
+    // and accessibilityLabel both read "Sending…" now, and it's disabled, so
+    // this press is a no-op.
     await fireEvent.changeText(input, "second message");
-    fireEvent.press(screen.getByLabelText("Send message"));
+    fireEvent.press(screen.getByLabelText("Sending…"));
 
     expect(mockInsertCallCount).toBe(1);
 

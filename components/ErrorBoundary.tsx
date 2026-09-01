@@ -1,6 +1,8 @@
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { reportError } from "@/lib/errorReporting";
+import { Button, Text } from "@/components/ui";
+import { color, space } from "@/theme";
 
 interface Props {
   children: React.ReactNode;
@@ -29,14 +31,12 @@ export default class ErrorBoundary extends React.Component<Props, State> {
     if (this.state.error) {
       return (
         <View style={styles.container} accessibilityLiveRegion="polite">
-          <Text style={styles.title}>Something went wrong</Text>
-          <Text style={styles.body}>
+          <Text role="h1">Something went wrong</Text>
+          <Text role="body" tone="secondary" style={styles.body}>
             ClubHQ ran into a problem and couldn't continue. Your data is safe -- try again, and if it keeps happening, close and reopen the
             app.
           </Text>
-          <Pressable style={styles.button} onPress={this.reset} accessibilityRole="button" accessibilityLabel="Try again">
-            <Text style={styles.buttonText}>Try again</Text>
-          </Pressable>
+          <Button label="Try again" onPress={this.reset} />
         </View>
       );
     }
@@ -49,12 +49,9 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0B0B0D",
-    padding: 24,
-    gap: 12,
+    backgroundColor: color.bg.page,
+    padding: space[6],
+    gap: space[3],
   },
-  title: { fontSize: 20, fontWeight: "800", color: "#F2F2F3" },
-  body: { fontSize: 14, color: "#9A9DA3", textAlign: "center", lineHeight: 20 },
-  button: { backgroundColor: "#0A6CFF", borderRadius: 10, paddingVertical: 12, paddingHorizontal: 24, marginTop: 8 },
-  buttonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+  body: { textAlign: "center" },
 });

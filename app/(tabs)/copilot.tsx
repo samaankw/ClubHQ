@@ -1,7 +1,11 @@
 import React, { useState, useRef } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
+import { View, TextInput, Pressable, StyleSheet, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { Screen, Text, IconChip, ListRow, Badge, EmptyState } from "@/components/ui";
+import type { IconName } from "@/components/ui";
+import { color, space, radius, borderWidth, type as typeTokens, opacity } from "@/theme";
 
 interface ChatMessage {
   id: string;
@@ -9,11 +13,11 @@ interface ChatMessage {
   text: string;
 }
 
-const SUGGESTIONS = [
-  "Which players improved the most this season?",
-  "What's the most common weakness across the club?",
-  "Which coaches are completing evaluations consistently?",
-  "What's our homework completion rate?",
+const SUGGESTIONS: { text: string; icon: IconName }[] = [
+  { text: "Which players improved the most this season?", icon: "trending-up" },
+  { text: "What's the most common weakness across the club?", icon: "warning-outline" },
+  { text: "Which coaches are completing evaluations consistently?", icon: "checkmark-done" },
+  { text: "What's our homework completion rate?", icon: "stats-chart" },
 ];
 
 export default function Copilot() {
@@ -57,23 +61,29 @@ export default function Copilot() {
 
   if (!canUse) {
     return (
-      <View style={styles.locked}>
-        <Text style={styles.lockedText}>The Director Copilot is available to coaches and directors.</Text>
-      </View>
+      <Screen>
+        <EmptyState icon="lock-closed" title="Copilot locked" body="The Director Copilot is available to coaches and directors." />
+      </Screen>
     );
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: "#0B0B0D" }} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={90}>
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={90}>
       {messages.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>Ask about your club</Text>
-          <Text style={styles.emptySubtitle}>Player development, coach activity, homework completion — grounded in your live data.</Text>
-          {SUGGESTIONS.map((s) => (
-            <Pressable key={s} style={styles.suggestionChip} onPress={() => ask(s)}>
-              <Text style={styles.suggestionText}>{s}</Text>
-            </Pressable>
-          ))}
+          <IconChip name="sparkles" tone="brand" size={28} style={styles.emptyIcon} />
+          <Text role="h1" style={styles.center}>
+            Ask about your club
+          </Text>
+          <Text tone="secondary" style={[styles.center, styles.emptySubtitle]}>
+            Player development, coach activity, homework completion — grounded in your live data.
+          </Text>
+          <View style={{ gap: space[2] }}>
+            {SUGGESTIONS.map((s) => (
+              <ListRow key={s.text} icon={s.icon} title={s.text} onPress={() => ask(s.text)} />
+            ))}
+          </View>
+          <Badge label="GROUNDED IN YOUR LIVE DATA" tone="brand" style={styles.groundedBadge} />
         </View>
       ) : (
         <FlatList
@@ -83,12 +93,12 @@ export default function Copilot() {
           initialNumToRender={12}
           maxToRenderPerBatch={12}
           windowSize={7}
-          contentContainerStyle={{ padding: 16 }}
+          contentContainerStyle={{ padding: space[4] }}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
           renderItem={({ item }) => (
             <View style={[styles.bubbleRow, item.role === "user" && styles.bubbleRowMine]}>
               <View style={[styles.bubble, item.role === "user" ? styles.bubbleMine : styles.bubbleTheirs]}>
-                <Text style={[styles.bubbleText, item.role === "user" && styles.bubbleTextMine]}>{item.text}</Text>
+                <Text tone={item.role === "user" ? "inverse" : "primary"}>{item.text}</Text>
               </View>
             </View>
           )}
@@ -97,8 +107,10 @@ export default function Copilot() {
 
       {asking && (
         <View style={styles.thinkingRow}>
-          <ActivityIndicator size="small" color="#0A6CFF" />
-          <Text style={styles.thinkingText}>Pulling club data…</Text>
+          <ActivityIndicator size="small" color={color.icon.brand} />
+          <Text tone="secondary" role="bodySm">
+            Pulling club data…
+          </Text>
         </View>
       )}
 
@@ -108,10 +120,17 @@ export default function Copilot() {
           value={draft}
           onChangeText={setDraft}
           placeholder="Ask the Copilot…"
+          placeholderTextColor={color.text.tertiary}
           onSubmitEditing={() => ask(draft)}
         />
-        <Pressable style={styles.sendButton} onPress={() => ask(draft)} disabled={!draft.trim() || asking}>
-          <Text style={styles.sendText}>Ask</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Send"
+          style={[styles.sendButton, (!draft.trim() || asking) && styles.sendButtonDisabled]}
+          onPress={() => ask(draft)}
+          disabled={!draft.trim() || asking}
+        >
+          <Ionicons name="arrow-up" size={20} color={color.icon.inverse} />
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -119,24 +138,43 @@ export default function Copilot() {
 }
 
 const styles = StyleSheet.create({
-  locked: { flex: 1, alignItems: "center", justifyContent: "center", padding: 30, backgroundColor: "#0B0B0D" },
-  lockedText: { color: "#9A9DA3", textAlign: "center", fontSize: 15 },
-  emptyState: { flex: 1, padding: 24, paddingTop: 60, backgroundColor: "#0B0B0D" },
-  emptyTitle: { fontSize: 22, fontWeight: "800", color: "#F2F2F3", marginBottom: 6 },
-  emptySubtitle: { fontSize: 14, color: "#9A9DA3", marginBottom: 24, lineHeight: 20 },
-  suggestionChip: { backgroundColor: "#17181B", borderRadius: 12, padding: 14, marginBottom: 10 },
-  suggestionText: { color: "#0A6CFF", fontWeight: "600" },
-  bubbleRow: { marginBottom: 12, alignItems: "flex-start" },
+  flex: { flex: 1, backgroundColor: color.bg.page },
+  center: { textAlign: "center" },
+  emptyState: { flex: 1, padding: space[6], paddingTop: space[8], gap: space[3], alignItems: "stretch" },
+  emptyIcon: { alignSelf: "center", width: space[9], height: space[9], borderRadius: radius.full, marginBottom: space[2] },
+  emptySubtitle: { marginBottom: space[3] },
+  groundedBadge: { alignSelf: "center", marginTop: space[3] },
+  bubbleRow: { marginBottom: space[3], alignItems: "flex-start" },
   bubbleRowMine: { alignItems: "flex-end" },
-  bubble: { maxWidth: "85%", borderRadius: 14, padding: 12 },
-  bubbleTheirs: { backgroundColor: "#17181B" },
-  bubbleMine: { backgroundColor: "#0A6CFF" },
-  bubbleText: { fontSize: 15, color: "#F2F2F3", lineHeight: 21 },
-  bubbleTextMine: { color: "#fff" },
-  thinkingRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 20, paddingBottom: 6, backgroundColor: "#0B0B0D" },
-  thinkingText: { color: "#9A9DA3", fontSize: 13 },
-  inputRow: { flexDirection: "row", padding: 10, borderTopWidth: 1, borderTopColor: "#1C1D20", backgroundColor: "#0B0B0D", gap: 8 },
-  input: { flex: 1, borderWidth: 1, borderColor: "#242424", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: "#F2F2F3", backgroundColor: "#141416" },
-  sendButton: { backgroundColor: "#0A6CFF", borderRadius: 20, paddingHorizontal: 16, justifyContent: "center" },
-  sendText: { color: "#fff", fontWeight: "700" },
+  bubble: { maxWidth: "85%", borderRadius: radius.lg, padding: space[3] },
+  bubbleTheirs: { backgroundColor: color.bg.sunken },
+  bubbleMine: { backgroundColor: color.bg.brand },
+  thinkingRow: { flexDirection: "row", alignItems: "center", gap: space[2], paddingHorizontal: space[5], paddingBottom: space[2] },
+  inputRow: {
+    flexDirection: "row",
+    padding: space[3],
+    borderTopWidth: borderWidth.thin,
+    borderTopColor: color.border.subtle,
+    gap: space[2],
+  },
+  input: {
+    flex: 1,
+    borderWidth: borderWidth.thin,
+    borderColor: color.border.subtle,
+    borderRadius: radius.full,
+    paddingHorizontal: space[4],
+    paddingVertical: space[3],
+    fontSize: typeTokens.body.fontSize,
+    color: color.text.primary,
+    backgroundColor: color.bg.surface,
+  },
+  sendButton: {
+    width: space[10],
+    height: space[10],
+    borderRadius: radius.full,
+    backgroundColor: color.bg.brand,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sendButtonDisabled: { opacity: opacity.disabled },
 });

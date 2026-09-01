@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef } from "react";
+import { useFocusEffect } from "expo-router";
 import { supabase } from "./supabase";
 import { useAuth } from "./AuthProvider";
+import { dedupeLocations } from "./dedupeLocations";
 import { Announcement, ClubEvent, DevelopmentPlan, Player } from "@/types/db";
 import { useAsyncData } from "./asyncData";
-// Defined in ./feed so the pure feed-building module stays free of React
-// and Supabase imports; re-exported here for existing call sites.
-import type { AnnouncementWithRead } from "./feed";
-export type { AnnouncementWithRead } from "./feed";
+
+export type AnnouncementWithRead = Announcement & { isRead: boolean };
 
 export function useNextEvent() {
   const { profile } = useAuth();
@@ -253,4 +253,158 @@ export function useLatestDevelopmentPlan(playerId?: string) {
   );
 
   return { plan, loading, error, refresh: retry };
+}
+
+/**
+ * Distinct venues this club has used before, most-recent first — powers the
+ * location suggestion chips on the event form. A read of existing `events`
+ * rows only: no schema change, no migration, and no hardcoded fallback city
+ * (a club's own history is always right; a hardcoded one wouldn't be).
+ */
+export function useRecentLocations(limit = 6) {
+  const { profile } = useAuth();
+  const clubId = profile?.club_id;
+
+  const {
+    data: locations,
+    loading,
+    error,
+    retry,
+  } = useAsyncData<string[]>(
+    async () => {
+      if (!clubId) return [];
+      const { data, error } = await supabase
+        .from("events")
+        .select("location")
+        .eq("club_id", clubId)
+        .not("location", "is", null)
+        // "Recent" means recently entered, not furthest in the future — a club
+        // with a season already on the calendar would otherwise be offered the
+        // venues of its most distant fixtures. The cap keeps this from pulling
+        // a whole season's rows to derive a handful of strings.
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      const rows = (data as { location: string | null }[]) ?? [];
+      return dedupeLocations(
+        rows.map((r) => r.location),
+        limit,
+      );
+    },
+    [clubId, limit],
+    [],
+  );
+
+  return { locations, loading, error, refresh: retry };
+}
+
+export interface SetupStep {
+  key: "club" | "team" | "players" | "practice";
+  title: string;
+  /** Shown under the title once complete, e.g. the club's name. */
+  detail?: string;
+  done: boolean;
+  /** Where tapping it should go. */
+  href: string;
+}
+
+interface SetupProgressData {
+  steps: SetupStep[];
+  teamCount: number;
+  playerCount: number;
+}
+
+const EMPTY_SETUP_PROGRESS: SetupProgressData = { steps: [], teamCount: 0, playerCount: 0 };
+
+/**
+ * Derives the four-step "getting started" checklist a newly-onboarded
+ * director sees on the dashboard, purely from existing tables — no schema
+ * change. Each step after "club" is a cheap existence check (`count: "exact",
+ * head: true`) rather than a full row fetch, since all the checklist needs is
+ * whether at least one non-archived row exists.
+ */
+export function useSetupProgress() {
+  const { profile } = useAuth();
+  const clubId = profile?.club_id;
+  const role = profile?.role;
+
+  const { data, loading, error, retry } = useAsyncData<SetupProgressData>(
+    async () => {
+      // Team/player creation is director-gated in RLS ("teams_write_staff",
+      // "players_insert_staff" both require role = 'director'), and this
+      // checklist only ever points at those actions — so a coach or parent
+      // gets an empty checklist rather than four queries they have no use for.
+      if (!clubId || role !== "director") return EMPTY_SETUP_PROGRESS;
+
+      const [clubResult, teamResult, playerResult, eventResult] = await Promise.all([
+        supabase.from("clubs").select("name").eq("id", clubId).maybeSingle(),
+        supabase.from("teams").select("id", { count: "exact", head: true }).eq("club_id", clubId).is("archived_at", null),
+        supabase
+          .from("players")
+          .select("id, teams!inner(club_id)", { count: "exact", head: true })
+          .eq("teams.club_id", clubId)
+          .is("archived_at", null),
+        supabase.from("events").select("id", { count: "exact", head: true }).eq("club_id", clubId),
+      ]);
+      if (clubResult.error) throw clubResult.error;
+      if (teamResult.error) throw teamResult.error;
+      if (playerResult.error) throw playerResult.error;
+      if (eventResult.error) throw eventResult.error;
+
+      const clubName = (clubResult.data as { name: string } | null)?.name;
+      const teamCount = teamResult.count ?? 0;
+      const playerCount = playerResult.count ?? 0;
+
+      const steps: SetupStep[] = [
+        {
+          key: "club",
+          title: "Create Club Profile",
+          detail: clubName ? `${clubName} established` : undefined,
+          done: true,
+          href: "/profile",
+        },
+        { key: "team", title: "Setup your first team", done: teamCount > 0, href: "/club-management" },
+        { key: "players", title: "Add your roster", done: playerCount > 0, href: "/(tabs)/players" },
+        {
+          // Counts any event, not just type = 'practice', so the label has to
+          // match: a director whose first booking is a game or a club social
+          // has scheduled something and shouldn't still be nagged.
+          key: "practice",
+          title: "Schedule your first session",
+          done: (eventResult.count ?? 0) > 0,
+          href: "/modals/create-event",
+        },
+      ];
+
+      return { steps, teamCount, playerCount };
+    },
+    [clubId, role],
+    EMPTY_SETUP_PROGRESS,
+  );
+
+  // Focus, not mount: expo-router keeps tab screens mounted, so a director who
+  // creates their first team and comes back would otherwise still be told to
+  // "Setup your first team" until the app was relaunched. Every step in this
+  // checklist is completed on a different screen, so re-deriving on focus is
+  // the whole point. club-management and the Players tab do the same.
+  useFocusEffect(
+    useCallback(() => {
+      retry();
+    }, [retry]),
+  );
+
+  const completed = data.steps.filter((s) => s.done).length;
+  const total = data.steps.length;
+
+  return {
+    steps: data.steps,
+    completed,
+    total,
+    allDone: total > 0 && completed === total,
+    loading,
+    error,
+    teamCount: data.teamCount,
+    playerCount: data.playerCount,
+    refresh: retry,
+  };
 }

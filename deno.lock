@@ -75,6 +75,7 @@
         "npm:react-native-web@~0.21.2",
         "npm:react-native-webview@13.16.1",
         "npm:react-native@0.86.3",
+        "npm:react-test-renderer@^19.2.3",
         "npm:react@19.2.3",
         "npm:typescript@~6.0.3"
       ]

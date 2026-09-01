@@ -1,5 +1,6 @@
-import React, { useState } from "react";
-import { View, Text, FlatList, TextInput, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
+import React, { useMemo, useState } from "react";
+import { View, FlatList, Pressable, StyleSheet, ActivityIndicator } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { supabase } from "@/lib/supabase";
@@ -9,6 +10,8 @@ import { Drill } from "@/types/db";
 import DrillVideoModal from "@/components/DrillVideoModal";
 import { useAsyncData } from "@/lib/asyncData";
 import ListState from "@/components/ListState";
+import { Screen, Card, Eyebrow, Text, Button, Field, Chip, FilterChipRow, Badge, IconChip, Divider, EmptyState } from "@/components/ui";
+import { color, space, radius } from "@/theme";
 
 async function uploadDrillVideo(clubId: string, localUri: string): Promise<string> {
   const extMatch = /\.(\w+)$/.exec(localUri);
@@ -44,6 +47,8 @@ const SKILLS: { key: string; label: string }[] = [
   { key: "positioning", label: "Positioning" },
 ];
 
+const CATEGORY_OPTIONS = ["All", ...SKILLS.map((s) => s.label)];
+
 export default function ManageDrills() {
   const { profile } = useAuth();
   const clubId = profile?.club_id;
@@ -75,6 +80,10 @@ export default function ManageDrills() {
   const [submitting, setSubmitting] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [watchingDrill, setWatchingDrill] = useState<Drill | null>(null);
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("All");
+  const [titleError, setTitleError] = useState<string | undefined>();
+  const [descriptionError, setDescriptionError] = useState<string | undefined>();
 
   const canManageDrills = profile?.role === "coach" || profile?.role === "director";
 
@@ -86,6 +95,8 @@ export default function ManageDrills() {
     setTitle("");
     setDescription("");
     setVideoUrl("");
+    setTitleError(undefined);
+    setDescriptionError(undefined);
   };
 
   const startEdit = (drill: Drill) => {
@@ -94,6 +105,10 @@ export default function ManageDrills() {
     setTitle(drill.title);
     setDescription(drill.description);
     setVideoUrl(drill.video_url ?? "");
+    // The fields are being overwritten with real values, so any error left
+    // over from a previous empty submit no longer describes what's on screen.
+    setTitleError(undefined);
+    setDescriptionError(undefined);
     setShowForm(true);
   };
 
@@ -151,8 +166,15 @@ export default function ManageDrills() {
   };
 
   const submit = async () => {
-    if (!title.trim() || !description.trim() || !profile?.club_id) {
-      notify("Missing info", "Add at least a title and description.");
+    // Checked separately from the field validation below: folding it into the
+    // same condition meant a null club_id set both errors to undefined and
+    // returned, so the button did nothing at all with nothing to explain it.
+    if (!profile?.club_id) {
+      return notify("No club found", "Your profile isn't linked to a club yet.");
+    }
+    if (!title.trim() || !description.trim()) {
+      setTitleError(!title.trim() ? "Add a drill title." : undefined);
+      setDescriptionError(!description.trim() ? "Add instructions a parent/player can follow." : undefined);
       return;
     }
     setSubmitting(true);
@@ -179,126 +201,185 @@ export default function ManageDrills() {
     load();
   };
 
-  return (
-    <View style={styles.container}>
-      <Stack.Screen options={{ title: "Drill Library" }} />
-      <Text style={styles.intro}>
-        {canManageDrills
-          ? "The AI only assigns homework from this library — add your own videos here so it always points players to something you've vetted."
-          : "The AI only assigns homework from this vetted library — coaches and directors keep it up to date."}
-      </Text>
+  const visibleDrills = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return drills.filter((d) => {
+      if (category !== "All") {
+        const key = SKILLS.find((s) => s.label === category)?.key;
+        if (d.skill !== key) return false;
+      }
+      if (!q) return true;
+      return d.title.toLowerCase().includes(q) || d.description.toLowerCase().includes(q);
+    });
+  }, [drills, category, query]);
+
+  const listHeader = (
+    <View style={{ gap: space[3] }}>
+      <View style={[styles.infoCallout, styles.inset]}>
+        <IconChip name="sparkles" tone="brand" />
+        <Text tone="secondary" style={{ flex: 1 }}>
+          {canManageDrills
+            ? "The AI only assigns homework from this library — add your own videos here so it always points players to something you've vetted."
+            : "The AI only assigns homework from this vetted library — coaches and directors keep it up to date."}
+        </Text>
+      </View>
+
+      <View style={styles.inset}>
+        <Field placeholder="Search drills…" value={query} onChangeText={setQuery} />
+      </View>
+
+      <FilterChipRow options={CATEGORY_OPTIONS} value={category} onChange={setCategory} />
 
       {canManageDrills && (
-        <>
-          <Pressable
-            style={styles.addButton}
+        <View style={[styles.inset, { gap: space[3] }]}>
+          <Button
+            label={showForm ? "Cancel" : "+ Add a Drill"}
+            fullWidth
             onPress={() => {
               if (showForm) resetForm();
               setShowForm((s) => !s);
             }}
-          >
-            <Text style={styles.addButtonText}>{showForm ? "Cancel" : "+ Add a Drill"}</Text>
-          </Pressable>
+          />
 
           {showForm && (
-            <ScrollView style={styles.form}>
-              {editingId && <Text style={styles.editingLabel}>Editing drill</Text>}
+            <Card style={{ gap: space[3] }}>
+              {editingId ? <Eyebrow tone="brand">Editing Drill</Eyebrow> : null}
               <View style={styles.chipRow}>
                 {SKILLS.map((s) => (
-                  <Pressable key={s.key} style={[styles.chip, skill === s.key && styles.chipActive]} onPress={() => setSkill(s.key)}>
-                    <Text style={[styles.chipText, skill === s.key && styles.chipTextActive]}>{s.label}</Text>
-                  </Pressable>
+                  <Chip key={s.key} label={s.label} selected={skill === s.key} onPress={() => setSkill(s.key)} />
                 ))}
               </View>
-              <TextInput
-                style={styles.input}
+              <Field
                 placeholder="Drill title"
-                placeholderTextColor="#6B6F76"
                 value={title}
-                onChangeText={setTitle}
+                onChangeText={(v) => {
+                  setTitle(v);
+                  if (titleError) setTitleError(undefined);
+                }}
+                error={titleError}
               />
-              <TextInput
-                style={[styles.input, styles.textarea]}
+              <Field
                 placeholder="Instructions a parent/player can follow"
-                placeholderTextColor="#6B6F76"
                 value={description}
-                onChangeText={setDescription}
+                onChangeText={(v) => {
+                  setDescription(v);
+                  if (descriptionError) setDescriptionError(undefined);
+                }}
                 multiline
+                error={descriptionError}
               />
               {videoUrl ? (
-                <Pressable style={styles.uploadButton} onPress={pickAndUploadVideo} disabled={uploadingVideo}>
-                  <Text style={styles.uploadButtonText}>Video uploaded ✓ — replace it</Text>
-                </Pressable>
+                <Button
+                  label="Video uploaded ✓ — replace it"
+                  variant="secondary"
+                  fullWidth
+                  onPress={pickAndUploadVideo}
+                  disabled={uploadingVideo}
+                />
               ) : uploadingVideo ? (
-                <View style={styles.uploadButton}>
-                  <ActivityIndicator color="#0A6CFF" />
+                <View style={styles.uploadingRow}>
+                  <ActivityIndicator color={color.icon.brand} />
                 </View>
               ) : (
-                <View style={styles.uploadRow}>
-                  <Pressable style={[styles.uploadButton, styles.uploadButtonHalf]} onPress={recordAndUploadVideo}>
-                    <Text style={styles.uploadButtonText}>📹 Record now</Text>
-                  </Pressable>
-                  <Pressable style={[styles.uploadButton, styles.uploadButtonHalf]} onPress={pickAndUploadVideo}>
-                    <Text style={styles.uploadButtonText}>🎥 Choose existing</Text>
-                  </Pressable>
+                <View style={styles.row}>
+                  <View style={{ flex: 1 }}>
+                    <Button label="📹 Record now" variant="secondary" fullWidth onPress={recordAndUploadVideo} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Button label="🎥 Choose existing" variant="secondary" fullWidth onPress={pickAndUploadVideo} />
+                  </View>
                 </View>
               )}
-              <Text style={styles.orDivider}>— or paste a link (YouTube, Vimeo, etc.) —</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Video URL (optional)"
-                placeholderTextColor="#6B6F76"
-                value={videoUrl}
-                onChangeText={setVideoUrl}
-                autoCapitalize="none"
+              <Text role="caption" tone="tertiary" style={styles.center}>
+                — or paste a link (YouTube, Vimeo, etc.) —
+              </Text>
+              <Field placeholder="Video URL (optional)" value={videoUrl} onChangeText={setVideoUrl} autoCapitalize="none" />
+              <Button
+                label={submitting ? "Saving…" : editingId ? "Save Changes" : "Save Drill"}
+                fullWidth
+                onPress={submit}
+                disabled={submitting}
               />
-              <Pressable style={styles.submitButton} onPress={submit} disabled={submitting}>
-                <Text style={styles.submitButtonText}>{submitting ? "Saving…" : editingId ? "Save Changes" : "Save Drill"}</Text>
-              </Pressable>
-            </ScrollView>
+            </Card>
           )}
-        </>
+        </View>
       )}
+    </View>
+  );
+
+  return (
+    <Screen scroll={false}>
+      <Stack.Screen options={{ title: "Drill Library" }} />
 
       <FlatList
-        data={drills}
+        data={visibleDrills}
         keyExtractor={(d) => d.id}
-        onRefresh={load}
-        refreshing={drillsLoading}
         initialNumToRender={10}
         maxToRenderPerBatch={10}
         windowSize={7}
-        contentContainerStyle={{ paddingTop: 8 }}
+        onRefresh={load}
+        refreshing={drillsLoading}
+        ListHeaderComponent={listHeader}
         ListEmptyComponent={
-          <ListState loading={drillsLoading} error={drillsError} isEmpty={false} onRetry={load} emptyTitle="">
-            <Text style={styles.sharedTag}>No drills yet.</Text>
-          </ListState>
-        }
-        renderItem={({ item }) => (
-          <View style={styles.drillCard}>
-            <View style={styles.drillHeaderRow}>
-              <Text style={styles.drillSkill}>{item.skill.replace(/_/g, " ")}</Text>
-              {canEdit(item) && (
-                <View style={styles.drillActions}>
-                  <Pressable onPress={() => startEdit(item)}>
-                    <Text style={styles.drillActionText}>Edit</Text>
-                  </Pressable>
-                  <Pressable onPress={() => deleteDrill(item)}>
-                    <Text style={[styles.drillActionText, styles.drillActionTextDanger]}>Delete</Text>
-                  </Pressable>
-                </View>
-              )}
-            </View>
-            <Text style={styles.drillTitle}>{item.title}</Text>
-            <Text style={styles.drillDesc}>{item.description}</Text>
-            {!item.club_id && <Text style={styles.sharedTag}>Shared starter library</Text>}
-            {item.video_url && (
-              <Pressable style={styles.watchButton} onPress={() => setWatchingDrill(item)}>
-                <Text style={styles.watchButtonText}>▶ Watch</Text>
-              </Pressable>
-            )}
+          <View style={styles.inset}>
+            <ListState loading={drillsLoading} error={drillsError} isEmpty={false} onRetry={load} emptyTitle="">
+              <EmptyState icon="search" title="No drills found" body="Try a different search or category." />
+            </ListState>
           </View>
-        )}
+        }
+        contentContainerStyle={{ paddingVertical: space[4], gap: space[3] }}
+        renderItem={({ item }) => {
+          const categoryLabel = item.skill.replace(/_/g, " ");
+          return (
+            <Card style={[styles.inset, { gap: space[2] }]}>
+              <View style={styles.thumb}>
+                {item.video_url ? (
+                  <Pressable
+                    style={styles.thumbInner}
+                    onPress={() => setWatchingDrill(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Watch ${item.title} video`}
+                  >
+                    <Ionicons name="play-circle" size={36} color={color.icon.inverse} />
+                  </Pressable>
+                ) : (
+                  <View style={styles.thumbInner}>
+                    <Ionicons name="videocam-outline" size={28} color={color.icon.muted} />
+                  </View>
+                )}
+                <Badge label={categoryLabel} tone="brand" style={styles.thumbBadge} />
+              </View>
+
+              <Text role="h3">{item.title}</Text>
+              <Text tone="secondary">{item.description}</Text>
+
+              <Divider />
+
+              <View style={styles.cardFooter}>
+                <Text role="caption" tone="tertiary">
+                  {!item.club_id ? "SHARED STARTER LIBRARY" : ""}
+                </Text>
+                {canEdit(item) && (
+                  <View style={styles.footerActions}>
+                    <Pressable
+                      onPress={() => deleteDrill(item)}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete ${item.title}`}
+                    >
+                      <Ionicons name="trash-outline" size={16} color={color.icon.danger} />
+                    </Pressable>
+                    <Pressable onPress={() => startEdit(item)} hitSlop={8}>
+                      <Text role="label" tone="brand">
+                        Edit Drill →
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            </Card>
+          );
+        }}
       />
 
       <DrillVideoModal
@@ -307,65 +388,27 @@ export default function ManageDrills() {
         videoUrl={watchingDrill?.video_url ?? null}
         title={watchingDrill?.title}
       />
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0B0B0D", padding: 16 },
-  intro: { fontSize: 13, color: "#9A9DA3", marginBottom: 14, lineHeight: 18 },
-  addButton: { backgroundColor: "#0A6CFF", borderRadius: 10, padding: 14, alignItems: "center", marginBottom: 14 },
-  addButtonText: { color: "#fff", fontWeight: "700" },
-  form: { backgroundColor: "#141416", borderRadius: 12, padding: 14, marginBottom: 16, maxHeight: 420 },
-  uploadRow: { flexDirection: "row", gap: 8, marginBottom: 6 },
-  uploadButton: {
-    flex: 1,
-    borderWidth: 1.5,
-    borderColor: "#0A6CFF",
-    borderStyle: "dashed",
-    borderRadius: 10,
-    padding: 14,
-    alignItems: "center",
-    marginBottom: 6,
+  inset: { marginHorizontal: space[4] },
+  row: { flexDirection: "row", gap: space[3] },
+  center: { textAlign: "center" },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: space[2] },
+  uploadingRow: { alignItems: "center", paddingVertical: space[3] },
+  infoCallout: {
+    flexDirection: "row",
+    gap: space[3],
+    padding: space[4],
+    borderRadius: radius.card,
+    backgroundColor: color.bg.brandSubtle,
+    alignItems: "flex-start",
   },
-  uploadButtonHalf: { marginBottom: 0 },
-  uploadButtonText: { color: "#0A6CFF", fontWeight: "700", fontSize: 14, textAlign: "center" },
-  orDivider: { textAlign: "center", color: "#6B6F76", fontSize: 12, marginBottom: 10 },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 12 },
-  chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: "#0A6CFF" },
-  chipActive: { backgroundColor: "#0A6CFF" },
-  chipText: { color: "#0A6CFF", fontSize: 12, fontWeight: "600" },
-  chipTextActive: { color: "#fff" },
-  input: {
-    borderWidth: 1,
-    borderColor: "#242424",
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
-    fontSize: 15,
-    color: "#F2F2F3",
-    backgroundColor: "#0B0B0D",
-  },
-  textarea: { height: 80, textAlignVertical: "top" },
-  submitButton: { backgroundColor: "#0A6CFF", borderRadius: 10, padding: 14, alignItems: "center" },
-  submitButtonText: { color: "#fff", fontWeight: "700" },
-  drillCard: { backgroundColor: "#141416", borderRadius: 12, padding: 14, marginBottom: 8 },
-  drillHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  drillSkill: { fontSize: 11, fontWeight: "700", color: "#0A6CFF", textTransform: "uppercase" },
-  drillActions: { flexDirection: "row", gap: 14 },
-  drillActionText: { fontSize: 12, fontWeight: "700", color: "#0A6CFF" },
-  drillActionTextDanger: { color: "#FF6B6B" },
-  editingLabel: { fontSize: 11, fontWeight: "800", color: "#9A9DA3", letterSpacing: 0.5, marginBottom: 10, textTransform: "uppercase" },
-  drillTitle: { fontSize: 15, fontWeight: "700", color: "#F2F2F3", marginTop: 2 },
-  drillDesc: { fontSize: 13, color: "#9A9DA3", marginTop: 4 },
-  sharedTag: { fontSize: 11, color: "#6B6F76", marginTop: 6, fontStyle: "italic" },
-  watchButton: {
-    marginTop: 8,
-    alignSelf: "flex-start",
-    backgroundColor: "#17181B",
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-  },
-  watchButtonText: { color: "#0A6CFF", fontWeight: "700", fontSize: 13 },
+  thumb: { height: 140, borderRadius: radius.card, backgroundColor: color.bg.sunken, overflow: "hidden", position: "relative" },
+  thumbInner: { flex: 1, alignItems: "center", justifyContent: "center" },
+  thumbBadge: { position: "absolute", top: space[2], left: space[2] },
+  cardFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  footerActions: { flexDirection: "row", alignItems: "center", gap: space[3] },
 });

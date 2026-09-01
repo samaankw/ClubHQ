@@ -11,12 +11,15 @@
     "test:functions": "deno test --quiet --no-check=remote supabase/functions/tests/",
     "doctor": "expo-doctor",
     "prebuild:clean": "expo prebuild --clean",
-    "verify": "npm run verify:static && npm run typecheck && npx expo-doctor@latest",
+    "verify": "npm run verify:static && npm run lint:tokens && npm run typecheck && npm run lint && npm test -- --ci && npx expo-doctor@latest",
     "verify:static": "node scripts/project-check.mjs",
     "lint": "eslint .",
+    "lint:tokens": "node scripts/lint-tokens.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "jest",
+    "test:watch": "jest --watch",
+    "test:rls": "npx supabase@latest test db",
     "gen:types": "supabase gen types typescript --linked > types/database.types.ts"
   },
   "dependencies": {
@@ -60,6 +63,7 @@
     "jest": "^29.7.0",
     "jest-expo": "^57.0.5",
     "prettier": "^3.9.6",
+    "react-test-renderer": "^19.2.3",
     "typescript": "~6.0.3"
   },
   "private": true,

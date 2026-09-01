@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, Image, StyleSheet } from "react-native";
+import { View, StyleSheet } from "react-native";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { Profile } from "@/types/db";
+import { Card, Eyebrow, Text, Avatar, Divider } from "@/components/ui";
+import { space } from "@/theme";
 
 export default function CoachesSection() {
   const { profile } = useAuth();
@@ -25,51 +27,27 @@ export default function CoachesSection() {
   if (!coaches.length) return null;
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.label}>MEET THE COACHES</Text>
-      {coaches.map((coach) => (
-        <View key={coach.id} style={styles.card}>
-          {coach.avatar_url ? (
-            <Image source={{ uri: coach.avatar_url }} style={styles.avatarImage} />
-          ) : (
-            <View style={styles.avatarFallback}>
-              <Text style={styles.avatarInitial}>{coach.full_name?.[0]?.toUpperCase() ?? "?"}</Text>
+    <Card style={styles.container}>
+      <Eyebrow>Meet the Coaches</Eyebrow>
+      {coaches.map((coach, i) => (
+        <React.Fragment key={coach.id}>
+          {i > 0 && <Divider />}
+          <View style={styles.row}>
+            <Avatar uri={coach.avatar_url} name={coach.full_name ?? "?"} size={52} />
+            <View style={styles.info}>
+              <Text role="h3">{coach.full_name}</Text>
+              <Eyebrow tone="brand">{coach.coach_title || (coach.role === "director" ? "Director" : "Coach")}</Eyebrow>
+              {coach.coach_bio ? <Text tone="secondary">{coach.coach_bio}</Text> : null}
             </View>
-          )}
-          <View style={styles.info}>
-            <Text style={styles.name}>{coach.full_name}</Text>
-            <Text style={styles.title}>{coach.coach_title || (coach.role === "director" ? "Director" : "Coach")}</Text>
-            {coach.coach_bio ? <Text style={styles.bio}>{coach.coach_bio}</Text> : null}
           </View>
-        </View>
+        </React.Fragment>
       ))}
-    </View>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { marginBottom: 14 },
-  label: { fontSize: 12, fontWeight: "700", color: "#9A9DA3", letterSpacing: 0.5, marginBottom: 10 },
-  card: {
-    flexDirection: "row",
-    backgroundColor: "#141416",
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-    gap: 12,
-  },
-  avatarImage: { width: 52, height: 52, borderRadius: 26 },
-  avatarFallback: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: "#0A6CFF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarInitial: { color: "#fff", fontSize: 20, fontWeight: "800" },
-  info: { flex: 1 },
-  name: { fontSize: 15, fontWeight: "700", color: "#F2F2F3" },
-  title: { fontSize: 12, fontWeight: "700", color: "#0A6CFF", marginTop: 1, textTransform: "uppercase", letterSpacing: 0.3 },
-  bio: { fontSize: 13, color: "#B5B8BE", marginTop: 6, lineHeight: 18 },
+  container: { gap: space[3] },
+  row: { flexDirection: "row", gap: space[3], paddingVertical: space[2] },
+  info: { flex: 1, gap: space[1] },
 });

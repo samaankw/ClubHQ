@@ -1,20 +1,43 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { View, Pressable, StyleSheet, ScrollView, LayoutChangeEvent, AccessibilityInfo } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
-import { format } from "date-fns";
+import { addDays, format, nextSaturday, parse, startOfDay } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { useRecentLocations } from "@/lib/hooks";
 import { ClubEvent, EventType, Team } from "@/types/db";
 import { notify } from "@/lib/alertCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { goBackOr } from "@/lib/navigation";
+import { TIME_PRESETS, matchTimePreset, buildStartsAt, weeklyOccurrences } from "@/lib/eventSchedule";
+import { resolveTargeting, AudienceMode } from "@/lib/eventTargeting";
 import ModalBackButton from "@/components/ModalBackButton";
+import { Screen, Card, Text, Eyebrow, Field, Button, Chip, IconChip, Toggle, CardHeader, Calendar, FilterChipRow } from "@/components/ui";
+import type { IconName } from "@/components/ui";
+import { color, space, radius, borderWidth } from "@/theme";
 
 interface PlayerOption {
   id: string;
   full_name: string;
   teams?: { age_group: string | null } | null;
 }
+
+// Mirrors the icon choice dashboard.tsx and the Schedule tab already use for
+// these same four event types, so a type card here matches what a user has
+// already seen elsewhere.
+const TYPE_ICON: Record<EventType, IconName> = {
+  practice: "fitness",
+  game: "football",
+  tournament: "trophy",
+  club_event: "megaphone",
+  // Not yet offered in the TYPES picker below (no UI for private-trainer/
+  // academy org types exists on this branch yet), but EventType's CHECK
+  // constraint already accepts these, so the Record must cover them.
+  clinic: "school-outline",
+  camp: "sunny-outline",
+  private_session: "person-outline",
+  small_group: "people-outline",
+};
 
 const TYPES: { key: EventType; label: string }[] = [
   { key: "practice", label: "Practice" },
@@ -23,7 +46,50 @@ const TYPES: { key: EventType; label: string }[] = [
   { key: "club_event", label: "Club Event" },
 ];
 
-type AudienceMode = "club" | "team" | "player";
+// "Custom" reveals the original hour/minute/AM-PM fields for anything the
+// TIME_PRESETS chips don't cover, so there's still exactly one way to end up
+// with an arbitrary time.
+const CUSTOM_TIME = "Custom";
+const TIME_OPTIONS = [...TIME_PRESETS.map((p) => p.label), CUSTOM_TIME];
+
+function TypeCard({ icon, label, selected, onPress }: { icon: IconName; label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={[styles.typeCard, selected && styles.typeCardSelected]}
+    >
+      <IconChip name={icon} tone="brand" />
+      <Text role="label" tone={selected ? "brand" : "primary"}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function CheckRow({ label, meta, checked, onPress }: { label: string; meta?: string; checked: boolean; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="checkbox" accessibilityState={{ checked }} onPress={onPress} style={styles.checkRow}>
+      <View style={[styles.checkbox, checked && styles.checkboxOn]}>
+        {checked ? (
+          <Text role="caption" tone="inverse">
+            ✓
+          </Text>
+        ) : null}
+      </View>
+      <Text role="h3" style={styles.checkRowLabel}>
+        {label}
+      </Text>
+      {meta ? (
+        <Text role="caption" tone="brand" style={styles.checkRowMeta}>
+          {meta}
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+}
 
 export default function CreateEvent() {
   const { profile } = useAuth();
@@ -40,7 +106,14 @@ export default function CreateEvent() {
   const [hourStr, setHourStr] = useState("");
   const [minuteStr, setMinuteStr] = useState("");
   const [meridiem, setMeridiem] = useState<"AM" | "PM">("AM");
+  // Which time chip reads as selected — one of TIME_PRESETS' labels, or
+  // CUSTOM_TIME, or "" before the coach has touched a time at all. This is
+  // purely a UI selection: hourStr/minuteStr/meridiem above stay the single
+  // source of truth that feeds starts_at on submit, whether they were set by
+  // tapping a chip or by typing into the custom fields.
+  const [timeChip, setTimeChip] = useState("");
   const [notes, setNotes] = useState("");
+  const { locations: recentLocations } = useRecentLocations();
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamId, setTeamId] = useState<string | null>(null);
   const [audienceMode, setAudienceMode] = useState<AudienceMode>(profile?.role === "director" ? "club" : "team");
@@ -54,34 +127,33 @@ export default function CreateEvent() {
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [repeatWeeksStr, setRepeatWeeksStr] = useState("8");
   const [submitting, setSubmitting] = useState(false);
-  // Defaults on: a coach who moved a session should have to opt *out* of
-  // telling families, not remember to opt in.
-  const [notifyChange, setNotifyChange] = useState(true);
-  // What the event looked like when the edit form opened, so we can tell
-  // whether this save actually moves the session or just fixes a typo in the
-  // notes — the notify toggle is meaningless in the second case.
-  const originalRef = useRef<{ startsAt: string; location: string } | null>(null);
-
-  // Shared by the submit handler and the "notify families" toggle, which
-  // only appears once the form actually differs from the saved event.
-  const composeStartsAt = (): Date | null => {
-    if (!dateStr || !hourStr || !minuteStr) return null;
-    const hour12 = parseInt(hourStr, 10);
-    const minute = parseInt(minuteStr, 10);
-    if (isNaN(hour12) || hour12 < 1 || hour12 > 12 || isNaN(minute) || minute < 0 || minute > 59) return null;
-    const hour24 = (hour12 % 12) + (meridiem === "PM" ? 12 : 0);
-    const d = new Date(`${dateStr}T${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`);
-    return isNaN(d.getTime()) ? null : d;
+  const [titleError, setTitleError] = useState<string | undefined>();
+  const [dateError, setDateError] = useState<string | undefined>();
+  const [timeError, setTimeError] = useState<string | undefined>();
+  const [teamError, setTeamError] = useState<string | undefined>();
+  const [attendingError, setAttendingError] = useState<string | undefined>();
+  const [playerError, setPlayerError] = useState<string | undefined>();
+  const [repeatError, setRepeatError] = useState<string | undefined>();
+  const scrollRef = useRef<ScrollView>(null);
+  // Y offset of each section inside the scroll column, recorded as it lays out.
+  // A failed submit scrolls to the section that actually errored. Scrolling to
+  // the top instead would push the Time and Repeat errors — which sit near the
+  // bottom of this long form, right above the button the user just pressed —
+  // off screen, making a failed submit look like nothing happened at all.
+  const sectionY = useRef<Record<string, number>>({});
+  const onSectionLayout = (key: string) => (e: LayoutChangeEvent) => {
+    sectionY.current[key] = e.nativeEvent.layout.y;
   };
-
-  const scheduleChanged = useMemo(() => {
-    const original = originalRef.current;
-    if (!isEditing || !original) return false;
-    const next = composeStartsAt();
-    const timeChanged = !!next && next.getTime() !== new Date(original.startsAt).getTime();
-    return timeChanged || location.trim() !== original.location;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditing, dateStr, hourStr, minuteStr, meridiem, location]);
+  const scrollToSection = (key: string, message: string) => {
+    // Scrolling moves the error into a sighted user's view; it does nothing
+    // for a screen-reader user, who otherwise gets no feedback at all from a
+    // failed submit. Announcing the message covers both.
+    AccessibilityInfo.announceForAccessibility(message);
+    const y = sectionY.current[key];
+    if (y === undefined) return;
+    // Leave a gutter above the section so its label isn't flush to the edge.
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - space[4]), animated: true });
+  };
 
   const togglePlayer = (id: string) => {
     setSelectedPlayerIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
@@ -91,14 +163,23 @@ export default function CreateEvent() {
     setAttendingIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
   };
 
+  // Tapping a preset chip sets exactly the same hourStr/minuteStr/meridiem
+  // state the custom fields would — there is one path into starts_at, chips
+  // just fill it in faster. "Custom" leaves whatever is already there and
+  // reveals the fields so the coach can type something else.
+  const handleTimePick = (label: string) => {
+    setTimeChip(label);
+    const preset = TIME_PRESETS.find((p) => p.label === label);
+    if (!preset) return;
+    setHourStr(preset.hour);
+    setMinuteStr(preset.minute);
+    setMeridiem(preset.meridiem);
+  };
+
   useEffect(() => {
     if (!eventId) return;
     (async () => {
-      const { data, error } = await supabase
-        .from("events")
-        .select("*, event_players(players(id))")
-        .eq("id", eventId)
-        .single();
+      const { data, error } = await supabase.from("events").select("*, event_players(players(id))").eq("id", eventId).single();
       if (error || !data) {
         notify("Couldn't load event", error?.message ?? "Event not found.");
         return;
@@ -108,12 +189,18 @@ export default function CreateEvent() {
       setTitle(ev.title);
       setLocation(ev.location ?? "");
       const startsAt = new Date(ev.starts_at);
+      const loadedHour = format(startsAt, "h");
+      const loadedMinute = format(startsAt, "mm");
+      const loadedMeridiem = format(startsAt, "a") as "AM" | "PM";
       setDateStr(format(startsAt, "yyyy-MM-dd"));
-      setHourStr(format(startsAt, "h"));
-      setMinuteStr(format(startsAt, "mm"));
-      setMeridiem(format(startsAt, "a") as "AM" | "PM");
+      setHourStr(loadedHour);
+      setMinuteStr(loadedMinute);
+      setMeridiem(loadedMeridiem);
+      // A prefilled time that isn't one of the chips must fall back to the
+      // custom fields rather than being silently rounded to the nearest one.
+      const preset = matchTimePreset(loadedHour, loadedMinute, loadedMeridiem);
+      setTimeChip(preset ? preset.label : CUSTOM_TIME);
       setNotes(ev.notes ?? "");
-      originalRef.current = { startsAt: ev.starts_at, location: (ev.location ?? "").trim() };
 
       const targetIds = (ev.event_players ?? []).map((t) => t.players.id);
       if (ev.team_id) {
@@ -136,7 +223,10 @@ export default function CreateEvent() {
       if (profile.role === "coach") {
         const { data: assignments } = await supabase.from("team_coaches").select("team_id").eq("coach_id", profile.id);
         const ids = (assignments ?? []).map((a) => a.team_id);
-        if (!ids.length) { setTeams([]); return; }
+        if (!ids.length) {
+          setTeams([]);
+          return;
+        }
         query = query.in("id", ids);
       }
       const { data } = await query;
@@ -150,7 +240,11 @@ export default function CreateEvent() {
   // day instead of the event always assuming the whole group showed up.
   useEffect(() => {
     (async () => {
-      if (audienceMode !== "team" || !teamId) { setTeamRoster([]); setAttendingIds([]); return; }
+      if (audienceMode !== "team" || !teamId) {
+        setTeamRoster([]);
+        setAttendingIds([]);
+        return;
+      }
       const { data } = await supabase
         .from("players")
         .select("id, full_name")
@@ -177,7 +271,10 @@ export default function CreateEvent() {
     (async () => {
       if (audienceMode !== "player") return;
       const teamIds = teams.map((t) => t.id);
-      if (!teamIds.length) { setPlayers([]); return; }
+      if (!teamIds.length) {
+        setPlayers([]);
+        return;
+      }
       const { data } = await supabase
         .from("players")
         .select("id, full_name, teams(age_group)")
@@ -189,27 +286,71 @@ export default function CreateEvent() {
   }, [audienceMode, teams]);
 
   const handleSubmit = async () => {
-    if (!title.trim() || !dateStr || !hourStr || !minuteStr) return notify("Missing info", "Please add a title, date (YYYY-MM-DD), and a time.");
-    if (!profile?.club_id) return notify("No club found", "Your profile isn't linked to a club yet.");
-    if (audienceMode === "team" && !teamId) return notify("Team required", "Pick a training group for this event.");
-    if (audienceMode === "team" && teamRoster.length > 0 && !attendingIds.length) return notify("No one attending", "Pick at least one player training that day, or switch groups.");
-    if (audienceMode === "player" && !selectedPlayerIds.length) return notify("Player required", "Pick who this session is for.");
-
-    const startsAt = composeStartsAt();
-    if (!startsAt) {
-      return notify("Invalid time", "Use YYYY-MM-DD for the date, an hour from 1–12, and minutes 0–59.");
+    if (!title.trim() || !dateStr || !hourStr || !minuteStr) {
+      setTitleError(!title.trim() ? "Add a title." : undefined);
+      setDateError(!dateStr ? "Pick a date." : undefined);
+      setTimeError(!hourStr || !minuteStr ? "Pick a time." : undefined);
+      // Several fields can fail at once; land on the topmost one so the user
+      // works downward through the form rather than jumping around it.
+      scrollToSection(
+        !title.trim() ? "title" : !dateStr ? "date" : "time",
+        !title.trim() ? "Add a title." : !dateStr ? "Pick a date." : "Pick a time.",
+      );
+      return;
     }
+    setTitleError(undefined);
+    setDateError(undefined);
+    if (!profile?.club_id) return notify("No club found", "Your profile isn't linked to a club yet.");
+    if (audienceMode === "team" && !teamId) {
+      setTeamError("Pick a training group for this event.");
+      scrollToSection("team", "Pick a training group for this event.");
+      return;
+    }
+    setTeamError(undefined);
+    if (audienceMode === "team" && teamRoster.length > 0 && !attendingIds.length) {
+      setAttendingError("Pick at least one player training that day, or switch groups.");
+      scrollToSection("attending", "Pick at least one player training that day, or switch groups.");
+      return;
+    }
+    setAttendingError(undefined);
+    if (audienceMode === "player" && !selectedPlayerIds.length) {
+      setPlayerError("Pick who this session is for.");
+      scrollToSection("player", "Pick who this session is for.");
+      return;
+    }
+    setPlayerError(undefined);
 
-    // Only attach an explicit player list when it's a *subset* of the group
-    // (someone's out that day) or a private session — a full group roster
-    // is represented by team_id alone, same as before.
-    const isPartialTeam = audienceMode === "team" && attendingIds.length < teamRoster.length;
-    const playerIds = audienceMode === "player" ? selectedPlayerIds : isPartialTeam ? attendingIds : null;
+    const hour12 = parseInt(hourStr, 10);
+    const minute = parseInt(minuteStr, 10);
+    if (isNaN(hour12) || hour12 < 1 || hour12 > 12 || isNaN(minute) || minute < 0 || minute > 59) {
+      setTimeError("Hour must be 1–12 and minutes 0–59.");
+      scrollToSection("time", "Hour must be 1–12 and minutes 0–59.");
+      return;
+    }
+    setTimeError(undefined);
+    const startsAt = buildStartsAt(dateStr, hour12, minute, meridiem);
+    if (isNaN(startsAt.getTime())) {
+      setDateError("Use YYYY-MM-DD for the date.");
+      scrollToSection("date", "Use YYYY-MM-DD for the date.");
+      return;
+    }
+    setDateError(undefined);
+
+    const { teamId: targetTeamId, playerIds } = resolveTargeting({
+      audienceMode,
+      teamId,
+      selectedPlayerIds,
+      attendingIds,
+      teamRoster,
+    });
 
     const occurrenceCount = !isEditing && repeatWeekly ? parseInt(repeatWeeksStr, 10) : 1;
     if (!isEditing && repeatWeekly && (isNaN(occurrenceCount) || occurrenceCount < 2 || occurrenceCount > 52)) {
-      return notify("Invalid repeat count", "Enter a number of weeks between 2 and 52.");
+      setRepeatError("Enter a number of weeks between 2 and 52.");
+      scrollToSection("repeat", "Enter a number of weeks between 2 and 52.");
+      return;
     }
+    setRepeatError(undefined);
 
     setSubmitting(true);
     // Player-targeted sessions (one or more specific players, possibly
@@ -224,26 +365,18 @@ export default function CreateEvent() {
         p_location: location.trim() || null,
         p_starts_at: startsAt.toISOString(),
         p_notes: notes.trim() || null,
-        p_team_id: audienceMode === "team" ? teamId : null,
+        p_team_id: targetTeamId,
         p_player_ids: playerIds,
-        // Read server-side by announce_event_change() (migration 0034), which
-        // writes the "New time / New location" notice into the feed. Only
-        // meaningful when the time or location actually moved.
-        p_notify: notifyChange,
       });
       setSubmitting(false);
       if (error) return notify("Couldn't save changes", error.message);
 
-      // Fire-and-forget, same as on create. The push and the in-feed notice
-      // are deliberately two mechanisms: the push is the interrupt, the
-      // announcement is the record for whoever missed it. Suppressing the
-      // notice suppresses both, or the coach would silence the feed and still
-      // ping everyone's phone.
-      if (!scheduleChanged || notifyChange) {
-        supabase.functions.invoke("send-event-push", { body: { eventId, isUpdate: true } }).catch((err) => {
-          console.warn("Event update push notification failed to send:", err);
-        });
-      }
+      // Fire-and-forget, same as on create — a time/location change is
+      // exactly the kind of edit parents need to actually be told about,
+      // not just something they'd only see if they happened to reopen the app.
+      supabase.functions.invoke("send-event-push", { body: { eventId, isUpdate: true } }).catch((err) => {
+        console.warn("Event update push notification failed to send:", err);
+      });
 
       goBackOr(`/event/${eventId}`);
       return;
@@ -261,21 +394,21 @@ export default function CreateEvent() {
         p_location: location.trim() || null,
         p_starts_at: startsAtIso,
         p_notes: notes.trim() || null,
-        p_team_id: audienceMode === "team" ? teamId : null,
+        p_team_id: targetTeamId,
         p_player_ids: playerIds,
         p_series_id: seriesIdArg,
       });
 
     let seriesId: string | null = null;
     let firstEventId: string | null = null;
+    const occurrences = weeklyOccurrences(startsAt, occurrenceCount);
     for (let i = 0; i < occurrenceCount; i++) {
-      const occurrenceStart = new Date(startsAt.getTime() + i * 7 * 24 * 60 * 60 * 1000);
-      const { data: newEventId, error } = await createOccurrence(occurrenceStart.toISOString(), seriesId);
+      const { data: newEventId, error } = await createOccurrence(occurrences[i].toISOString(), seriesId);
       if (error) {
         setSubmitting(false);
         return notify(
           i === 0 ? "Couldn't create event" : "Some sessions couldn't be created",
-          i === 0 ? error.message : `Created ${i} of ${occurrenceCount} sessions before hitting an error: ${error.message}`
+          i === 0 ? error.message : `Created ${i} of ${occurrenceCount} sessions before hitting an error: ${error.message}`,
         );
       }
       if (i === 0) {
@@ -298,196 +431,305 @@ export default function CreateEvent() {
     goBackOr("/(tabs)/schedule?section=events");
   };
 
+  // date-fns' nextSaturday returns the Saturday *after* the given date, so
+  // when today is already Saturday this correctly lands 7 days out — "the
+  // coming Saturday", never today.
+  const today = new Date();
+  const quickDates = [
+    { label: "Today", value: format(today, "yyyy-MM-dd") },
+    { label: "Tomorrow", value: format(addDays(today, 1), "yyyy-MM-dd") },
+    { label: "This Saturday", value: format(nextSaturday(today), "yyyy-MM-dd") },
+  ];
+  const selectedDate = dateStr ? parse(dateStr, "yyyy-MM-dd", new Date()) : null;
+  const showCustomTime = timeChip === CUSTOM_TIME;
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <Screen ref={scrollRef}>
       <Stack.Screen
         options={{
           title: isEditing ? "Edit Event" : "New Event",
-          headerLeft: () => <ModalBackButton onPress={() => goBackOr(isEditing ? `/event/${eventId}` : "/(tabs)/schedule?section=events")} />,
+          headerLeft: () => (
+            <ModalBackButton onPress={() => goBackOr(isEditing ? `/event/${eventId}` : "/(tabs)/schedule?section=events")} />
+          ),
         }}
       />
-      <Text style={styles.label}>EVENT TYPE</Text>
-      <View style={styles.typeRow}>
-        {TYPES.map((t) => <Pressable key={t.key} style={[styles.typeChip, type === t.key && styles.typeChipActive]} onPress={() => setType(t.key)}><Text style={[styles.typeChipText, type === t.key && styles.typeChipTextActive]}>{t.label}</Text></Pressable>)}
+
+      <View style={styles.section}>
+        <Eyebrow>What kind of event?</Eyebrow>
+        <View style={styles.typeGrid}>
+          {TYPES.map((t) => (
+            <TypeCard key={t.key} icon={TYPE_ICON[t.key]} label={t.label} selected={type === t.key} onPress={() => setType(t.key)} />
+          ))}
+        </View>
       </View>
 
-      <Text style={styles.label}>AUDIENCE</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }} contentContainerStyle={styles.chipRow}>
-        {profile?.role === "director" && (
-          <Pressable style={[styles.teamChip, audienceMode === "club" && styles.teamChipActive]} onPress={() => setAudienceMode("club")}>
-            <Text style={[styles.teamChipText, audienceMode === "club" && styles.teamChipTextActive]}>Club-wide</Text>
-          </Pressable>
-        )}
-        <Pressable style={[styles.teamChip, audienceMode === "team" && styles.teamChipActive]} onPress={() => setAudienceMode("team")}>
-          <Text style={[styles.teamChipText, audienceMode === "team" && styles.teamChipTextActive]}>Training Group</Text>
-        </Pressable>
-        <Pressable style={[styles.teamChip, audienceMode === "player" && styles.teamChipActive]} onPress={() => setAudienceMode("player")}>
-          <Text style={[styles.teamChipText, audienceMode === "player" && styles.teamChipTextActive]}>Select Players</Text>
-        </Pressable>
-      </ScrollView>
+      <View style={styles.section}>
+        <Eyebrow>Audience</Eyebrow>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {profile?.role === "director" && (
+            <Chip label="Club-wide" selected={audienceMode === "club"} onPress={() => setAudienceMode("club")} />
+          )}
+          <Chip label="Training Group" selected={audienceMode === "team"} onPress={() => setAudienceMode("team")} />
+          <Chip label="Select Players" selected={audienceMode === "player"} onPress={() => setAudienceMode("player")} />
+        </ScrollView>
+      </View>
 
       {audienceMode === "team" && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }} contentContainerStyle={styles.chipRow}>
-          {teams.map((team) => (
-            <Pressable key={team.id} style={[styles.teamChip, teamId === team.id && styles.teamChipActive]} onPress={() => setTeamId(team.id)}>
-              <Text style={[styles.teamChipText, teamId === team.id && styles.teamChipTextActive]}>{teamLabel(team)}</Text>
-            </Pressable>
-          ))}
-          {!teams.length && <Text style={styles.mutedNote}>No training groups assigned yet.</Text>}
-        </ScrollView>
+        <View style={styles.section} onLayout={onSectionLayout("team")}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {teams.map((team) => (
+              <Chip
+                key={team.id}
+                label={teamLabel(team)}
+                selected={teamId === team.id}
+                onPress={() => {
+                  setTeamId(team.id);
+                  if (teamError) setTeamError(undefined);
+                }}
+              />
+            ))}
+          </ScrollView>
+          {!teams.length && <Text tone="secondary">No training groups assigned yet.</Text>}
+          {teamError ? (
+            <Text role="caption" tone="danger">
+              {teamError}
+            </Text>
+          ) : null}
+        </View>
       )}
 
       {audienceMode === "team" && teamId && teamRoster.length > 0 && (
-        <View style={styles.rosterCard}>
-          <View style={styles.rosterHeaderRow}>
-            <Text style={styles.rosterHeading}>Who's training today? ({attendingIds.length}/{teamRoster.length})</Text>
-            <Pressable onPress={() => setAttendingIds(attendingIds.length === teamRoster.length ? [] : teamRoster.map((p) => p.id))}>
-              <Text style={styles.rosterToggleAll}>{attendingIds.length === teamRoster.length ? "Clear all" : "Select all"}</Text>
-            </Pressable>
-          </View>
-          {teamRoster.map((p) => {
-            const isAttending = attendingIds.includes(p.id);
-            return (
-              <Pressable key={p.id} style={styles.rosterRow} onPress={() => toggleAttending(p.id)}>
-                <View style={[styles.checkBox, isAttending && styles.checkBoxOn]}>{isAttending && <Text style={styles.checkMark}>✓</Text>}</View>
-                <Text style={styles.rosterName}>{p.full_name}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <Card style={styles.rosterCard} onLayout={onSectionLayout("attending")}>
+          <CardHeader
+            title={`Who's training today? (${attendingIds.length}/${teamRoster.length})`}
+            action={attendingIds.length === teamRoster.length ? "Clear all" : "Select all"}
+            onAction={() => {
+              setAttendingIds(attendingIds.length === teamRoster.length ? [] : teamRoster.map((p) => p.id));
+              // "Select all" is the fastest way to fix this exact error, so it
+              // has to clear it the same way tapping a single player does.
+              if (attendingError) setAttendingError(undefined);
+            }}
+          />
+          {teamRoster.map((p) => (
+            <CheckRow
+              key={p.id}
+              label={p.full_name}
+              checked={attendingIds.includes(p.id)}
+              onPress={() => {
+                toggleAttending(p.id);
+                if (attendingError) setAttendingError(undefined);
+              }}
+            />
+          ))}
+          {attendingError ? (
+            <Text role="caption" tone="danger">
+              {attendingError}
+            </Text>
+          ) : null}
+        </Card>
       )}
 
       {audienceMode === "player" && (
-        <View style={styles.rosterCard}>
-          <Text style={styles.rosterHeading}>Pick anyone, from any group ({selectedPlayerIds.length} selected)</Text>
-          {players.map((p) => {
-            const isSelected = selectedPlayerIds.includes(p.id);
-            return (
-              <Pressable key={p.id} style={styles.rosterRow} onPress={() => togglePlayer(p.id)}>
-                <View style={[styles.checkBox, isSelected && styles.checkBoxOn]}>{isSelected && <Text style={styles.checkMark}>✓</Text>}</View>
-                <Text style={styles.rosterName}>{p.full_name}</Text>
-                {p.teams?.age_group ? <Text style={styles.rosterAgeGroup}>{p.teams.age_group}</Text> : null}
-              </Pressable>
-            );
-          })}
-          {!players.length && <Text style={styles.mutedNote}>No players found on your teams yet.</Text>}
-        </View>
+        <Card style={styles.rosterCard} onLayout={onSectionLayout("player")}>
+          <Eyebrow>Pick anyone, from any group ({selectedPlayerIds.length} selected)</Eyebrow>
+          {players.map((p) => (
+            <CheckRow
+              key={p.id}
+              label={p.full_name}
+              meta={p.teams?.age_group ?? undefined}
+              checked={selectedPlayerIds.includes(p.id)}
+              onPress={() => {
+                togglePlayer(p.id);
+                if (playerError) setPlayerError(undefined);
+              }}
+            />
+          ))}
+          {!players.length && <Text tone="secondary">No players found on your teams yet.</Text>}
+          {playerError ? (
+            <Text role="caption" tone="danger">
+              {playerError}
+            </Text>
+          ) : null}
+        </Card>
       )}
 
-      <TextInput style={styles.input} placeholder="Title (e.g. U10 vs Northside FC)" placeholderTextColor="#6B6F76" value={title} onChangeText={setTitle} />
-      <TextInput style={styles.input} placeholder="Location" placeholderTextColor="#6B6F76" value={location} onChangeText={setLocation} />
-      <TextInput style={styles.input} placeholder="Date (YYYY-MM-DD)" placeholderTextColor="#6B6F76" value={dateStr} onChangeText={setDateStr} />
-      <View style={styles.timeRow}>
-        <TextInput
-          style={[styles.input, styles.timeInput]}
-          placeholder="3"
-          placeholderTextColor="#6B6F76"
-          value={hourStr}
-          onChangeText={setHourStr}
-          keyboardType="number-pad"
-          maxLength={2}
+      <View style={styles.section} onLayout={onSectionLayout("title")}>
+        <Field
+          placeholder="Title (e.g. U10 vs Northside FC)"
+          value={title}
+          onChangeText={(v) => {
+            setTitle(v);
+            if (titleError) setTitleError(undefined);
+          }}
+          error={titleError}
         />
-        <Text style={styles.timeColon}>:</Text>
-        <TextInput
-          style={[styles.input, styles.timeInput]}
-          placeholder="00"
-          placeholderTextColor="#6B6F76"
-          value={minuteStr}
-          onChangeText={setMinuteStr}
-          keyboardType="number-pad"
-          maxLength={2}
-        />
-        <View style={styles.meridiemGroup}>
-          <Pressable style={[styles.meridiemChip, meridiem === "AM" && styles.meridiemChipActive]} onPress={() => setMeridiem("AM")}>
-            <Text style={[styles.meridiemChipText, meridiem === "AM" && styles.meridiemChipTextActive]}>AM</Text>
-          </Pressable>
-          <Pressable style={[styles.meridiemChip, meridiem === "PM" && styles.meridiemChipActive]} onPress={() => setMeridiem("PM")}>
-            <Text style={[styles.meridiemChipText, meridiem === "PM" && styles.meridiemChipTextActive]}>PM</Text>
-          </Pressable>
-        </View>
+
+        {!!recentLocations.length && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {recentLocations.map((loc) => (
+              <Chip key={loc} label={loc} selected={location.trim().toLowerCase() === loc.toLowerCase()} onPress={() => setLocation(loc)} />
+            ))}
+          </ScrollView>
+        )}
+        <Field placeholder="Location" value={location} onChangeText={setLocation} />
       </View>
 
-      {!isEditing && (
-        <View style={styles.rosterCard}>
-          <Pressable style={styles.repeatRow} onPress={() => setRepeatWeekly((v) => !v)}>
-            <View style={[styles.checkBox, repeatWeekly && styles.checkBoxOn]}>{repeatWeekly && <Text style={styles.checkMark}>✓</Text>}</View>
-            <Text style={styles.rosterName}>Repeats weekly</Text>
-          </Pressable>
-          {repeatWeekly && (
-            <View style={styles.repeatWeeksRow}>
-              <Text style={styles.mutedNote}>Same day and time, for</Text>
-              <TextInput
-                style={[styles.input, styles.repeatWeeksInput]}
-                value={repeatWeeksStr}
-                onChangeText={setRepeatWeeksStr}
+      <View style={styles.section} onLayout={onSectionLayout("date")}>
+        <Eyebrow>Date</Eyebrow>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {quickDates.map((q) => (
+            <Chip
+              key={q.label}
+              label={q.label}
+              selected={dateStr === q.value}
+              onPress={() => {
+                setDateStr(q.value);
+                if (dateError) setDateError(undefined);
+              }}
+            />
+          ))}
+        </ScrollView>
+        <Calendar
+          value={selectedDate}
+          // New events can't be scheduled into the past, but an edit has to be
+          // able to reach a past date to correct an event that already
+          // happened — this grid is the only date input on the form.
+          minDate={isEditing ? undefined : startOfDay(new Date())}
+          onChange={(d) => {
+            setDateStr(format(d, "yyyy-MM-dd"));
+            if (dateError) setDateError(undefined);
+          }}
+        />
+        {dateError ? (
+          <Text role="caption" tone="danger">
+            {dateError}
+          </Text>
+        ) : null}
+      </View>
+
+      <View style={styles.section} onLayout={onSectionLayout("time")}>
+        <Eyebrow>Time</Eyebrow>
+        <FilterChipRow
+          options={TIME_OPTIONS}
+          value={timeChip}
+          onChange={(label) => {
+            handleTimePick(label);
+            if (timeError) setTimeError(undefined);
+          }}
+        />
+        {showCustomTime && (
+          <View style={styles.iconFieldRow}>
+            <IconChip name="time-outline" />
+            <View style={styles.timeRow}>
+              <Field
+                style={styles.timeInput}
+                placeholder="3"
+                value={hourStr}
+                onChangeText={(v) => {
+                  setHourStr(v);
+                  if (timeError) setTimeError(undefined);
+                }}
                 keyboardType="number-pad"
                 maxLength={2}
               />
-              <Text style={styles.mutedNote}>weeks</Text>
+              <Text role="h2">:</Text>
+              <Field
+                style={styles.timeInput}
+                placeholder="00"
+                value={minuteStr}
+                onChangeText={(v) => {
+                  setMinuteStr(v);
+                  if (timeError) setTimeError(undefined);
+                }}
+                keyboardType="number-pad"
+                maxLength={2}
+              />
+              <Chip label="AM" selected={meridiem === "AM"} onPress={() => setMeridiem("AM")} />
+              <Chip label="PM" selected={meridiem === "PM"} onPress={() => setMeridiem("PM")} />
+            </View>
+          </View>
+        )}
+        {timeError ? (
+          <Text role="caption" tone="danger">
+            {timeError}
+          </Text>
+        ) : null}
+      </View>
+
+      {!isEditing && (
+        <Card style={styles.rosterCard} onLayout={onSectionLayout("repeat")}>
+          <Toggle label="Repeats weekly" value={repeatWeekly} onValueChange={setRepeatWeekly} />
+          {repeatWeekly && (
+            <View style={styles.repeatWeeksRow}>
+              <Text tone="secondary">Same day and time, for</Text>
+              <Field
+                style={styles.repeatWeeksInput}
+                value={repeatWeeksStr}
+                onChangeText={(v) => {
+                  setRepeatWeeksStr(v);
+                  if (repeatError) setRepeatError(undefined);
+                }}
+                keyboardType="number-pad"
+                maxLength={2}
+              />
+              <Text tone="secondary">weeks</Text>
             </View>
           )}
-        </View>
+          {repeatError ? (
+            <Text role="caption" tone="danger">
+              {repeatError}
+            </Text>
+          ) : null}
+        </Card>
       )}
 
-      {/* Only surfaced once the time or location actually differs from the
-          saved event — a coach fixing a typo in the notes has no reason to
-          think about notifying anyone. */}
-      {scheduleChanged && (
-        <View style={styles.rosterCard}>
-          <Pressable style={styles.repeatRow} onPress={() => setNotifyChange((v) => !v)}>
-            <View style={[styles.checkBox, notifyChange && styles.checkBoxOn]}>
-              {notifyChange && <Text style={styles.checkMark}>✓</Text>}
-            </View>
-            <Text style={styles.rosterName}>Let families know what changed</Text>
-          </Pressable>
-          <Text style={styles.mutedNote}>
-            {notifyChange
-              ? "Posts the old and new details to the schedule feed and sends a notification."
-              : "This change will be saved silently. Families won't be told."}
-          </Text>
-        </View>
-      )}
+      <Field placeholder="Notes (optional)" value={notes} onChangeText={setNotes} multiline />
 
-      <TextInput style={[styles.input, styles.textarea]} placeholder="Notes (optional)" placeholderTextColor="#6B6F76" value={notes} onChangeText={setNotes} multiline />
-      <Pressable style={styles.button} onPress={handleSubmit} disabled={submitting}>
-        <Text style={styles.buttonText}>{submitting ? (isEditing ? "Saving…" : "Creating…") : isEditing ? "Save Changes" : "Add to Schedule"}</Text>
-      </Pressable>
-    </ScrollView>
+      <Button
+        label={submitting ? (isEditing ? "Saving…" : "Creating…") : isEditing ? "Save Changes" : "Add to Schedule"}
+        onPress={handleSubmit}
+        disabled={submitting}
+        size="lg"
+        fullWidth
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, backgroundColor: "#0B0B0D", flexGrow: 1 },
-  label: { fontSize: 11, fontWeight: "800", color: "#9A9DA3", letterSpacing: .5, marginBottom: 8 },
-  typeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
-  typeChip: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: "#0A6CFF" },
-  typeChipActive: { backgroundColor: "#0A6CFF" }, typeChipText: { color: "#0A6CFF", fontWeight: "600" }, typeChipTextActive: { color: "#fff" },
-  chipRow: { flexDirection: "row", alignItems: "flex-start" },
-  teamChip: { marginRight: 8, paddingVertical: 8, paddingHorizontal: 13, borderRadius: 18, backgroundColor: "#17181B" }, teamChipActive: { backgroundColor: "#0A6CFF" }, teamChipText: { color: "#9A9DA3", fontWeight: "600" }, teamChipTextActive: { color: "#fff" },
-  mutedNote: { color: "#6B6F76", fontSize: 13, marginTop: 6 },
-  rosterCard: { backgroundColor: "#141416", borderRadius: 12, padding: 14, marginBottom: 14 },
-  rosterHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  rosterHeading: { fontSize: 12, fontWeight: "800", color: "#9A9DA3" },
-  rosterToggleAll: { fontSize: 13, fontWeight: "700", color: "#0A6CFF" },
-  rosterRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 7 },
-  rosterName: { color: "#F2F2F3", fontWeight: "600", fontSize: 14, flex: 1 },
-  rosterAgeGroup: { color: "#0A6CFF", fontWeight: "700", fontSize: 11, backgroundColor: "#17181B", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-  checkBox: { width: 20, height: 20, borderRadius: 5, borderWidth: 2, borderColor: "#0A6CFF", alignItems: "center", justifyContent: "center" },
-  checkBoxOn: { backgroundColor: "#0A6CFF" },
-  checkMark: { color: "#fff", fontWeight: "800", fontSize: 12 },
-  input: { borderWidth: 1, borderColor: "#242424", borderRadius: 10, padding: 14, marginBottom: 14, fontSize: 16, color: "#F2F2F3", backgroundColor: "#141416" },
-  textarea: { height: 90, textAlignVertical: "top" },
-  timeRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 },
-  timeInput: { flex: 1, marginBottom: 0, textAlign: "center" },
-  timeColon: { color: "#F2F2F3", fontSize: 18, fontWeight: "700" },
-  meridiemGroup: { flexDirection: "row", borderRadius: 10, overflow: "hidden", borderWidth: 1, borderColor: "#242424" },
-  meridiemChip: { paddingVertical: 14, paddingHorizontal: 14, backgroundColor: "#141416" },
-  meridiemChipActive: { backgroundColor: "#0A6CFF" },
-  meridiemChipText: { color: "#9A9DA3", fontWeight: "700", fontSize: 13 },
-  meridiemChipTextActive: { color: "#fff" },
-  repeatRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  repeatWeeksRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
-  repeatWeeksInput: { width: 56, marginBottom: 0, textAlign: "center", paddingVertical: 10 },
-  button: { backgroundColor: "#0A6CFF", borderRadius: 10, padding: 16, alignItems: "center", marginTop: 8 },
-  buttonText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  section: { gap: space[3] },
+  typeGrid: { flexDirection: "row", flexWrap: "wrap", gap: space[3] },
+  typeCard: {
+    flexBasis: "47%",
+    flexGrow: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space[2],
+    padding: space[3],
+    borderRadius: radius.card,
+    borderWidth: borderWidth.thin,
+    borderColor: color.border.subtle,
+    backgroundColor: color.bg.surface,
+  },
+  typeCardSelected: { borderColor: color.border.brand },
+  chipRow: { flexDirection: "row", gap: space[2] },
+  rosterCard: { gap: space[2] },
+  checkRow: { flexDirection: "row", alignItems: "center", gap: space[3], paddingVertical: space[2] },
+  checkRowLabel: { flex: 1 },
+  checkRowMeta: { backgroundColor: color.bg.sunken, borderRadius: radius.sm, paddingHorizontal: space[2], paddingVertical: space[1] },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: radius.xs,
+    borderWidth: borderWidth.thin,
+    borderColor: color.border.brand,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxOn: { backgroundColor: color.bg.brand },
+  iconFieldRow: { flexDirection: "row", alignItems: "center", gap: space[3] },
+  timeRow: { flex: 1, flexDirection: "row", alignItems: "center", gap: space[2] },
+  timeInput: { width: 56, textAlign: "center" },
+  repeatWeeksRow: { flexDirection: "row", alignItems: "center", gap: space[2] },
+  repeatWeeksInput: { width: 56, textAlign: "center" },
 });
