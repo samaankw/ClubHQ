@@ -13,3 +13,5 @@ ios/
 
 # Python bytecode from supabase/tests
 __pycache__/
+.venv/
+supabase/.temp/

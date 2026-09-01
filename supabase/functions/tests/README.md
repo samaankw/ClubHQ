@@ -5,11 +5,13 @@ Covers the recipient targeting and payload building in
 can be exercised without an HTTP server or a Supabase project.
 
 ```bash
-npm run test:functions      # deno test --allow-none supabase/functions/tests/
+npm run test:functions      # deno test --quiet --no-check=remote supabase/functions/tests/
 ```
 
 Needs [Deno](https://deno.com) on PATH. Nothing else — no network, no database,
-no credentials, which is why `--allow-none` is safe to keep on.
+no credentials to provide. `--no-check=remote` skips type-checking the
+`https://` remote imports (Deno std, esm.sh) so the suite doesn't need
+network access just to typecheck code it isn't testing.
 
 ## Why this half is tested and the rest isn't
 

@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "feat/**"
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+          cache: "npm"
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Jest
+        run: npm test -- --runInBand
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Edge function tests (Deno)
+        run: npm run test:functions
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python test dependencies
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet psycopg2-binary
+
+      - name: Install embedded Postgres
+        run: npm install --no-save @embedded-postgres/linux-x64
+
+      - name: Start embedded Postgres
+        run: |
+          PGBIN=node_modules/@embedded-postgres/linux-x64/native/bin
+          rm -rf /tmp/clubhq-pgdata
+          "$PGBIN/initdb" -D /tmp/clubhq-pgdata -U postgres -A trust -E UTF8
+          "$PGBIN/pg_ctl" -D /tmp/clubhq-pgdata -o "-p 5439 -k /tmp" -l /tmp/clubhq-pg.log start
+
+      - name: Migration replay + database test suite
+        run: |
+          .venv/bin/python3 supabase/tests/run_migrations.py
+          .venv/bin/python3 supabase/tests/test_change_notices.py
+          .venv/bin/python3 supabase/tests/test_cancellation_notices.py
+          .venv/bin/python3 supabase/tests/test_function_grants.py
+          .venv/bin/python3 supabase/tests/test_public_rls.py
+
+      # Runs even if a prior step failed, so a red run doesn't leave a stray
+      # postgres process on the runner (irrelevant for a throwaway CI VM, but
+      # keeping this identical to the documented local teardown avoids the
+      # two diverging).
+      - name: Stop embedded Postgres
+        if: always()
+        run: |
+          PGBIN=node_modules/@embedded-postgres/linux-x64/native/bin
+          "$PGBIN/pg_ctl" -D /tmp/clubhq-pgdata stop -m fast || true

@@ -14,9 +14,7 @@
         {
           "microphonePermission": "Allow ClubHQ to use the microphone for coach voice evaluations.",
           "speechRecognitionPermission": "Allow ClubHQ to use speech recognition to transcribe coach evaluations.",
-          "androidSpeechServicePackages": [
-            "com.google.android.googlequicksearchbox"
-          ]
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
         }
       ],
       "expo-secure-store",

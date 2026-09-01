@@ -36,6 +36,18 @@ exception when duplicate_object then null; end $$;
 alter default privileges in schema public
   grant all on functions to anon, authenticated, service_role;
 
+-- Same story, tables: a hosted project also ships
+--   alter default privileges in schema public
+--     grant all on tables to postgres, anon, authenticated, service_role;
+-- so every table a migration creates is grantable to anon/authenticated by
+-- default, RLS is the only thing standing between that grant and an open
+-- table. Without this line the harness under-grants relative to production,
+-- and a table missing RLS would look no different here than one that has
+-- it -- neither anon nor authenticated could reach either one, for the
+-- wrong reason (no grant at all) rather than the right one (a policy).
+alter default privileges in schema public
+  grant all on tables to anon, authenticated, service_role;
+
 create table if not exists auth.users (
   id uuid primary key,
   email text,

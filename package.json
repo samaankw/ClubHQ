@@ -8,11 +8,16 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "test:functions": "deno test --allow-none supabase/functions/tests/",
+    "test:functions": "deno test --quiet --no-check=remote supabase/functions/tests/",
     "doctor": "expo-doctor",
     "prebuild:clean": "expo prebuild --clean",
     "verify": "npm run verify:static && npm run typecheck && npx expo-doctor@latest",
-    "verify:static": "node scripts/project-check.mjs"
+    "verify:static": "node scripts/project-check.mjs",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "jest",
+    "gen:types": "supabase gen types typescript --linked > types/database.types.ts"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -44,8 +49,16 @@
   },
   "devDependencies": {
     "@babel/core": "^7.28.0",
+    "@testing-library/react-native": "^14.0.1",
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.2.0",
     "babel-preset-expo": "^57.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~57.0.2",
+    "eslint-config-prettier": "^10.1.8",
+    "jest": "^29.7.0",
+    "jest-expo": "^57.0.5",
+    "prettier": "^3.9.6",
     "typescript": "~6.0.3"
   },
   "private": true,

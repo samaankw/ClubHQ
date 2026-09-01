@@ -1,0 +1,67 @@
+node_modules/
+.expo/
+dist/
+web-build/
+coverage/
+android/
+ios/
+types/database.types.ts
+supabase/functions/
+supabase/.temp/
+
+# Incremental adoption: Prettier was added in Phase 1 against an existing,
+# unformatted codebase. Reformatting all of it in the same PR that adds the
+# tool would touch ~44 files with zero logic changes -- exactly the kind of
+# unrelated mass churn a phase-scoped diff is supposed to avoid. The specific
+# pre-existing files below are ignored *for now*; the intent is to shrink
+# this list as files get genuinely touched in later phases (format them
+# as you go), not to leave it here permanently. New files added after
+# Phase 1 are NOT covered by this list and are checked by default.
+app/_layout.tsx
+app/index.tsx
+app/create-club.tsx
+app/claim-player.tsx
+app/club-management.tsx
+app/pilot-metrics.tsx
+app/(auth)/legal-terms.tsx
+app/(auth)/login.tsx
+app/(auth)/privacy.tsx
+app/(auth)/reset-password.tsx
+app/(auth)/signup.tsx
+app/(auth)/update-password.tsx
+app/(tabs)/_layout.tsx
+app/(tabs)/copilot.tsx
+app/(tabs)/dashboard.tsx
+app/(tabs)/messages.tsx
+app/(tabs)/players.tsx
+app/(tabs)/profile.tsx
+app/(tabs)/schedule.tsx
+app/conversation/\[id\].tsx
+app/event/\[id\].tsx
+app/legal/privacy.tsx
+app/legal/terms.tsx
+app/manage-drills.tsx
+app/modals/create-announcement.tsx
+app/modals/create-event.tsx
+app/modals/evaluate-player.tsx
+app/modals/new-conversation.tsx
+app/modals/search-messages.tsx
+app/modals/voice-evaluation.tsx
+app/player/\[id\].tsx
+lib/alertCompat.ts
+lib/announcementCategories.ts
+lib/AuthProvider.tsx
+lib/hooks.ts
+lib/index.tsx
+lib/notifications.ts
+lib/supabase.ts
+components/AnnouncementCard.tsx
+components/ClubBioSection.tsx
+components/DrillVideoModal.tsx
+components/EventCard.tsx
+components/LegalTermsContent.tsx
+types/db.ts
+README.md
+scripts/project-check.mjs
+supabase/tests/README.md
+docs/

@@ -1,3 +1,12 @@
+// Hand-written, ergonomic types for the shapes this app actually queries and
+// renders -- narrower and friendlier than the full generated schema. The
+// generated source of truth is types/database.types.ts (`npm run gen:types`);
+// consult or derive from it when adding a new type or field rather than
+// hand-guessing a shape here. These two were caught drifting from it and are
+// fixed as of Phase 1 (see database.types.ts's events.type and players.team_id):
+//   - EventType only listed 4 of the 8 values the DB has accepted since 0033.
+//   - Player.team_id was typed as required; the column has been nullable
+//     since 0001 -- the type was wrong, not the schema.
 export type Role = "director" | "coach" | "parent" | "player";
 
 export interface Profile {
@@ -30,7 +39,7 @@ export interface Team {
 
 export interface Player {
   id: string;
-  team_id: string;
+  team_id?: string | null;
   parent_id?: string | null;
   full_name: string;
   birth_date?: string | null;
@@ -99,7 +108,13 @@ export interface Announcement {
   source_series_id?: string | null;
 }
 
-export type EventType = "practice" | "game" | "tournament" | "club_event";
+// events.type is `text` with a CHECK constraint, not a native Postgres enum,
+// so `supabase gen types` can't infer a literal union for it -- it comes
+// back as plain `string` in database.types.ts. This is the one place a
+// hand-written literal union is genuinely necessary rather than a
+// duplication of what codegen already gives us. Keep in sync with the
+// CHECK in supabase/migrations/0033_org_types.sql.
+export type EventType = "practice" | "game" | "tournament" | "club_event" | "private_session" | "small_group" | "clinic" | "camp";
 
 export interface ClubEvent {
   id: string;
