@@ -1,4 +1,5 @@
 import React from "react";
+import { ScrollView } from "react-native";
 import { render, fireEvent } from "@testing-library/react-native";
 import { Screen } from "./Screen";
 import { CardHeader } from "./CardHeader";
@@ -17,6 +18,19 @@ describe("Screen", () => {
       </Screen>,
     );
     expect(flat(getByTestId("s").props.style).backgroundColor).toBe(color.bg.page);
+  });
+
+  // A form screen behind the keyboard is useless if tapping a Button while a
+  // Field is focused just dismisses the keyboard instead of firing onPress --
+  // this is the prop that keeps a submit button one tap, not two.
+  it("lets a scrolling screen's taps reach a control while the keyboard is up", async () => {
+    const ref = React.createRef<ScrollView>();
+    await render(
+      <Screen ref={ref}>
+        <Text>x</Text>
+      </Screen>,
+    );
+    expect((ref.current as unknown as { props: { keyboardShouldPersistTaps?: string } })?.props.keyboardShouldPersistTaps).toBe("handled");
   });
 });
 

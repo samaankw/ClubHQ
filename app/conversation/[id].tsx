@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, FlatList, Pressable, StyleSheet, KeyboardAvoidingView, Platform } from "react-native";
+import { View, FlatList, Pressable, StyleSheet } from "react-native";
 import { useLocalSearchParams, Stack } from "expo-router";
 import { format } from "date-fns";
 import { supabase } from "@/lib/supabase";
@@ -138,9 +138,9 @@ export default function Conversation() {
   };
 
   return (
-    <Screen scroll={false}>
+    <Screen scroll={false} keyboardVerticalOffset={90}>
       <Stack.Screen options={{ title }} />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={90}>
+      <View style={styles.flex}>
         <FlatList
           ref={listRef}
           data={allMessages}
@@ -194,7 +194,7 @@ export default function Conversation() {
           </View>
           <Button label={isSending ? "Sending…" : "Send"} onPress={send} disabled={!draft.trim() || isSending} />
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Screen>
   );
 }

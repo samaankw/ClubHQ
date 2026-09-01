@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { View, ScrollView, StyleSheet, ActivityIndicator } from "react-native";
 import { router, Stack } from "expo-router";
-import { isValid, parse } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { Team } from "@/types/db";
@@ -9,6 +8,7 @@ import { notify } from "@/lib/alertCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { goBackOr } from "@/lib/navigation";
 import { userFacingDbError } from "@/lib/dbErrors";
+import { isValidBirthDate } from "@/lib/validateBirthDate";
 import ModalBackButton from "@/components/ModalBackButton";
 import { Screen, Card, Eyebrow, Text, Field, Button, Chip, EmptyState } from "@/components/ui";
 import { color, space } from "@/theme";
@@ -70,9 +70,7 @@ export default function AddPlayer() {
     } else {
       setTeamError(undefined);
     }
-    // Shape alone isn't enough: "2026-13-45" matches the pattern and would
-    // reach Postgres, which answers in its own vocabulary.
-    if (birthDate && !isValid(parse(birthDate, "yyyy-MM-dd", new Date()))) {
+    if (birthDate && !isValidBirthDate(birthDate)) {
       setBirthDateError("Use a real date as YYYY-MM-DD, or leave it blank.");
       hasError = true;
     } else {

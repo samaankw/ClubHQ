@@ -10,6 +10,7 @@ import { shareText } from "@/lib/shareCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { confirmAsync, notify } from "@/lib/alertCompat";
 import { scheduleScrollIntoView } from "@/lib/scrollIntoView";
+import { isValidBirthDate } from "@/lib/validateBirthDate";
 import { Screen, Card, CardHeader, Eyebrow, Text, Button, Badge, Avatar, Field, IconChip, Divider, EmptyState } from "@/components/ui";
 import { color, space, radius, borderWidth } from "@/theme";
 
@@ -127,8 +128,8 @@ export default function ClubManagement() {
       setPlayerNameError(!playerName.trim() ? "Enter the player's name." : "Choose a team first.");
       return;
     }
-    if (birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
-      setBirthDateError("Use YYYY-MM-DD or leave it blank.");
+    if (birthDate && !isValidBirthDate(birthDate)) {
+      setBirthDateError("Use a real date as YYYY-MM-DD, or leave it blank.");
       return;
     }
     setPlayerNameError(undefined);

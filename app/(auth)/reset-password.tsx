@@ -10,18 +10,25 @@ import { space } from "@/theme";
 export default function ResetPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [emailError, setEmailError] = useState<string | undefined>();
 
   const sendReset = async () => {
     if (!email.trim()) {
-      return notify("Email required", "Enter the email on your ClubHQ account.");
+      setEmailError("Enter the email on your ClubHQ account.");
+      return;
     }
+    setEmailError(undefined);
 
     setLoading(true);
 
     // Hardcoding localhost:8081 here would send every password-reset email a
     // dead link once this isn't running on your own dev machine — use
     // whatever origin the app is actually being served from instead.
-    const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/update-password` : Linking.createURL("update-password");
+    // `window` can exist without `window.location` (e.g. in a test/worker
+    // environment), so check the property actually being read, not just the
+    // global's presence.
+    const redirectTo =
+      typeof window !== "undefined" && window.location ? `${window.location.origin}/update-password` : Linking.createURL("update-password");
 
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo });
 
@@ -44,7 +51,17 @@ export default function ResetPassword() {
       </Text>
 
       <View style={styles.form}>
-        <Field placeholder="Email" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
+        <Field
+          placeholder="Email"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={(v) => {
+            setEmail(v);
+            if (emailError) setEmailError(undefined);
+          }}
+          error={emailError}
+        />
         <Button label={loading ? "Sending…" : "Send Reset Link"} onPress={sendReset} disabled={loading} fullWidth />
       </View>
 

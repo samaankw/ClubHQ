@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { View, Pressable, StyleSheet, ScrollView, LayoutChangeEvent, AccessibilityInfo } from "react-native";
+import { View, Pressable, StyleSheet, ScrollView, LayoutChangeEvent, AccessibilityInfo, BackHandler } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { addDays, format, nextSaturday, parse, startOfDay } from "date-fns";
 import { supabase } from "@/lib/supabase";
@@ -12,7 +12,21 @@ import { goBackOr } from "@/lib/navigation";
 import { TIME_PRESETS, matchTimePreset, buildStartsAt, weeklyOccurrences } from "@/lib/eventSchedule";
 import { resolveTargeting, AudienceMode } from "@/lib/eventTargeting";
 import ModalBackButton from "@/components/ModalBackButton";
-import { Screen, Card, Text, Eyebrow, Field, Button, Chip, IconChip, Toggle, CardHeader, Calendar, FilterChipRow } from "@/components/ui";
+import {
+  Screen,
+  Card,
+  Text,
+  Eyebrow,
+  Field,
+  Button,
+  Chip,
+  IconChip,
+  Toggle,
+  CardHeader,
+  Calendar,
+  FilterChipRow,
+  ProgressBar,
+} from "@/components/ui";
 import type { IconName } from "@/components/ui";
 import { color, space, radius, borderWidth } from "@/theme";
 
@@ -127,6 +141,9 @@ export default function CreateEvent() {
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [repeatWeeksStr, setRepeatWeeksStr] = useState("8");
   const [submitting, setSubmitting] = useState(false);
+  // Set only during the recurring-creation loop below, so a single-event
+  // create/edit shows the ordinary "Saving…" button label with nothing else.
+  const [creationProgress, setCreationProgress] = useState<{ done: number; total: number } | null>(null);
   const [titleError, setTitleError] = useState<string | undefined>();
   const [dateError, setDateError] = useState<string | undefined>();
   const [timeError, setTimeError] = useState<string | undefined>();
@@ -285,6 +302,18 @@ export default function CreateEvent() {
     })();
   }, [audienceMode, teams]);
 
+  // Android's hardware back button bypasses the header entirely, so it needs
+  // its own guard: while a submit (especially a multi-week recurring create)
+  // is in flight, there is no cancellation for the RPC calls already
+  // underway -- letting the user navigate away just means they keep running
+  // against a screen nobody's looking at, and whatever notify()/goBackOr()
+  // fires when they finish lands on a route the user already left. Returning
+  // true here means "handled, don't do the default back."
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => submitting);
+    return () => sub.remove();
+  }, [submitting]);
+
   const handleSubmit = async () => {
     if (!title.trim() || !dateStr || !hourStr || !minuteStr) {
       setTitleError(!title.trim() ? "Add a title." : undefined);
@@ -402,10 +431,12 @@ export default function CreateEvent() {
     let seriesId: string | null = null;
     let firstEventId: string | null = null;
     const occurrences = weeklyOccurrences(startsAt, occurrenceCount);
+    if (occurrenceCount > 1) setCreationProgress({ done: 0, total: occurrenceCount });
     for (let i = 0; i < occurrenceCount; i++) {
       const { data: newEventId, error } = await createOccurrence(occurrences[i].toISOString(), seriesId);
       if (error) {
         setSubmitting(false);
+        setCreationProgress(null);
         return notify(
           i === 0 ? "Couldn't create event" : "Some sessions couldn't be created",
           i === 0 ? error.message : `Created ${i} of ${occurrenceCount} sessions before hitting an error: ${error.message}`,
@@ -415,8 +446,10 @@ export default function CreateEvent() {
         seriesId = newEventId;
         firstEventId = newEventId;
       }
+      if (occurrenceCount > 1) setCreationProgress({ done: i + 1, total: occurrenceCount });
     }
     setSubmitting(false);
+    setCreationProgress(null);
 
     // Fire-and-forget, same as announcements — the event is already saved
     // either way, so a push hiccup shouldn't block the coach or scare them
@@ -448,8 +481,17 @@ export default function CreateEvent() {
       <Stack.Screen
         options={{
           title: isEditing ? "Edit Event" : "New Event",
+          // iOS swipe-to-dismiss, gated the same as the header button and the
+          // Android hardware-back listener below -- see that listener's
+          // comment for why navigating away mid-submit isn't safe here.
+          gestureEnabled: !submitting,
           headerLeft: () => (
-            <ModalBackButton onPress={() => goBackOr(isEditing ? `/event/${eventId}` : "/(tabs)/schedule?section=events")} />
+            <ModalBackButton
+              onPress={() => {
+                if (submitting) return;
+                goBackOr(isEditing ? `/event/${eventId}` : "/(tabs)/schedule?section=events");
+              }}
+            />
           ),
         }}
       />
@@ -685,8 +727,27 @@ export default function CreateEvent() {
 
       <Field placeholder="Notes (optional)" value={notes} onChangeText={setNotes} multiline />
 
+      {creationProgress && (
+        <View style={{ gap: space[2] }}>
+          <Text tone="secondary" role="bodySm">
+            Creating session {creationProgress.done} of {creationProgress.total}…
+          </Text>
+          <ProgressBar value={creationProgress.done / creationProgress.total} />
+        </View>
+      )}
+
       <Button
-        label={submitting ? (isEditing ? "Saving…" : "Creating…") : isEditing ? "Save Changes" : "Add to Schedule"}
+        label={
+          creationProgress
+            ? `Creating ${creationProgress.done} of ${creationProgress.total}…`
+            : submitting
+              ? isEditing
+                ? "Saving…"
+                : "Creating…"
+              : isEditing
+                ? "Save Changes"
+                : "Add to Schedule"
+        }
         onPress={handleSubmit}
         disabled={submitting}
         size="lg"

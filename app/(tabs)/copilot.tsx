@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { View, TextInput, Pressable, StyleSheet, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
+import { View, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
@@ -68,7 +68,7 @@ export default function Copilot() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={90}>
+    <Screen scroll={false} keyboardVerticalOffset={90}>
       {messages.length === 0 ? (
         <View style={styles.emptyState}>
           <IconChip name="sparkles" tone="brand" size={28} style={styles.emptyIcon} />
@@ -133,12 +133,11 @@ export default function Copilot() {
           <Ionicons name="arrow-up" size={20} color={color.icon.inverse} />
         </Pressable>
       </View>
-    </KeyboardAvoidingView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: color.bg.page },
   center: { textAlign: "center" },
   emptyState: { flex: 1, padding: space[6], paddingTop: space[8], gap: space[3], alignItems: "stretch" },
   emptyIcon: { alignSelf: "center", width: space[9], height: space[9], borderRadius: radius.full, marginBottom: space[2] },
