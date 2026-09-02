@@ -3,8 +3,10 @@ Phase 6c: 0041_club_bio_fields.sql widens clubs' UPDATE policy from
 owner-only to any director of the club, and locks the grant down to
 name/crest_url/bio specifically. This proves both halves for real: a
 promoted (non-owner) director can now edit the bio, a non-director cannot,
-a different club's director cannot, and nobody can slip org_type/owner_id
-through the same update.
+a different club's director cannot, and nobody can slip owner_id/join_code
+through the same update. (0042_club_org_type_setting.sql later widens the
+grant again to also allow org_type -- see test_club_org_type.py for that;
+org_type is deliberately NOT checked as blocked here anymore.)
 """
 import uuid
 import psycopg2
@@ -108,10 +110,6 @@ def run():
         )
 
         as_user(cur, owner_a)
-        check(
-            "even the owner cannot slip org_type through the same update (column grant)",
-            expect_denied(cur, "update clubs set org_type = 'large_club' where id = %s", (club_a,)),
-        )
         check(
             "even the owner cannot reassign owner_id through the same update",
             expect_denied(cur, "update clubs set owner_id = %s where id = %s", (second_director_a, club_a)),

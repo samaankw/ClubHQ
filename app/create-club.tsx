@@ -4,6 +4,8 @@ import { router } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { notify } from "@/lib/alertCompat";
+import { OrgType } from "@/types/db";
+import OrgTypePicker from "@/components/OrgTypePicker";
 import { Screen, Card, Text, Field, Button, SegmentedControl, StepDots } from "@/components/ui";
 import { space, radius, elevation, layout } from "@/theme";
 
@@ -11,6 +13,7 @@ export default function CreateOrJoinClub() {
   const { profile, refreshProfile } = useAuth();
   const [mode, setMode] = useState<"create" | "join">("create");
   const [clubName, setClubName] = useState("");
+  const [orgType, setOrgType] = useState<OrgType>("small_club");
   const [joinCode, setJoinCode] = useState("");
   const [working, setWorking] = useState(false);
   const [nameError, setNameError] = useState<string | undefined>();
@@ -25,7 +28,7 @@ export default function CreateOrJoinClub() {
     setWorking(true);
     // Runs server-side (SECURITY DEFINER) — this is the only way an account
     // becomes a director. Nothing about role is trusted from the client.
-    const { error } = await supabase.rpc("create_club", { club_name: clubName.trim() });
+    const { error } = await supabase.rpc("create_club", { club_name: clubName.trim(), p_org_type: orgType });
     setWorking(false);
     if (error) {
       notify("Couldn't create club", error.message);
@@ -79,6 +82,9 @@ export default function CreateOrJoinClub() {
               <Text role="bodySm" tone="secondary" style={styles.center}>
                 Creating a club makes you its director.
               </Text>
+
+              <OrgTypePicker value={orgType} onChange={setOrgType} />
+
               <Field
                 placeholder="Club name"
                 value={clubName}

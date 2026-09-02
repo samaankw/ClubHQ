@@ -7,7 +7,8 @@ import * as ImagePicker from "expo-image-picker";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { useClubBio } from "@/lib/hooks";
-import { PaymentStatus, Player, PlayerPayment, Profile, Team } from "@/types/db";
+import { OrgType, PaymentStatus, Player, PlayerPayment, Profile, Team } from "@/types/db";
+import OrgTypePicker from "@/components/OrgTypePicker";
 import { shareText } from "@/lib/shareCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { confirmAsync, notify } from "@/lib/alertCompat";
@@ -39,7 +40,7 @@ async function uploadClubCrest(clubId: string, localUri: string): Promise<string
 }
 
 export default function ClubManagement() {
-  const { profile } = useAuth();
+  const { profile, orgType, refreshProfile } = useAuth();
   const vocab = useVocab();
   const groupLabel = vocab.group ?? vocab.member;
   const { crestUrl, bio, refresh: refreshClubBio } = useClubBio();
@@ -47,6 +48,9 @@ export default function ClubManagement() {
   const [bioDraft, setBioDraft] = useState("");
   const [savingStory, setSavingStory] = useState(false);
   const [uploadingCrest, setUploadingCrest] = useState(false);
+  const [editingOrgType, setEditingOrgType] = useState(false);
+  const [orgTypeDraft, setOrgTypeDraft] = useState<OrgType>("small_club");
+  const [savingOrgType, setSavingOrgType] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [staff, setStaff] = useState<Profile[]>([]);
@@ -267,6 +271,21 @@ export default function ClubManagement() {
     await refreshClubBio();
   };
 
+  const startEditingOrgType = () => {
+    setOrgTypeDraft(orgType ?? "small_club");
+    setEditingOrgType(true);
+  };
+
+  const saveOrgType = async () => {
+    if (!profile?.club_id) return;
+    setSavingOrgType(true);
+    const { error } = await supabase.from("clubs").update({ org_type: orgTypeDraft }).eq("id", profile.club_id);
+    setSavingOrgType(false);
+    if (error) return notify("Couldn't save club type", error.message);
+    setEditingOrgType(false);
+    await refreshProfile();
+  };
+
   const pickAndUploadCrest = async () => {
     if (!profile?.club_id) return;
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -365,6 +384,26 @@ export default function ClubManagement() {
           </Text>
         ) : (
           <Text tone="tertiary">Not set yet — parents see a generic placeholder until you add your story.</Text>
+        )}
+      </Card>
+
+      <Card style={{ gap: space[3] }}>
+        <CardHeader
+          title={`${vocab.organization.singular} Type`}
+          action={editingOrgType ? "Cancel" : "Change"}
+          onAction={() => (editingOrgType ? setEditingOrgType(false) : startEditingOrgType())}
+        />
+        {editingOrgType ? (
+          <>
+            <OrgTypePicker value={orgTypeDraft} onChange={setOrgTypeDraft} />
+            <Button label={savingOrgType ? "Saving…" : "Save"} onPress={saveOrgType} disabled={savingOrgType} fullWidth />
+          </>
+        ) : (
+          <Text tone="secondary">
+            {orgType === "private_trainer" && "Private Trainer"}
+            {orgType === "academy" && "Academy"}
+            {(orgType === "small_club" || orgType === "large_club" || !orgType) && "Club"}
+          </Text>
         )}
       </Card>
 
