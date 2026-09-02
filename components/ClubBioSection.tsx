@@ -1,5 +1,8 @@
 import React, { useState } from "react";
 import { View, Image, LayoutAnimation, Platform, UIManager, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useClubBio } from "@/lib/hooks";
+import ListState from "@/components/ListState";
 import { Card, Text, Button } from "@/components/ui";
 import { color, space, radius } from "@/theme";
 
@@ -7,27 +10,8 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// Swap these with your actual asset paths / remote URLs
-const CREST_LOGO = require("../assets/images/williams-crest.png");
-
-const FULL_BIO =
-  "Every crest tells you what a club values before a single word does. Ours is built " +
-  "around a ball made of stars, because that’s what we’re here to find, and what " +
-  "we’re here to build.\n\n" +
-  "Williams Soccer Clinic was founded by twin brothers who saw a gap between " +
-  "rec league soccer and the level players actually need to get seen, get better, " +
-  "and get recruited. So we built the training ground we wished we’d had: " +
-  "private, individualized, and relentlessly focused on the details that separate " +
-  "a good player from a great one.\n\n" +
-  "Across our Dunwoody, Snellville, and Stone Mountain locations, we work with " +
-  "players one on one and in small groups, building technical foundations, " +
-  "tactical intelligence, and the competitive mentality the game demands at its " +
-  "highest levels.\n\n" +
-  "We’re young by design, not by accident. Every session, every evaluation, " +
-  "every rep is building toward one standard: players who carry themselves, " +
-  "and play, like they belong on a bigger stage.";
-
 export default function ClubBioSection() {
+  const { crestUrl, bio, loading, error, refresh } = useClubBio();
   const [expanded, setExpanded] = useState(false);
 
   const toggleExpanded = () => {
@@ -37,21 +21,32 @@ export default function ClubBioSection() {
 
   return (
     <Card style={styles.container}>
-      {/* The crest asset is an opaque, near-black PNG with no transparency —
-          rendering it directly on the light page ground makes it look like a
-          rendering bug rather than a mark. Framing it on a dark badge (the
-          same spotlight surface used elsewhere for emphasis) makes the dark
-          disc a deliberate design choice instead. The asset itself should be
-          re-exported with a transparent background. */}
       <View style={styles.logoWrap}>
         <View style={styles.logoBadge}>
-          <Image source={CREST_LOGO} style={styles.logo} resizeMode="contain" />
+          {/* A club that hasn't uploaded a crest gets a generic mark, never
+              another club's image -- this section used to compile Williams
+              Soccer Clinic's crest and founding story directly into shared
+              UI, which every club's app would have shown regardless of
+              whose account it was. */}
+          {crestUrl ? (
+            <Image source={{ uri: crestUrl }} style={styles.logo} resizeMode="contain" />
+          ) : (
+            <Ionicons name="shield-outline" size={48} color={color.icon.inverse} />
+          )}
         </View>
       </View>
 
-      <Button label={expanded ? "Show less" : "Read our full story"} variant="ghost" size="sm" onPress={toggleExpanded} />
-
-      {expanded && <Text tone="secondary">{FULL_BIO}</Text>}
+      <ListState
+        loading={loading}
+        error={error}
+        isEmpty={!loading && !error && !bio}
+        onRetry={refresh}
+        emptyTitle="No club story yet"
+        emptyHint="A director can add one from Club Management."
+      >
+        <Button label={expanded ? "Show less" : "Read our full story"} variant="ghost" size="sm" onPress={toggleExpanded} />
+        {expanded && <Text tone="secondary">{bio}</Text>}
+      </ListState>
     </Card>
   );
 }

@@ -5,6 +5,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { useVocab } from "@/lib/vocab";
 import { teamLabel } from "@/lib/teamLabel";
 import { useAsyncData } from "@/lib/asyncData";
 import ListState from "@/components/ListState";
@@ -24,6 +25,7 @@ interface ConversationRow {
 
 export default function Messages() {
   const { profile } = useAuth();
+  const vocab = useVocab();
   const profileId = profile?.id;
 
   const {
@@ -90,7 +92,7 @@ export default function Messages() {
             item.type === "team_group"
               ? item.team_name
                 ? teamLabel({ name: item.team_name, age_group: item.team_age_group })
-                : "Team Chat"
+                : `${vocab.group?.singular ?? vocab.member.singular} Chat`
               : (item.other_participant_name ?? "Direct Message");
           return (
             <Card>

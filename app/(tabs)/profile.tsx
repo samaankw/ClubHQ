@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { useVocab } from "@/lib/vocab";
 import { shareText } from "@/lib/shareCompat";
 import { confirmAsync, notify } from "@/lib/alertCompat";
 import { Screen, Text, Eyebrow, Card, CardHeader, SpotlightCard, Button, Avatar, ListRow, Toggle, Field } from "@/components/ui";
@@ -30,6 +31,7 @@ async function uploadAvatarPhoto(userId: string, localUri: string): Promise<stri
 
 export default function Profile() {
   const { profile, refreshProfile } = useAuth();
+  const vocab = useVocab();
   const canManageDrills = profile?.role === "coach" || profile?.role === "director";
   const [joinCode, setJoinCode] = useState<string | null>(null);
   const [clubName, setClubName] = useState<string | null>(null);
@@ -208,9 +210,15 @@ export default function Profile() {
             {joinCode}
           </Text>
           <Text tone="onSpotlightMuted" style={styles.codeHint}>
-            Share this club code with adult members. Parents still link each child with a separate player code.
+            Share this {vocab.organization.singular.toLowerCase()} code with adult members. Parents still link each child with a separate{" "}
+            {vocab.member.singular.toLowerCase()} code.
           </Text>
-          <Button label="Share Club Code" onPress={() => shareText(`Join ${clubName} on ClubHQ! Use club invite code: ${joinCode}`)} />
+          <Button
+            label={`Share ${vocab.organization.singular} Code`}
+            onPress={() =>
+              shareText(`Join ${clubName} on ClubHQ! Use ${vocab.organization.singular.toLowerCase()} invite code: ${joinCode}`)
+            }
+          />
         </SpotlightCard>
       )}
 
@@ -218,9 +226,11 @@ export default function Profile() {
         <Card style={styles.list}>
           <Eyebrow>Administration</Eyebrow>
           {profile?.role === "director" && (
-            <ListRow icon="business" title="Club Management" onPress={() => router.push("/club-management")} />
+            <ListRow icon="business" title={`${vocab.organization.singular} Management`} onPress={() => router.push("/club-management")} />
           )}
-          {profile?.role === "parent" && <ListRow icon="link" title="Link a Player" onPress={() => router.push("/claim-player")} />}
+          {profile?.role === "parent" && (
+            <ListRow icon="link" title={`Link a ${vocab.member.singular}`} onPress={() => router.push("/claim-player")} />
+          )}
           {canManageDrills && <ListRow icon="film" title="Manage Drill Library" onPress={() => router.push("/manage-drills")} />}
           {canManageDrills && <ListRow icon="bulb" title="Director Copilot" onPress={() => router.push("/(tabs)/copilot")} />}
           {profile?.role === "director" && (

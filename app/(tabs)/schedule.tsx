@@ -6,6 +6,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { ClubEvent } from "@/types/db";
+import { useVocab } from "@/lib/vocab";
+import type { VocabSet } from "@/lib/vocab";
 import { useAsyncData } from "@/lib/asyncData";
 import ListState from "@/components/ListState";
 import AnnouncementsList from "@/components/AnnouncementsList";
@@ -26,21 +28,23 @@ const TYPE_ICON: Record<string, IconName> = {
   club_event: "megaphone",
 };
 
-function audienceLabel(event: ClubEvent): string {
+function audienceLabel(event: ClubEvent, vocab: VocabSet): string {
   const targets = event.event_players ?? [];
   const names = targets.map((t) => t.players.full_name).join(", ");
+  const groupWord = vocab.group?.singular ?? "Team";
   // A team event with specific players attached means "not everyone in the
   // group showed up" — still worth labeling by group, just with who's in.
-  if (targets.length && event.team_id) return `${event.teams ? teamLabel(event.teams) : "Team"} · ${names}`;
+  if (targets.length && event.team_id) return `${event.teams ? teamLabel(event.teams) : groupWord} · ${names}`;
   if (targets.length) return names;
-  if (event.team_id) return event.teams ? teamLabel(event.teams) : "Team";
-  return "Club-wide";
+  if (event.team_id) return event.teams ? teamLabel(event.teams) : groupWord;
+  return `${vocab.organization.singular}-wide`;
 }
 
 type Section = "events" | "announcements";
 
 function EventsSection() {
   const { profile } = useAuth();
+  const vocab = useVocab();
   const clubId = profile?.club_id;
   const canCreate = profile?.role === "coach" || profile?.role === "director";
 
@@ -113,7 +117,7 @@ function EventsSection() {
                     <Text role="h3" style={styles.titleText}>
                       {item.title}
                     </Text>
-                    <Badge label={audienceLabel(item)} tone={isPrivate ? "success" : "brand"} />
+                    <Badge label={audienceLabel(item, vocab)} tone={isPrivate ? "success" : "brand"} />
                   </View>
                   <Text role="bodySm" tone="secondary">
                     {format(new Date(item.starts_at), "h:mm a")}

@@ -3,7 +3,9 @@ import { View, ScrollView, StyleSheet, RefreshControl } from "react-native";
 import { Stack } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
-import { Screen, Card, SpotlightCard, Eyebrow, Text, StatTile, EmptyState } from "@/components/ui";
+import { useVocab } from "@/lib/vocab";
+import { Screen, Card, SpotlightCard, Eyebrow, Text, StatTile } from "@/components/ui";
+import NotAuthorized from "@/components/NotAuthorized";
 import { color, space, radius } from "@/theme";
 
 interface Metrics {
@@ -88,6 +90,7 @@ function UsageDonut({ manual, voice }: { manual: number; voice: number }) {
 
 export default function PilotMetrics() {
   const { profile } = useAuth();
+  const vocab = useVocab();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -163,7 +166,7 @@ export default function PilotMetrics() {
     return (
       <Screen>
         <Stack.Screen options={{ title: "Pilot Metrics" }} />
-        <EmptyState icon="lock-closed" title="Directors only" body="Pilot metrics are visible to directors only." />
+        <NotAuthorized title="Directors only" body="Pilot metrics are visible to directors only." fallback="/(tabs)/dashboard" />
       </Screen>
     );
   }
@@ -189,11 +192,11 @@ export default function PilotMetrics() {
           <>
             <View style={styles.row}>
               <StatTile
-                label="Roster evaluated (7d)"
+                label={`${vocab.rosterTitle} evaluated (7d)`}
                 value={evalRate7 !== null ? `${evalRate7}%` : "—"}
-                footnote={`${metrics.evaluatedLast7Days} of ${metrics.totalPlayers} players`}
+                footnote={`${metrics.evaluatedLast7Days} of ${metrics.totalPlayers} ${vocab.member.plural.toLowerCase()}`}
               />
-              <StatTile label="Players evaluated (30d)" value={String(metrics.evaluatedLast30Days)} />
+              <StatTile label={`${vocab.member.plural} evaluated (30d)`} value={String(metrics.evaluatedLast30Days)} />
             </View>
 
             <View style={styles.row}>

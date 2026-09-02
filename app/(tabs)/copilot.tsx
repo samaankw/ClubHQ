@@ -3,7 +3,8 @@ import { View, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicator } f
 import { Ionicons } from "@expo/vector-icons";
 import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
-import { Screen, Text, IconChip, ListRow, Badge, EmptyState } from "@/components/ui";
+import { Screen, Text, IconChip, ListRow, Badge } from "@/components/ui";
+import NotAuthorized from "@/components/NotAuthorized";
 import type { IconName } from "@/components/ui";
 import { color, space, radius, borderWidth, type as typeTokens, opacity } from "@/theme";
 
@@ -62,7 +63,11 @@ export default function Copilot() {
   if (!canUse) {
     return (
       <Screen>
-        <EmptyState icon="lock-closed" title="Copilot locked" body="The Director Copilot is available to coaches and directors." />
+        <NotAuthorized
+          title="Copilot locked"
+          body="The Director Copilot is available to coaches and directors."
+          fallback="/(tabs)/dashboard"
+        />
       </Screen>
     );
   }

@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { useVocab } from "@/lib/vocab";
 import { Player, DevelopmentPlan, HomeworkItem, Drill, Evaluation } from "@/types/db";
 import { confirmAsync, notify } from "@/lib/alertCompat";
 import DrillVideoModal from "@/components/DrillVideoModal";
@@ -76,6 +77,7 @@ interface PlayerDetailData {
 export default function PlayerDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuth();
+  const vocab = useVocab();
   const [expandedPlanIds, setExpandedPlanIds] = useState<Set<string>>(new Set());
   const [publishing, setPublishing] = useState(false);
   const [watchingDrill, setWatchingDrill] = useState<HomeworkWithDrill | null>(null);
@@ -91,7 +93,7 @@ export default function PlayerDetail() {
       if (!id) return null;
       const { data: playerData, error: playerError } = await supabase.from("players").select("*").eq("id", id).single();
       if (playerError) throw playerError;
-      if (!playerData) throw { message: "Player not found." };
+      if (!playerData) throw { message: `${vocab.member.singular} not found.` };
 
       // Homework used to only ever load from the single latest plan — once a
       // new plan generated, every prior week's drills (and their videos)
@@ -127,7 +129,7 @@ export default function PlayerDetail() {
         evaluations: (evaluationData as Evaluation[]) ?? [],
       };
     },
-    [id, profile?.id, profile?.role],
+    [id, profile?.id, profile?.role, vocab.member.singular],
     null,
   );
 
@@ -140,7 +142,13 @@ export default function PlayerDetail() {
   if (loading || error || !data) {
     return (
       <Screen>
-        <ListState loading={loading} error={error} isEmpty={!loading && !error} onRetry={load} emptyTitle="Player not found." />
+        <ListState
+          loading={loading}
+          error={error}
+          isEmpty={!loading && !error}
+          onRetry={load}
+          emptyTitle={`${vocab.member.singular} not found.`}
+        />
       </Screen>
     );
   }
@@ -496,7 +504,7 @@ export default function PlayerDetail() {
           <EmptyState
             icon="stats-chart"
             title="No evaluations yet"
-            body="Once a coach logs an evaluation, this player's development profile appears here."
+            body={`Once a coach logs an evaluation, this ${vocab.member.singular.toLowerCase()}'s development profile appears here.`}
           />
         )}
 

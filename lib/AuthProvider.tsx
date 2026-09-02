@@ -3,11 +3,12 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { Session } from "@supabase/supabase-js";
 import * as Linking from "expo-linking";
 import { supabase } from "./supabase";
-import { Profile } from "@/types/db";
+import { Profile, OrgType } from "@/types/db";
 
 interface AuthContextValue {
   session: Session | null;
   profile: Profile | null;
+  orgType: OrgType | null;
   loading: boolean;
   refreshProfile: () => Promise<void>;
 }
@@ -15,6 +16,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue>({
   session: null,
   profile: null,
+  orgType: null,
   loading: true,
   refreshProfile: async () => {},
 });
@@ -51,7 +53,27 @@ export async function createSessionFromUrl(url: string) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [orgType, setOrgType] = useState<OrgType | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const loadOrgType = async (clubId: string | null | undefined) => {
+    if (!clubId) {
+      setOrgType(null);
+      return;
+    }
+    // Deliberately a separate query, not embedded onto the profiles select
+    // below (`select("*, clubs(org_type)")`) -- clubs has two FKs to/from
+    // profiles (profiles.club_id and clubs.owner_id), which PostgREST can't
+    // disambiguate without a !fkey hint, and this app has already hit that
+    // exact "more than one relationship was found" error once before.
+    const { data, error } = await supabase.from("clubs").select("org_type").eq("id", clubId).maybeSingle();
+    if (error) {
+      console.error("Failed to load club org_type:", error.message);
+      setOrgType(null);
+      return;
+    }
+    setOrgType((data?.org_type as OrgType | undefined) ?? null);
+  };
 
   const loadProfile = async (userId: string) => {
     let { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
@@ -70,9 +92,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) {
       console.error("Failed to load ClubHQ profile:", error.message);
       setProfile(null);
+      setOrgType(null);
       return;
     }
     setProfile(data as Profile | null);
+    await loadOrgType((data as Profile | null)?.club_id);
   };
 
   useEffect(() => {
@@ -114,6 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await loadProfile(newSession.user.id);
   } else {
     setProfile(null);
+    setOrgType(null);
   }
 
   setLoading(false);
@@ -130,7 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (session) await loadProfile(session.user.id);
   };
 
-  return <AuthContext.Provider value={{ session, profile, loading, refreshProfile }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ session, profile, orgType, loading, refreshProfile }}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => useContext(AuthContext);

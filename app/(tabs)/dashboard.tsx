@@ -3,6 +3,7 @@ import { View, ScrollView, RefreshControl } from "react-native";
 import { format } from "date-fns";
 import { router } from "expo-router";
 import { useAuth } from "@/lib/AuthProvider";
+import { useVocab } from "@/lib/vocab";
 import { useNextEvent, useWeekCounts, useRecentAnnouncements, useMyPlayers, useLatestDevelopmentPlan, useSetupProgress } from "@/lib/hooks";
 import ClubBioSection from "@/components/ClubBioSection";
 import CoachesSection from "@/components/CoachesSection";
@@ -26,6 +27,7 @@ import {
 import { space, opacity } from "@/theme";
 
 function PlayerDevelopmentCard() {
+  const vocab = useVocab();
   const { players, loading, error, refresh } = useMyPlayers();
   const [selectedId, setSelectedId] = React.useState<string | undefined>();
 
@@ -43,15 +45,15 @@ function PlayerDevelopmentCard() {
     // has no player card at all, with no clue why or what to do about it.
     return (
       <Card style={{ gap: space[3] }}>
-        <Eyebrow>My Players</Eyebrow>
+        <Eyebrow>My {vocab.member.plural}</Eyebrow>
         <ListState
           loading={loading}
           error={error}
           isEmpty={!loading && !error}
           onRetry={refresh}
           emptyTitle="No child linked to your account yet."
-          emptyHint="Your director can give you a one-time player code."
-          emptyAction={{ label: "Link a Player", onPress: () => router.push("/claim-player") }}
+          emptyHint={`Your director can give you a one-time ${vocab.member.singular.toLowerCase()} code.`}
+          emptyAction={{ label: `Link a ${vocab.member.singular}`, onPress: () => router.push("/claim-player") }}
         />
       </Card>
     );
@@ -63,7 +65,7 @@ function PlayerDevelopmentCard() {
 
   return (
     <Card style={{ gap: space[3] }}>
-      <Eyebrow>My Players</Eyebrow>
+      <Eyebrow>My {vocab.member.plural}</Eyebrow>
 
       {players.length > 1 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -97,6 +99,7 @@ function PlayerDevelopmentCard() {
 
 export default function Dashboard() {
   const { profile } = useAuth();
+  const vocab = useVocab();
   const { event, loading: eventLoading, error: eventError, refresh: refreshEvent } = useNextEvent();
   const { counts, loading: countsLoading, error: countsError, refresh: refreshCounts } = useWeekCounts();
   const { announcements, loading: annLoading, error: annError, refresh: refreshAnn } = useRecentAnnouncements(3);
@@ -142,11 +145,20 @@ export default function Dashboard() {
 
         {profile?.role === "director" && (
           <View style={{ flexDirection: "row", gap: space[3] }}>
-            <View style={[{ flex: 1 }, teamCount === 0 && { opacity: opacity.disabled }]}>
-              <StatTile label="Club Status" value={String(teamCount)} footnote="Teams active" />
-            </View>
+            {/* A private trainer has no group/team concept at all -- showing
+                a "0 teams active" stat next to their real client count would
+                read as a broken metric, not an empty one. */}
+            {vocab.group && (
+              <View style={[{ flex: 1 }, teamCount === 0 && { opacity: opacity.disabled }]}>
+                <StatTile
+                  label={`${vocab.organization.singular} Status`}
+                  value={String(teamCount)}
+                  footnote={`${vocab.group.plural} active`}
+                />
+              </View>
+            )}
             <View style={[{ flex: 1 }, playerCount === 0 && { opacity: opacity.disabled }]}>
-              <StatTile label="Players" value={String(playerCount)} footnote="Roster count" />
+              <StatTile label={vocab.member.plural} value={String(playerCount)} footnote={`${vocab.rosterTitle} count`} />
             </View>
           </View>
         )}
@@ -204,7 +216,7 @@ export default function Dashboard() {
         </Card>
 
         <Card style={{ gap: space[3] }}>
-          <Eyebrow>Club This Week</Eyebrow>
+          <Eyebrow>{vocab.organization.singular} This Week</Eyebrow>
           <ListState loading={countsLoading} error={countsError} isEmpty={false} onRetry={refreshCounts} emptyTitle="">
             <View style={{ gap: space[3] }}>
               <View style={{ flexDirection: "row", gap: space[3] }}>
@@ -213,7 +225,7 @@ export default function Dashboard() {
               </View>
               <View style={{ flexDirection: "row", gap: space[3] }}>
                 <StatTile label="Tournaments" value={String(counts.tournaments)} icon="trophy" />
-                <StatTile label="Club Events" value={String(counts.clubEvents)} icon="megaphone" />
+                <StatTile label={`${vocab.organization.singular} Events`} value={String(counts.clubEvents)} icon="megaphone" />
               </View>
             </View>
           </ListState>

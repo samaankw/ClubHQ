@@ -9,12 +9,19 @@ import { teamLabel } from "@/lib/teamLabel";
 import { goBackOr } from "@/lib/navigation";
 import { userFacingDbError } from "@/lib/dbErrors";
 import { isValidBirthDate } from "@/lib/validateBirthDate";
+import { useVocab } from "@/lib/vocab";
+import NotAuthorized from "@/components/NotAuthorized";
 import ModalBackButton from "@/components/ModalBackButton";
 import { Screen, Card, Eyebrow, Text, Field, Button, Chip, EmptyState } from "@/components/ui";
 import { color, space } from "@/theme";
 
 export default function AddPlayer() {
   const { profile } = useAuth();
+  const vocab = useVocab();
+  // private_trainer clubs have no group/team concept at all -- Phase 6a's
+  // whole point was letting a client exist with no team row, so this screen
+  // must not force one just because it always used to.
+  const hasGroups = vocab.group !== null;
   const [teams, setTeams] = useState<Team[]>([]);
   const [loadingTeams, setLoadingTeams] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -28,7 +35,7 @@ export default function AddPlayer() {
   const [submitting, setSubmitting] = useState(false);
 
   const loadTeams = useCallback(async () => {
-    if (!profile?.club_id) {
+    if (!hasGroups || !profile?.club_id) {
       setLoadingTeams(false);
       return;
     }
@@ -50,7 +57,7 @@ export default function AddPlayer() {
     // when there's only one coach to assign. Skip the picker, use it.
     if (next.length === 1) setTeamId(next[0].id);
     setLoadingTeams(false);
-  }, [profile?.club_id]);
+  }, [profile?.club_id, hasGroups]);
 
   useEffect(() => {
     loadTeams();
@@ -64,8 +71,8 @@ export default function AddPlayer() {
     } else {
       setNameError(undefined);
     }
-    if (!teamId) {
-      setTeamError("Choose a team first.");
+    if (hasGroups && !teamId) {
+      setTeamError(`Choose a ${vocab.group?.singular.toLowerCase()} first.`);
       hasError = true;
     } else {
       setTeamError(undefined);
@@ -81,6 +88,7 @@ export default function AddPlayer() {
     setSubmitting(true);
     const { error } = await supabase.from("players").insert({
       team_id: teamId,
+      club_id: profile?.club_id,
       full_name: name.trim(),
       position: position.trim() || null,
       birth_date: birthDate || null,
@@ -96,7 +104,7 @@ export default function AddPlayer() {
   const header = (
     <Stack.Screen
       options={{
-        title: "Add Player",
+        title: `Add ${vocab.member.singular}`,
         headerLeft: () => <ModalBackButton onPress={() => goBackOr("/(tabs)/players")} />,
       }}
     />
@@ -109,30 +117,34 @@ export default function AddPlayer() {
     return (
       <Screen>
         {header}
-        <EmptyState icon="lock-closed" title="Directors only" body="Only club directors can add players to a roster." />
+        <NotAuthorized
+          title="Directors only"
+          body={`Only club directors can add ${vocab.member.plural.toLowerCase()} to a ${vocab.rosterTitle.toLowerCase()}.`}
+          fallback="/(tabs)/players"
+        />
       </Screen>
     );
   }
 
-  if (loadingTeams) {
+  if (hasGroups && loadingTeams) {
     return (
       <Screen>
         {header}
         <View style={styles.loading}>
           <ActivityIndicator color={color.icon.brand} />
-          <Text tone="secondary">Loading your teams…</Text>
+          <Text tone="secondary">Loading your {vocab.group?.plural.toLowerCase()}…</Text>
         </View>
       </Screen>
     );
   }
 
-  if (loadFailed) {
+  if (hasGroups && loadFailed) {
     return (
       <Screen>
         {header}
         <EmptyState
           icon="cloud-offline"
-          title="Couldn't load your teams"
+          title={`Couldn't load your ${vocab.group?.plural.toLowerCase()}`}
           body="We couldn't reach the server. Check your connection and try again."
         />
         <Button label="Try Again" onPress={loadTeams} fullWidth />
@@ -140,16 +152,20 @@ export default function AddPlayer() {
     );
   }
 
-  if (teams.length === 0) {
+  // private_trainer clubs have no group concept -- hasGroups is false, so
+  // this branch (and the team requirement in handleSubmit above) never
+  // applies to them. This is the concrete case Phase 6a's migration exists
+  // for: a client can be added with no team row at all.
+  if (hasGroups && teams.length === 0) {
     return (
       <Screen>
         {header}
         <EmptyState
           icon="people"
-          title="No teams yet"
-          body="A player has to belong to a team — create one first, then come back to add players."
+          title={`No ${vocab.group?.plural.toLowerCase()} yet`}
+          body={`A ${vocab.member.singular.toLowerCase()} has to belong to a ${vocab.group?.singular.toLowerCase()} — create one first, then come back to add ${vocab.member.plural.toLowerCase()}.`}
         />
-        <Button label="Create a Team" onPress={() => router.replace("/modals/create-team")} fullWidth />
+        <Button label={`Create a ${vocab.group?.singular}`} onPress={() => router.replace("/modals/create-team")} fullWidth />
       </Screen>
     );
   }
@@ -163,7 +179,7 @@ export default function AddPlayer() {
       <Card style={styles.card}>
         {teams.length > 1 ? (
           <View style={styles.section}>
-            <Eyebrow>Team</Eyebrow>
+            <Eyebrow>{vocab.group?.singular}</Eyebrow>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
               {teams.map((team) => (
                 <Chip
@@ -192,7 +208,7 @@ export default function AddPlayer() {
         ) : null}
 
         <Field
-          placeholder="Player full name"
+          placeholder={`${vocab.member.singular} full name`}
           value={name}
           onChangeText={(v) => {
             setName(v);
@@ -211,7 +227,7 @@ export default function AddPlayer() {
           error={birthDateError}
         />
 
-        <Button label={submitting ? "Adding…" : "Add Player"} onPress={handleSubmit} disabled={submitting} fullWidth />
+        <Button label={submitting ? "Adding…" : `Add ${vocab.member.singular}`} onPress={handleSubmit} disabled={submitting} fullWidth />
       </Card>
     </Screen>
   );

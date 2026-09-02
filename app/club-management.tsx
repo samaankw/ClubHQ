@@ -1,23 +1,52 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, View, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { format, addMonths, startOfMonth } from "date-fns";
+import * as ImagePicker from "expo-image-picker";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { useClubBio } from "@/lib/hooks";
 import { PaymentStatus, Player, PlayerPayment, Profile, Team } from "@/types/db";
 import { shareText } from "@/lib/shareCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { confirmAsync, notify } from "@/lib/alertCompat";
 import { scheduleScrollIntoView } from "@/lib/scrollIntoView";
 import { isValidBirthDate } from "@/lib/validateBirthDate";
+import { useVocab } from "@/lib/vocab";
+import NotAuthorized from "@/components/NotAuthorized";
 import { Screen, Card, CardHeader, Eyebrow, Text, Button, Badge, Avatar, Field, IconChip, Divider, EmptyState } from "@/components/ui";
 import { color, space, radius, borderWidth } from "@/theme";
 
 type TeamCoach = { team_id: string; coach_id: string };
 
+async function uploadClubCrest(clubId: string, localUri: string): Promise<string> {
+  const extMatch = /\.(\w+)$/.exec(localUri);
+  const ext = extMatch ? extMatch[1] : "jpg";
+  const path = `club-crests/${clubId}/${Date.now()}.${ext}`;
+
+  const response = await fetch(localUri);
+  const bytes = await response.arrayBuffer();
+
+  const { error } = await supabase.storage.from("club-media").upload(path, bytes, {
+    contentType: `image/${ext === "jpg" ? "jpeg" : ext}`,
+    upsert: false,
+  });
+  if (error) throw error;
+
+  const { data } = supabase.storage.from("club-media").getPublicUrl(path);
+  return data.publicUrl;
+}
+
 export default function ClubManagement() {
   const { profile } = useAuth();
+  const vocab = useVocab();
+  const groupLabel = vocab.group ?? vocab.member;
+  const { crestUrl, bio, refresh: refreshClubBio } = useClubBio();
+  const [editingStory, setEditingStory] = useState(false);
+  const [bioDraft, setBioDraft] = useState("");
+  const [savingStory, setSavingStory] = useState(false);
+  const [uploadingCrest, setUploadingCrest] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [staff, setStaff] = useState<Profile[]>([]);
@@ -118,7 +147,7 @@ export default function ClubManagement() {
   if (profile?.role !== "director") {
     return (
       <Screen>
-        <EmptyState icon="lock-closed" title="Directors only" body="Only club directors can manage club operations." />
+        <NotAuthorized title="Directors only" body="Only club directors can manage club operations." fallback="/(tabs)/dashboard" />
       </Screen>
     );
   }
@@ -135,9 +164,13 @@ export default function ClubManagement() {
     setPlayerNameError(undefined);
     setBirthDateError(undefined);
     setBusy(true);
-    const { error } = await supabase
-      .from("players")
-      .insert({ team_id: selectedTeamId, full_name: playerName.trim(), position: position.trim() || null, birth_date: birthDate || null });
+    const { error } = await supabase.from("players").insert({
+      team_id: selectedTeamId,
+      club_id: profile?.club_id,
+      full_name: playerName.trim(),
+      position: position.trim() || null,
+      birth_date: birthDate || null,
+    });
     setBusy(false);
     if (error) return notify("Couldn't add player", error.message);
     setPlayerName("");
@@ -194,12 +227,12 @@ export default function ClubManagement() {
   const archivePlayer = async (player: Player) => {
     const ok = await confirmAsync(
       `Archive ${player.full_name}?`,
-      "Their history is kept — they just come off the active roster.",
+      `Their history is kept — they just come off the active ${vocab.rosterTitle.toLowerCase()}.`,
       "Archive",
     );
     if (!ok) return;
     const { error } = await supabase.from("players").update({ archived_at: new Date().toISOString() }).eq("id", player.id);
-    if (error) notify("Couldn't archive player", error.message);
+    if (error) notify(`Couldn't archive ${vocab.member.singular.toLowerCase()}`, error.message);
     else await load();
   };
 
@@ -207,7 +240,7 @@ export default function ClubManagement() {
     if (!selectedTeam) return;
     const ok = await confirmAsync(
       `Archive ${teamLabel(selectedTeam)}?`,
-      "Players and history stay intact. Move active players first if needed.",
+      `${vocab.member.plural} and history stay intact. Move active ${vocab.member.plural.toLowerCase()} first if needed.`,
       "Archive",
     );
     if (!ok) return;
@@ -216,9 +249,57 @@ export default function ClubManagement() {
     else await load();
   };
 
+  const startEditingStory = () => {
+    setBioDraft(bio ?? "");
+    setEditingStory(true);
+  };
+
+  const saveStory = async () => {
+    if (!profile?.club_id) return;
+    setSavingStory(true);
+    const { error } = await supabase
+      .from("clubs")
+      .update({ bio: bioDraft.trim() || null })
+      .eq("id", profile.club_id);
+    setSavingStory(false);
+    if (error) return notify("Couldn't save club story", error.message);
+    setEditingStory(false);
+    await refreshClubBio();
+  };
+
+  const pickAndUploadCrest = async () => {
+    if (!profile?.club_id) return;
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      notify("Permission needed", "Allow photo library access to set a club crest.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]?.uri) return;
+
+    setUploadingCrest(true);
+    try {
+      const publicUrl = await uploadClubCrest(profile.club_id, result.assets[0].uri);
+      const { error } = await supabase.from("clubs").update({ crest_url: publicUrl }).eq("id", profile.club_id);
+      if (error) throw error;
+      await refreshClubBio();
+    } catch (err) {
+      notify("Upload failed", err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setUploadingCrest(false);
+    }
+  };
+
   return (
     <Screen ref={scrollRef}>
-      <Text tone="secondary">Set up your teams, build rosters, and invite parents.</Text>
+      <Text tone="secondary">
+        Set up your {groupLabel.plural.toLowerCase()}, build {vocab.rosterTitle.toLowerCase()}, and invite parents.
+      </Text>
 
       <Card style={{ gap: space[3] }}>
         <View style={styles.headerRow}>
@@ -248,11 +329,50 @@ export default function ClubManagement() {
         </View>
       </Card>
 
+      <Card style={{ gap: space[3] }}>
+        <CardHeader
+          title={`${vocab.organization.singular} Story`}
+          action={editingStory ? "Cancel" : bio || crestUrl ? "Edit" : "Add"}
+          onAction={() => (editingStory ? setEditingStory(false) : startEditingStory())}
+        />
+
+        <View style={styles.headerRow}>
+          <Pressable onPress={pickAndUploadCrest} disabled={uploadingCrest} style={styles.crestPreview}>
+            {crestUrl ? (
+              <Image source={{ uri: crestUrl }} style={styles.crestImage} resizeMode="contain" />
+            ) : (
+              <Ionicons name="shield-outline" size={28} color={color.icon.inverse} />
+            )}
+          </Pressable>
+          <Text tone="secondary" role="bodySm" style={{ flex: 1 }}>
+            {uploadingCrest ? "Uploading…" : "Tap the crest to change it."}
+          </Text>
+        </View>
+
+        {editingStory ? (
+          <>
+            <Field
+              placeholder={`Tell parents what makes your ${vocab.organization.singular.toLowerCase()} worth joining.`}
+              value={bioDraft}
+              onChangeText={setBioDraft}
+              multiline
+            />
+            <Button label={savingStory ? "Saving…" : "Save"} onPress={saveStory} disabled={savingStory} fullWidth />
+          </>
+        ) : bio ? (
+          <Text tone="secondary" numberOfLines={3}>
+            {bio}
+          </Text>
+        ) : (
+          <Text tone="tertiary">Not set yet — parents see a generic placeholder until you add your story.</Text>
+        )}
+      </Card>
+
       <View style={{ gap: space[3] }}>
-        <CardHeader title="Active Teams" action="+" onAction={() => router.push("/modals/create-team")} />
+        <CardHeader title={`Active ${groupLabel.plural}`} action="+" onAction={() => router.push("/modals/create-team")} />
         {teams.length === 0 ? (
           <Card>
-            <Text tone="secondary">No active teams yet — tap + to create one.</Text>
+            <Text tone="secondary">No active {groupLabel.plural.toLowerCase()} yet — tap + to create one.</Text>
           </Card>
         ) : (
           teams.map((team) => {
@@ -273,7 +393,7 @@ export default function ClubManagement() {
                   </View>
 
                   <Text tone="secondary" role="bodySm">
-                    {count} {count === 1 ? "player" : "players"}
+                    {count} {count === 1 ? vocab.member.singular.toLowerCase() : vocab.member.plural.toLowerCase()}
                   </Text>
 
                   {coaches.length > 0 ? (
@@ -292,7 +412,13 @@ export default function ClubManagement() {
 
                   <View style={styles.row}>
                     <View style={{ flex: 1 }}>
-                      <Button label="Add Player" variant="secondary" size="sm" fullWidth onPress={() => focusAddPlayer(team.id)} />
+                      <Button
+                        label={`Add ${vocab.member.singular}`}
+                        variant="secondary"
+                        size="sm"
+                        fullWidth
+                        onPress={() => focusAddPlayer(team.id)}
+                      />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Button label="Invite Parents" variant="ghost" size="sm" fullWidth onPress={() => focusRoster(team.id)} />
@@ -313,7 +439,9 @@ export default function ClubManagement() {
               otherwise there is nothing to show, so nothing renders. */}
           {staff.length > 1 && (
             <Card style={{ gap: space[3] }}>
-              <Eyebrow>Assigned Coaches — {teamLabel(selectedTeam)}</Eyebrow>
+              <Eyebrow>
+                Assigned {vocab.staff.plural} — {teamLabel(selectedTeam)}
+              </Eyebrow>
               {staff.map((coach) => {
                 const assigned = teamCoaches.some((tc) => tc.team_id === selectedTeam.id && tc.coach_id === coach.id);
                 return (
@@ -335,9 +463,11 @@ export default function ClubManagement() {
 
           <View ref={addPlayerCardRef} collapsable={false}>
             <Card style={{ gap: space[3] }}>
-              <Eyebrow>Add Player to {teamLabel(selectedTeam)}</Eyebrow>
+              <Eyebrow>
+                Add {vocab.member.singular} to {teamLabel(selectedTeam)}
+              </Eyebrow>
               <Field
-                placeholder="Player full name"
+                placeholder={`${vocab.member.singular} full name`}
                 value={playerName}
                 onChangeText={(v) => {
                   setPlayerName(v);
@@ -361,15 +491,20 @@ export default function ClubManagement() {
                   />
                 </View>
               </View>
-              <Button label="Add Player" onPress={addPlayer} disabled={busy} fullWidth />
+              <Button label={`Add ${vocab.member.singular}`} onPress={addPlayer} disabled={busy} fullWidth />
             </Card>
           </View>
 
           <View ref={rosterCardRef} collapsable={false}>
             <Card style={{ gap: space[3] }}>
-              <Eyebrow>Roster ({selectedPlayers.length})</Eyebrow>
+              <Eyebrow>
+                {vocab.rosterTitle} ({selectedPlayers.length})
+              </Eyebrow>
               {selectedPlayers.length === 0 ? (
-                <EmptyState title="No players yet" body="Add players to this team to start building the roster." />
+                <EmptyState
+                  title={`No ${vocab.member.plural.toLowerCase()} yet`}
+                  body={`Add ${vocab.member.plural.toLowerCase()} to this ${groupLabel.singular.toLowerCase()} to start building the ${vocab.rosterTitle.toLowerCase()}.`}
+                />
               ) : (
                 selectedPlayers.map((player, i) => (
                   <React.Fragment key={player.id}>
@@ -412,7 +547,10 @@ export default function ClubManagement() {
               Tap Paid/Unpaid to record training fees for {format(selectedMonth, "MMMM")} — no money moves through the app.
             </Text>
             {selectedPlayers.length === 0 ? (
-              <EmptyState title="No players yet" body="Add players to this team to start tracking training fees." />
+              <EmptyState
+                title={`No ${vocab.member.plural.toLowerCase()} yet`}
+                body={`Add ${vocab.member.plural.toLowerCase()} to this ${groupLabel.singular.toLowerCase()} to start tracking training fees.`}
+              />
             ) : (
               selectedPlayers.map((player, i) => {
                 const status: PaymentStatus = payments.find((p) => p.player_id === player.id)?.status ?? "unpaid";
@@ -433,8 +571,8 @@ export default function ClubManagement() {
           </Card>
 
           <Card style={{ gap: space[3] }}>
-            <Eyebrow tone="danger">Archive Team</Eyebrow>
-            <Button label="Archive team" variant="danger" fullWidth onPress={archiveTeam} />
+            <Eyebrow tone="danger">Archive {groupLabel.singular}</Eyebrow>
+            <Button label={`Archive ${groupLabel.singular.toLowerCase()}`} variant="danger" fullWidth onPress={archiveTeam} />
           </Card>
         </>
       )}
@@ -442,7 +580,8 @@ export default function ClubManagement() {
       <View style={styles.infoCallout}>
         <IconChip name="information-circle" tone="brand" />
         <Text tone="secondary" style={{ flex: 1 }}>
-          Archiving a team or player keeps their history intact — nothing is deleted, and you can always reference past rosters later.
+          Archiving a {groupLabel.singular.toLowerCase()} or {vocab.member.singular.toLowerCase()} keeps their history intact — nothing is
+          deleted, and you can always reference past {vocab.rosterTitle.toLowerCase()} later.
         </Text>
       </View>
     </Screen>
@@ -450,8 +589,17 @@ export default function ClubManagement() {
 }
 
 const styles = StyleSheet.create({
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: space[3] },
   row: { flexDirection: "row", gap: space[3], alignItems: "center" },
+  crestPreview: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.full,
+    backgroundColor: color.bg.spotlight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  crestImage: { width: 48, height: 48, borderRadius: radius.full },
   progressSegments: { flexDirection: "row", gap: space[2] },
   progressSegment: { flex: 1, height: space[2], borderRadius: radius.full, backgroundColor: color.bg.sunken },
   progressSegmentDone: { backgroundColor: color.bg.brand },

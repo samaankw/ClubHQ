@@ -3,6 +3,7 @@ import { View, FlatList, Pressable, StyleSheet, ActivityIndicator } from "react-
 import { router, Stack } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { useVocab } from "@/lib/vocab";
 import { notify } from "@/lib/alertCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { goBackOr } from "@/lib/navigation";
@@ -23,6 +24,8 @@ interface PersonRow {
 
 export default function NewConversation() {
   const { profile } = useAuth();
+  const vocab = useVocab();
+  const groupChatLabel = `${vocab.group?.singular ?? vocab.member.singular} Chat`;
   const [mode, setMode] = useState<"team" | "direct">("team");
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [people, setPeople] = useState<PersonRow[]>([]);
@@ -79,9 +82,9 @@ export default function NewConversation() {
       <Stack.Screen options={{ headerLeft: () => <ModalBackButton onPress={() => goBackOr("/(tabs)/messages")} /> }} />
       <View style={styles.toggleRow}>
         <SegmentedControl
-          options={["Team Chat", "Direct Message"]}
-          value={mode === "team" ? "Team Chat" : "Direct Message"}
-          onChange={(v) => setMode(v === "Team Chat" ? "team" : "direct")}
+          options={[groupChatLabel, "Direct Message"]}
+          value={mode === "team" ? groupChatLabel : "Direct Message"}
+          onChange={(v) => setMode(v === groupChatLabel ? "team" : "direct")}
         />
       </View>
 
@@ -101,10 +104,14 @@ export default function NewConversation() {
             <View style={styles.emptyWrap}>
               <EmptyState
                 icon="chatbubbles"
-                title="No teams found yet"
-                body="You'll need at least one team setup before you can start a group conversation."
+                title={`No ${vocab.group?.plural.toLowerCase() ?? "groups"} found yet`}
+                body={`You'll need at least one ${(vocab.group?.singular ?? "group").toLowerCase()} setup before you can start a group conversation.`}
               />
-              <Button label="Go to Club Operations →" onPress={() => router.push("/club-management")} fullWidth />
+              <Button
+                label={`Go to ${vocab.organization.singular} Operations →`}
+                onPress={() => router.push("/club-management")}
+                fullWidth
+              />
             </View>
           }
           renderItem={({ item }) => <ListRow icon="people" title={teamLabel(item)} onPress={() => startTeamChat(item)} />}

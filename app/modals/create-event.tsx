@@ -4,6 +4,7 @@ import { Stack, useLocalSearchParams } from "expo-router";
 import { addDays, format, nextSaturday, parse, startOfDay } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { useVocab } from "@/lib/vocab";
 import { useRecentLocations } from "@/lib/hooks";
 import { ClubEvent, EventType, Team } from "@/types/db";
 import { notify } from "@/lib/alertCompat";
@@ -107,6 +108,7 @@ function CheckRow({ label, meta, checked, onPress }: { label: string; meta?: str
 
 export default function CreateEvent() {
   const { profile } = useAuth();
+  const vocab = useVocab();
   const { eventId } = useLocalSearchParams<{ eventId?: string }>();
   const isEditing = !!eventId;
   // Holds the specific players an edited event already had until the
@@ -509,10 +511,14 @@ export default function CreateEvent() {
         <Eyebrow>Audience</Eyebrow>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
           {profile?.role === "director" && (
-            <Chip label="Club-wide" selected={audienceMode === "club"} onPress={() => setAudienceMode("club")} />
+            <Chip
+              label={`${vocab.organization.singular}-wide`}
+              selected={audienceMode === "club"}
+              onPress={() => setAudienceMode("club")}
+            />
           )}
-          <Chip label="Training Group" selected={audienceMode === "team"} onPress={() => setAudienceMode("team")} />
-          <Chip label="Select Players" selected={audienceMode === "player"} onPress={() => setAudienceMode("player")} />
+          {vocab.group && <Chip label={vocab.group.singular} selected={audienceMode === "team"} onPress={() => setAudienceMode("team")} />}
+          <Chip label={`Select ${vocab.member.plural}`} selected={audienceMode === "player"} onPress={() => setAudienceMode("player")} />
         </ScrollView>
       </View>
 

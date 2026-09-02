@@ -38,6 +38,31 @@ export function useNextEvent() {
   return { event, loading, error, refresh: retry };
 }
 
+interface ClubBio {
+  crestUrl: string | null;
+  bio: string | null;
+}
+
+const EMPTY_CLUB_BIO: ClubBio = { crestUrl: null, bio: null };
+
+export function useClubBio() {
+  const { profile } = useAuth();
+  const clubId = profile?.club_id;
+
+  const { data, loading, error, retry } = useAsyncData<ClubBio>(
+    async () => {
+      if (!clubId) return EMPTY_CLUB_BIO;
+      const { data, error } = await supabase.from("clubs").select("crest_url, bio").eq("id", clubId).maybeSingle();
+      if (error) throw error;
+      return { crestUrl: data?.crest_url ?? null, bio: data?.bio ?? null };
+    },
+    [clubId],
+    EMPTY_CLUB_BIO,
+  );
+
+  return { crestUrl: data.crestUrl, bio: data.bio, loading, error, refresh: retry };
+}
+
 const EMPTY_WEEK_COUNTS = { games: 0, practices: 0, tournaments: 0, clubEvents: 0 };
 
 export function useWeekCounts() {

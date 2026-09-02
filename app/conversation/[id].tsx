@@ -4,6 +4,7 @@ import { useLocalSearchParams, Stack } from "expo-router";
 import { format } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { useVocab } from "@/lib/vocab";
 import { teamLabel } from "@/lib/teamLabel";
 import { notify } from "@/lib/alertCompat";
 import { Screen, Text, Field, Button } from "@/components/ui";
@@ -25,6 +26,7 @@ interface MessageRow {
 export default function Conversation() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuth();
+  const vocab = useVocab();
   const [messages, setMessages] = useState<MessageRow[]>([]);
   // Kept separate from `messages` (which `load()` wholesale replaces from the
   // server) so an in-flight or failed optimistic send survives a realtime
@@ -56,12 +58,16 @@ export default function Conversation() {
       )?.find((c) => c.id === id);
       if (!convo) return;
       if (convo.type === "team_group") {
-        setTitle(convo.team_name ? teamLabel({ name: convo.team_name, age_group: convo.team_age_group }) : "Team Chat");
+        setTitle(
+          convo.team_name
+            ? teamLabel({ name: convo.team_name, age_group: convo.team_age_group })
+            : `${vocab.group?.singular ?? vocab.member.singular} Chat`,
+        );
       } else {
         setTitle(convo.other_participant_name ?? "Direct Message");
       }
     })();
-  }, [id]);
+  }, [id, vocab.group?.singular, vocab.member.singular]);
 
   const load = useCallback(async () => {
     if (!id) return;

@@ -5,6 +5,7 @@ import { Stack, router, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Notifications from "expo-notifications";
 import { AuthProvider, useAuth } from "@/lib/AuthProvider";
+import { useVocab } from "@/lib/vocab";
 import { color } from "@/theme";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { initErrorReporting } from "@/lib/errorReporting";
@@ -13,6 +14,7 @@ initErrorReporting();
 
 function RootNavigator() {
   const { session, loading } = useAuth();
+  const vocab = useVocab();
   const segments = useSegments();
 
   useEffect(() => {
@@ -56,15 +58,24 @@ function RootNavigator() {
     >
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="create-club" options={{ headerShown: true, title: "Set Up Your Club" }} />
-      <Stack.Screen name="club-management" options={{ headerShown: true, title: "Club Management" }} />
-      <Stack.Screen name="claim-player" options={{ headerShown: true, title: "Link a Player" }} />
+      <Stack.Screen name="create-club" options={{ headerShown: true, title: `Set Up Your ${vocab.organization.singular}` }} />
+      <Stack.Screen name="club-management" options={{ headerShown: true, title: `${vocab.organization.singular} Management` }} />
+      <Stack.Screen name="claim-player" options={{ headerShown: true, title: `Link a ${vocab.member.singular}` }} />
       <Stack.Screen name="event/[id]" options={{ headerShown: true, title: "Event" }} />
       <Stack.Screen name="modals/create-announcement" options={{ presentation: "modal", headerShown: true, title: "New Announcement" }} />
       <Stack.Screen name="modals/create-event" options={{ presentation: "modal", headerShown: true, title: "New Event" }} />
-      <Stack.Screen name="modals/add-player" options={{ presentation: "modal", headerShown: true, title: "Add Player" }} />
-      <Stack.Screen name="modals/create-team" options={{ presentation: "modal", headerShown: true, title: "New Team" }} />
-      <Stack.Screen name="modals/evaluate-player" options={{ presentation: "modal", headerShown: true, title: "Evaluate Player" }} />
+      <Stack.Screen
+        name="modals/add-player"
+        options={{ presentation: "modal", headerShown: true, title: `Add ${vocab.member.singular}` }}
+      />
+      <Stack.Screen
+        name="modals/create-team"
+        options={{ presentation: "modal", headerShown: true, title: `New ${vocab.group?.singular ?? "Team"}` }}
+      />
+      <Stack.Screen
+        name="modals/evaluate-player"
+        options={{ presentation: "modal", headerShown: true, title: `Evaluate ${vocab.member.singular}` }}
+      />
       <Stack.Screen name="modals/voice-evaluation" options={{ presentation: "modal", headerShown: true, title: "Voice Evaluation" }} />
       <Stack.Screen name="modals/new-conversation" options={{ presentation: "modal", headerShown: true, title: "New Message" }} />
       <Stack.Screen name="modals/search-messages" options={{ presentation: "modal", headerShown: true, title: "Search Messages" }} />

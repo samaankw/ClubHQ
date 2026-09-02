@@ -6,12 +6,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/lib/AuthProvider";
 import { registerPushToken } from "@/lib/notifications";
 import { useUnreadAnnouncementsCount } from "@/lib/hooks";
+import { getTabConfig } from "@/lib/tabConfig";
 import { color, space, type } from "@/theme";
 
 export default function TabsLayout() {
-  const { profile } = useAuth();
+  const { profile, orgType } = useAuth();
   const unreadAnnouncements = useUnreadAnnouncementsCount();
   const insets = useSafeAreaInsets();
+  const tabs = getTabConfig(profile?.role, orgType);
 
   useEffect(() => {
     if (profile?.id) void registerPushToken(profile.id);
@@ -53,60 +55,24 @@ export default function TabsLayout() {
         },
       }}
     >
-      <Tabs.Screen
-        name="dashboard"
-        options={{
-          title: "Home",
-          tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? "home" : "home-outline"} size={24} color={color} />,
-        }}
-      />
-
-      <Tabs.Screen
-        name="schedule"
-        options={{
-          title: "Schedule",
-          tabBarBadge: unreadAnnouncements > 0 ? unreadAnnouncements : undefined,
-          tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? "calendar" : "calendar-outline"} size={24} color={color} />,
-        }}
-      />
-
-      <Tabs.Screen
-        name="messages"
-        options={{
-          title: "Messages",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "chatbubble-ellipses" : "chatbubble-ellipses-outline"} size={24} color={color} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="players"
-        options={{
-          title: "Players",
-          tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? "people" : "people-outline"} size={24} color={color} />,
-        }}
-      />
-
-      {/* Copilot is a coach/director tool, not a daily screen for every
-          role — reachable from Profile instead of taking a permanent slot
-          in an already-crowded tab bar. href: null keeps the route working
-          via router.push while hiding it from the tab bar itself. */}
-      <Tabs.Screen
-        name="copilot"
-        options={{
-          title: "Copilot",
-          href: null,
-        }}
-      />
-
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profile",
-          tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? "person" : "person-outline"} size={24} color={color} />,
-        }}
-      />
+      {tabs.map((tab) => (
+        <Tabs.Screen
+          key={tab.name}
+          name={tab.name}
+          options={{
+            title: tab.title,
+            // Copilot stays reachable via router.push from Profile rather
+            // than taking a permanent slot in an already-crowded tab bar --
+            // href: null keeps the route working while hiding it from the
+            // tab bar itself.
+            href: tab.hidden ? null : undefined,
+            tabBarBadge: tab.showUnreadBadge && unreadAnnouncements > 0 ? unreadAnnouncements : undefined,
+            tabBarIcon: tab.hidden
+              ? undefined
+              : ({ color, focused }) => <Ionicons name={focused ? tab.focusedIcon : tab.icon} size={24} color={color} />,
+          }}
+        />
+      ))}
     </Tabs>
   );
 }

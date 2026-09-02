@@ -4,6 +4,7 @@ import { Stack, router } from "expo-router";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { teamLabel } from "@/lib/teamLabel";
+import { useVocab } from "@/lib/vocab";
 import { notify } from "@/lib/alertCompat";
 import { goBackOr } from "@/lib/navigation";
 import ModalBackButton from "@/components/ModalBackButton";
@@ -22,14 +23,16 @@ interface MessageResult {
   other_participant_name?: string | null;
 }
 
-function conversationLabel(row: MessageResult): string {
+function conversationLabel(row: MessageResult, groupChatLabel: string): string {
   if (row.conversation_type === "team_group") {
-    return row.team_name ? teamLabel({ name: row.team_name, age_group: row.team_age_group }) : "Team Chat";
+    return row.team_name ? teamLabel({ name: row.team_name, age_group: row.team_age_group }) : groupChatLabel;
   }
   return row.other_participant_name ?? "Direct Message";
 }
 
 export default function SearchMessages() {
+  const vocab = useVocab();
+  const groupChatLabel = `${vocab.group?.singular ?? vocab.member.singular} Chat`;
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MessageResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -92,7 +95,7 @@ export default function SearchMessages() {
             <Card style={styles.card}>
               <View style={styles.cardHeader}>
                 <Text role="label" tone="brand">
-                  {conversationLabel(item)}
+                  {conversationLabel(item, groupChatLabel)}
                 </Text>
                 <Text role="caption" tone="tertiary">
                   {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}

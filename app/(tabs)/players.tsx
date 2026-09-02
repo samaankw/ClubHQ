@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/AuthProvider";
 import { Player, Team } from "@/types/db";
 import { teamLabel } from "@/lib/teamLabel";
 import { useAsyncData } from "@/lib/asyncData";
+import { useVocab } from "@/lib/vocab";
 import ListState from "@/components/ListState";
 import { Screen, Text, Eyebrow, Card, Button, Chip, Avatar, EmptyState } from "@/components/ui";
 import { color, space, layout, radius, elevation } from "@/theme";
@@ -20,6 +21,7 @@ const EMPTY_PLAYERS_DATA: PlayersData = { players: [], teams: [] };
 
 export default function Players() {
   const { profile } = useAuth();
+  const vocab = useVocab();
   const profileId = profile?.id;
   const role = profile?.role;
   const clubId = profile?.club_id;
@@ -127,10 +129,10 @@ export default function Players() {
           ListHeaderComponent={
             isCoachOrDirector && teams.length > 0 ? (
               <Card style={styles.filterCard}>
-                <Eyebrow>Team Filter</Eyebrow>
+                <Eyebrow>{vocab.group?.singular ?? "Team"} Filter</Eyebrow>
 
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.teamRow}>
-                  <Chip label="All Players" selected={selectedTeamId === null} onPress={() => setSelectedTeamId(null)} />
+                  <Chip label={`All ${vocab.member.plural}`} selected={selectedTeamId === null} onPress={() => setSelectedTeamId(null)} />
 
                   {teams.map((team) => (
                     <Chip
@@ -144,7 +146,7 @@ export default function Players() {
 
                 {selectedTeamId ? (
                   <Button
-                    label="🎙️ Voice Evaluation for Selected Team"
+                    label={`🎙️ Voice Evaluation for Selected ${vocab.group?.singular ?? "Team"}`}
                     variant="secondary"
                     onPress={() =>
                       router.push({
@@ -157,7 +159,8 @@ export default function Players() {
                   />
                 ) : (
                   <Text role="bodySm" tone="tertiary">
-                    Choose a team above to start a whole-team voice evaluation.
+                    Choose a {(vocab.group?.singular ?? "team").toLowerCase()} above to start a whole-
+                    {(vocab.group?.singular ?? "team").toLowerCase()} voice evaluation.
                   </Text>
                 )}
               </Card>
@@ -170,9 +173,9 @@ export default function Players() {
                   <EmptyState
                     icon="link"
                     title="No child linked yet"
-                    body="Joining the club doesn't automatically connect your child's record — your director gives you a separate one-time player code for that."
+                    body={`Joining the club doesn't automatically connect your child's record — your director gives you a separate one-time ${vocab.member.singular.toLowerCase()} code for that.`}
                   />
-                  <Button label="Link a Player" onPress={() => router.push("/claim-player")} />
+                  <Button label={`Link a ${vocab.member.singular}`} onPress={() => router.push("/claim-player")} />
                 </View>
               ) : profile?.role === "director" ? (
                 // Adding a player is director-gated in RLS (`players_insert_staff`),
@@ -181,11 +184,19 @@ export default function Players() {
                 // empty, and sending them to different screens made one of them
                 // look like a different feature.
                 <View style={styles.linkPrompt}>
-                  <EmptyState icon="people" title="No players yet" body="Start building your roster by adding your first player." />
-                  <Button label="Add a Player" onPress={() => router.push("/modals/add-player")} />
+                  <EmptyState
+                    icon="people"
+                    title={`No ${vocab.member.plural.toLowerCase()} yet`}
+                    body={`Start building your ${vocab.rosterTitle.toLowerCase()} by adding your first ${vocab.member.singular.toLowerCase()}.`}
+                  />
+                  <Button label={`Add a ${vocab.member.singular}`} onPress={() => router.push("/modals/add-player")} />
                 </View>
               ) : (
-                <EmptyState icon="people" title="No players yet" body="Ask your director to add players to get the roster started." />
+                <EmptyState
+                  icon="people"
+                  title={`No ${vocab.member.plural.toLowerCase()} yet`}
+                  body={`Ask your director to add ${vocab.member.plural.toLowerCase()} to get the ${vocab.rosterTitle.toLowerCase()} started.`}
+                />
               )}
             </ListState>
           }
@@ -248,7 +259,7 @@ export default function Players() {
             style={styles.fab}
             onPress={() => router.push("/modals/add-player")}
             accessibilityRole="button"
-            accessibilityLabel="Add player"
+            accessibilityLabel={`Add ${vocab.member.singular.toLowerCase()}`}
           >
             <Ionicons name="add" size={28} color={color.icon.inverse} />
           </Pressable>
@@ -268,10 +279,11 @@ export default function Players() {
       >
         <View style={styles.modalOverlay}>
           <Card style={styles.modalCard}>
-            <Text role="h1">Remove Player?</Text>
+            <Text role="h1">Remove {vocab.member.singular}?</Text>
 
             <Text tone="secondary">
-              Are you sure you want to remove <Text tone="primary">{playerToRemove?.full_name}</Text> from the active roster?
+              Are you sure you want to remove <Text tone="primary">{playerToRemove?.full_name}</Text> from the active{" "}
+              {vocab.rosterTitle.toLowerCase()}?
             </Text>
 
             <Text role="bodySm" tone="tertiary">
@@ -295,7 +307,12 @@ export default function Players() {
                 }}
               />
 
-              <Button label={removing ? "Removing…" : "Remove Player"} variant="danger" disabled={removing} onPress={removePlayer} />
+              <Button
+                label={removing ? "Removing…" : `Remove ${vocab.member.singular}`}
+                variant="danger"
+                disabled={removing}
+                onPress={removePlayer}
+              />
             </View>
           </Card>
         </View>

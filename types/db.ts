@@ -21,11 +21,18 @@ export interface Profile {
   notify_announcements?: boolean;
 }
 
+// clubs.org_type is `text` with a CHECK constraint, not a native Postgres
+// enum, so it comes back as plain `string` in database.types.ts. Keep in
+// sync with the CHECK in supabase/migrations/0033_org_types.sql.
+export type OrgType = "private_trainer" | "academy" | "small_club" | "large_club";
+
 export interface Club {
   id: string;
   name: string;
   crest_url?: string | null;
+  bio?: string | null;
   owner_id: string;
+  org_type: OrgType;
 }
 
 export interface Team {

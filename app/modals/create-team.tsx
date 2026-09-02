@@ -3,15 +3,19 @@ import { View, StyleSheet } from "react-native";
 import { Stack } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { useVocab } from "@/lib/vocab";
 import { notify } from "@/lib/alertCompat";
 import { goBackOr } from "@/lib/navigation";
 import { userFacingDbError } from "@/lib/dbErrors";
 import ModalBackButton from "@/components/ModalBackButton";
-import { Screen, Card, Eyebrow, Field, Button, EmptyState } from "@/components/ui";
+import { Screen, Card, Eyebrow, Field, Button } from "@/components/ui";
+import NotAuthorized from "@/components/NotAuthorized";
 import { space } from "@/theme";
 
 export default function CreateTeam() {
   const { profile } = useAuth();
+  const vocab = useVocab();
+  const groupWord = vocab.group?.singular ?? "Team";
   const [name, setName] = useState("");
   const [ageGroup, setAgeGroup] = useState("");
   const [season, setSeason] = useState("");
@@ -25,7 +29,7 @@ export default function CreateTeam() {
       return notify("No club found", "Your profile isn't linked to a club yet.");
     }
     if (!name.trim()) {
-      setNameError("Enter a team name first.");
+      setNameError(`Enter a ${groupWord.toLowerCase()} name first.`);
       return;
     }
     setNameError(undefined);
@@ -52,7 +56,7 @@ export default function CreateTeam() {
     setSubmitting(false);
     if (error) {
       console.error("Failed to create team:", error.message);
-      return notify("Couldn't create team", userFacingDbError(error.message, "Try again in a moment."));
+      return notify(`Couldn't create ${groupWord.toLowerCase()}`, userFacingDbError(error.message, "Try again in a moment."));
     }
     goBackOr("/club-management");
   };
@@ -60,7 +64,7 @@ export default function CreateTeam() {
   const header = (
     <Stack.Screen
       options={{
-        title: "New Team",
+        title: `New ${groupWord}`,
         headerLeft: () => <ModalBackButton onPress={() => goBackOr("/club-management")} />,
       }}
     />
@@ -73,7 +77,11 @@ export default function CreateTeam() {
     return (
       <Screen>
         {header}
-        <EmptyState icon="lock-closed" title="Directors only" body="Only club directors can create teams." />
+        <NotAuthorized
+          title="Directors only"
+          body={`Only club directors can create ${groupWord.toLowerCase()}s.`}
+          fallback="/club-management"
+        />
       </Screen>
     );
   }
@@ -83,9 +91,9 @@ export default function CreateTeam() {
       {header}
 
       <Card style={styles.card}>
-        <Eyebrow>Team Details</Eyebrow>
+        <Eyebrow>{groupWord} Details</Eyebrow>
         <Field
-          placeholder="Team name, e.g. U10 Boys Red"
+          placeholder={`${groupWord} name, e.g. U10 Boys Red`}
           value={name}
           onChangeText={(v) => {
             setName(v);
@@ -102,7 +110,7 @@ export default function CreateTeam() {
           </View>
         </View>
 
-        <Button label={submitting ? "Creating…" : "Create Team"} onPress={handleSubmit} disabled={submitting} fullWidth />
+        <Button label={submitting ? "Creating…" : `Create ${groupWord}`} onPress={handleSubmit} disabled={submitting} fullWidth />
       </Card>
     </Screen>
   );

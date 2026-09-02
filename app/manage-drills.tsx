@@ -5,6 +5,7 @@ import { Stack } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { useVocab } from "@/lib/vocab";
 import { confirmAsync, notify } from "@/lib/alertCompat";
 import { Drill } from "@/types/db";
 import DrillVideoModal from "@/components/DrillVideoModal";
@@ -51,6 +52,7 @@ const CATEGORY_OPTIONS = ["All", ...SKILLS.map((s) => s.label)];
 
 export default function ManageDrills() {
   const { profile } = useAuth();
+  const vocab = useVocab();
   const clubId = profile?.club_id;
   const {
     data: drills,
@@ -259,7 +261,7 @@ export default function ManageDrills() {
                 error={titleError}
               />
               <Field
-                placeholder="Instructions a parent/player can follow"
+                placeholder={`Instructions a parent/${vocab.member.singular.toLowerCase()} can follow`}
                 value={description}
                 onChangeText={(v) => {
                   setDescription(v);

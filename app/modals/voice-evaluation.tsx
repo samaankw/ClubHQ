@@ -4,6 +4,7 @@ import { Stack, useLocalSearchParams } from "expo-router";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { useVocab } from "@/lib/vocab";
 import { notify } from "@/lib/alertCompat";
 import { goBackOr } from "@/lib/navigation";
 import ModalBackButton from "@/components/ModalBackButton";
@@ -24,6 +25,7 @@ interface Update {
 export default function VoiceEvaluation() {
   const { teamId } = useLocalSearchParams<{ teamId: string }>();
   const { profile } = useAuth();
+  const vocab = useVocab();
   const [stage, setStage] = useState<Stage>("idle");
   const [transcript, setTranscript] = useState("");
   const [updates, setUpdates] = useState<Update[]>([]);
@@ -300,7 +302,7 @@ export default function VoiceEvaluation() {
             ))}
           </View>
 
-          <Button label="Confirm & Update Players" size="lg" fullWidth onPress={confirmAndSave} />
+          <Button label={`Confirm & Update ${vocab.member.plural}`} size="lg" fullWidth onPress={confirmAndSave} />
           <Button label="Record Again" variant="ghost" onPress={() => setStage("idle")} />
         </View>
       )}

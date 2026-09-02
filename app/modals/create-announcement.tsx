@@ -4,8 +4,10 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { useVocab } from "@/lib/vocab";
 import { ANNOUNCEMENT_CATEGORIES } from "@/lib/announcementCategories";
 import { AnnouncementCategory, AnnouncementTargetType, Team } from "@/types/db";
+import type { VocabSet } from "@/lib/vocab";
 import { notify } from "@/lib/alertCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { goBackOr } from "@/lib/navigation";
@@ -21,12 +23,14 @@ interface PlayerOption {
 
 const CATEGORY_KEYS = Object.keys(ANNOUNCEMENT_CATEGORIES) as AnnouncementCategory[];
 
-const AUDIENCE_LABELS: Record<AnnouncementTargetType, string> = {
-  everyone: "Everyone",
-  team: "Training Group",
-  players: "Selected Players",
-  parents: "Selected Parents",
-};
+function audienceLabels(vocab: VocabSet): Record<AnnouncementTargetType, string> {
+  return {
+    everyone: "Everyone",
+    team: vocab.group?.singular ?? "Team",
+    players: `Selected ${vocab.member.plural}`,
+    parents: "Selected Parents",
+  };
+}
 
 // Maps each category's urgency tier to an IconChip tint, so the grid reads
 // at a glance without depending on the selection outline alone.
@@ -63,6 +67,7 @@ function CategoryCard({
 
 export default function CreateAnnouncement() {
   const { profile } = useAuth();
+  const vocab = useVocab();
   const { announcementId } = useLocalSearchParams<{ announcementId?: string }>();
   const isEditing = !!announcementId;
   const [title, setTitle] = useState("");
@@ -250,7 +255,7 @@ export default function CreateAnnouncement() {
         {isEditing ? (
           <Card style={styles.audienceLockedCard}>
             <Text role="h3">
-              {AUDIENCE_LABELS[targetType]}
+              {audienceLabels(vocab)[targetType]}
               {targetType === "team" && teams.find((t) => t.id === teamId) ? ` · ${teamLabel(teams.find((t) => t.id === teamId)!)}` : ""}
             </Text>
             <Text tone="secondary">
@@ -263,8 +268,12 @@ export default function CreateAnnouncement() {
               {profile?.role === "director" && (
                 <Chip label="Everyone" selected={targetType === "everyone"} onPress={() => setTargetType("everyone")} />
               )}
-              <Chip label="Training Group" selected={targetType === "team"} onPress={() => setTargetType("team")} />
-              <Chip label="Selected Players" selected={targetType === "players"} onPress={() => setTargetType("players")} />
+              {vocab.group && <Chip label={vocab.group.singular} selected={targetType === "team"} onPress={() => setTargetType("team")} />}
+              <Chip
+                label={`Selected ${vocab.member.plural}`}
+                selected={targetType === "players"}
+                onPress={() => setTargetType("players")}
+              />
               <Chip label="Selected Parents" selected={targetType === "parents"} onPress={() => setTargetType("parents")} />
             </ScrollView>
 

@@ -6,6 +6,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { AttendanceRecord, AttendanceStatus, ClubEvent, EventRSVP, PaymentStatus, Player, PlayerPayment, RSVPStatus } from "@/types/db";
+import { useVocab } from "@/lib/vocab";
+import type { VocabSet } from "@/lib/vocab";
 import { chooseAsync, confirmAsync, notify } from "@/lib/alertCompat";
 import { teamLabel } from "@/lib/teamLabel";
 import { goBackOr } from "@/lib/navigation";
@@ -15,13 +17,14 @@ import ListState from "@/components/ListState";
 import { Screen, Card, SpotlightCard, Text, Eyebrow, Button, Badge, Chip, Avatar, EmptyState } from "@/components/ui";
 import { color, space } from "@/theme";
 
-function audienceLabel(event: ClubEvent): string {
+function audienceLabel(event: ClubEvent, vocab: VocabSet): string {
   const targets = event.event_players ?? [];
   const names = targets.map((t) => t.players.full_name).join(", ");
-  if (targets.length && event.team_id) return `${event.teams ? teamLabel(event.teams) : "Team"} · ${names}`;
+  const groupWord = vocab.group?.singular ?? "Team";
+  if (targets.length && event.team_id) return `${event.teams ? teamLabel(event.teams) : groupWord} · ${names}`;
   if (targets.length) return names;
-  if (event.team_id) return event.teams ? teamLabel(event.teams) : "Team";
-  return "Club-wide";
+  if (event.team_id) return event.teams ? teamLabel(event.teams) : groupWord;
+  return `${vocab.organization.singular}-wide`;
 }
 
 const RSVP_OPTIONS: { value: RSVPStatus; label: string }[] = [
@@ -48,6 +51,7 @@ interface EventDetailData {
 export default function EventDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { profile } = useAuth();
+  const vocab = useVocab();
   const [addingToCalendar, setAddingToCalendar] = useState(false);
   const isStaff = profile?.role === "coach" || profile?.role === "director";
 
@@ -310,11 +314,11 @@ export default function EventDetail() {
     ? event.team_id
       ? "Attending Today"
       : event.event_players.length > 1
-        ? "Players"
-        : "Player"
+        ? vocab.member.plural
+        : vocab.member.singular
     : isStaff
-      ? "Roster"
-      : "Your Players";
+      ? vocab.rosterTitle
+      : `Your ${vocab.member.plural}`;
 
   return (
     <Screen>
@@ -323,7 +327,7 @@ export default function EventDetail() {
       <SpotlightCard style={{ gap: space[3] }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], flexWrap: "wrap" }}>
           <Eyebrow tone="onSpotlightMuted">{event.type.replace("_", " ")}</Eyebrow>
-          <Badge label={audienceLabel(event)} tone="neutral" />
+          <Badge label={audienceLabel(event, vocab)} tone="neutral" />
         </View>
         <Text role="h1" tone="onSpotlight">
           {event.title}
@@ -380,7 +384,7 @@ export default function EventDetail() {
       <Eyebrow>{sectionTitle}</Eyebrow>
 
       {players.length === 0 ? (
-        <EmptyState title="No eligible players for this event." />
+        <EmptyState title={`No eligible ${vocab.member.plural.toLowerCase()} for this event.`} />
       ) : (
         players.map((player) => {
           const rsvp = rsvps.find((r) => r.player_id === player.id)?.status ?? "no_response";

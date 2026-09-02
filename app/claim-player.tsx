@@ -4,12 +4,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { useVocab } from "@/lib/vocab";
 import { notify } from "@/lib/alertCompat";
 import { Screen, Text, Field, Button } from "@/components/ui";
 import { color, space, radius, borderWidth } from "@/theme";
 
 export default function ClaimPlayer() {
   const { profile } = useAuth();
+  const vocab = useVocab();
   const [code, setCode] = useState("");
   const [consent, setConsent] = useState(false);
   const [working, setWorking] = useState(false);
@@ -19,7 +21,7 @@ export default function ClaimPlayer() {
 
   const claim = async () => {
     if (profile?.role !== "parent") {
-      setRoleError("Player links can only be claimed by a parent account.");
+      setRoleError(`${vocab.member.singular} links can only be claimed by a parent account.`);
       return;
     }
     if (!code.trim()) {
@@ -37,7 +39,7 @@ export default function ClaimPlayer() {
     const { data, error } = await supabase.rpc("claim_parent_link_code", { p_code: code.trim(), p_confirm_parental_consent: true });
     setWorking(false);
     if (error) return notify("Couldn't link player", error.message);
-    notify("Player linked", "The player is now connected to your parent account.");
+    notify(`${vocab.member.singular} linked`, `The ${vocab.member.singular.toLowerCase()} is now connected to your parent account.`);
     router.replace(`/player/${data}` as never);
   };
 
@@ -55,7 +57,7 @@ export default function ClaimPlayer() {
         </Text>
       ) : null}
       <Field
-        placeholder="Player link code"
+        placeholder={`${vocab.member.singular} link code`}
         autoCapitalize="characters"
         value={code}
         onChangeText={(v) => {
@@ -89,7 +91,7 @@ export default function ClaimPlayer() {
           </Text>
         ) : null}
       </View>
-      <Button label={working ? "Linking…" : "Link Player"} onPress={claim} disabled={working} fullWidth />
+      <Button label={working ? "Linking…" : `Link ${vocab.member.singular}`} onPress={claim} disabled={working} fullWidth />
       <Pressable style={styles.skipLink} onPress={() => router.replace("/(tabs)/dashboard")}>
         <Text role="label" tone="secondary" style={styles.skipLinkText}>
           Don't have the code yet? Skip for now
