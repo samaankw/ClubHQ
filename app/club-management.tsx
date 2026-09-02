@@ -242,9 +242,21 @@ export default function ClubManagement() {
 
   const archiveTeam = async () => {
     if (!selectedTeam) return;
+    // The dialog used to say "move active players first if needed" but
+    // never actually checked — a director could archive a team out from
+    // under players still on it, silently orphaning them from any team.
+    // Move-first is now required, not suggested.
+    if (selectedPlayers.length > 0) {
+      const memberWord = (selectedPlayers.length === 1 ? vocab.member.singular : vocab.member.plural).toLowerCase();
+      notify(
+        `Can't archive ${teamLabel(selectedTeam)} yet`,
+        `${selectedPlayers.length} active ${memberWord} ${selectedPlayers.length === 1 ? "is" : "are"} still on this ${groupLabel.singular.toLowerCase()}. Archive them from the roster below first, then archive the ${groupLabel.singular.toLowerCase()} itself.`,
+      );
+      return;
+    }
     const ok = await confirmAsync(
       `Archive ${teamLabel(selectedTeam)}?`,
-      `${vocab.member.plural} and history stay intact. Move active ${vocab.member.plural.toLowerCase()} first if needed.`,
+      "History stays intact — this just removes it from the active list.",
       "Archive",
     );
     if (!ok) return;

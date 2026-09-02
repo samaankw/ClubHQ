@@ -3,7 +3,7 @@ import { View, Pressable, StyleSheet } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
-import { notify } from "@/lib/alertCompat";
+import { confirmAsync, notify } from "@/lib/alertCompat";
 import { goBackOr } from "@/lib/navigation";
 import ModalBackButton from "@/components/ModalBackButton";
 import { Screen, Card, Text, Eyebrow, Field, Button } from "@/components/ui";
@@ -57,9 +57,23 @@ export default function EvaluatePlayer() {
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [generatingPlan, setGeneratingPlan] = useState(false);
+  // Every skill starts at 5/10 so the grid isn't a wall of empty pips, but
+  // that means "submit without tapping anything" silently produces a flat,
+  // meaningless evaluation a parent would see as real. Tracked separately
+  // from `scores` itself, since a coach re-tapping 5 on purpose is a real
+  // choice and shouldn't be indistinguishable from never touching it.
+  const [touchedAnyScore, setTouchedAnyScore] = useState(false);
 
   const handleSubmit = async () => {
     if (!profile?.id || !playerId) return;
+    if (!touchedAnyScore) {
+      const ok = await confirmAsync(
+        "No scores adjusted",
+        "Every skill is still at the default 5/10. Save this evaluation anyway?",
+        "Save Anyway",
+      );
+      if (!ok) return;
+    }
     setSubmitting(true);
 
     const { data: evaluation, error } = await supabase
@@ -123,7 +137,15 @@ export default function EvaluatePlayer() {
 
       <Card style={styles.card}>
         {SKILLS.map((s) => (
-          <ScoreRow key={s.key} label={s.label} value={scores[s.key]} onChange={(n) => setScores((prev) => ({ ...prev, [s.key]: n }))} />
+          <ScoreRow
+            key={s.key}
+            label={s.label}
+            value={scores[s.key]}
+            onChange={(n) => {
+              setScores((prev) => ({ ...prev, [s.key]: n }));
+              setTouchedAnyScore(true);
+            }}
+          />
         ))}
       </Card>
 
