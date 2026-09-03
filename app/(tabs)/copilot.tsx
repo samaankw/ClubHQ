@@ -1,10 +1,12 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { View, TextInput, Pressable, StyleSheet, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams } from "expo-router";
 import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
-import { Screen, Text, IconChip, ListRow, Badge, EmptyState } from "@/components/ui";
-import type { IconName } from "@/components/ui";
+import { useCopilotSnapshot } from "@/lib/hooks";
+import { copilotIdentity, copilotRoleFor } from "@/lib/copilotScope";
+import { Screen, Text, IconChip, ListRow, Badge, EmptyState, StatTile } from "@/components/ui";
 import { color, space, radius, borderWidth, type as typeTokens, opacity } from "@/theme";
 
 interface ChatMessage {
@@ -13,23 +15,20 @@ interface ChatMessage {
   text: string;
 }
 
-const SUGGESTIONS: { text: string; icon: IconName }[] = [
-  { text: "Which players improved the most this season?", icon: "trending-up" },
-  { text: "What's the most common weakness across the club?", icon: "warning-outline" },
-  { text: "Which coaches are completing evaluations consistently?", icon: "checkmark-done" },
-  { text: "What's our homework completion rate?", icon: "stats-chart" },
-];
-
 export default function Copilot() {
   const { profile } = useAuth();
+  const { q } = useLocalSearchParams<{ q?: string }>();
+  const { snapshot } = useCopilotSnapshot();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [asking, setAsking] = useState(false);
   const listRef = useRef<FlatList>(null);
+  const autoAskedRef = useRef<string | null>(null);
 
-  const canUse = profile?.role === "director" || profile?.role === "coach";
+  const copilotRole = copilotRoleFor(profile?.role);
+  const identity = copilotIdentity(copilotRole ?? "coach");
 
-  const ask = async (question: string) => {
+  const ask = useCallback(async (question: string) => {
     if (!question.trim() || !profile?.club_id) return;
     const userMsg: ChatMessage = { id: `${Date.now()}-u`, role: "user", text: question.trim() };
     setMessages((prev) => [...prev, userMsg]);
@@ -57,12 +56,22 @@ export default function Copilot() {
     } finally {
       setAsking(false);
     }
-  };
+  }, [profile?.club_id]);
 
-  if (!canUse) {
+  // Home hands the Copilot a question rather than an empty prompt box, so a
+  // tap there lands here with the answer already being fetched. Guarded by the
+  // last question asked: this tab stays mounted, so without it every re-render
+  // would re-send the same question.
+  useEffect(() => {
+    if (!q || !copilotRole || autoAskedRef.current === q) return;
+    autoAskedRef.current = q;
+    void ask(q);
+  }, [q, copilotRole, ask]);
+
+  if (!copilotRole) {
     return (
       <Screen>
-        <EmptyState icon="lock-closed" title="Copilot locked" body="The Director Copilot is available to coaches and directors." />
+        <EmptyState icon="lock-closed" title="Copilot locked" body="The Copilot is available to coaches and directors." />
       </Screen>
     );
   }
@@ -72,15 +81,42 @@ export default function Copilot() {
       {messages.length === 0 ? (
         <View style={styles.emptyState}>
           <IconChip name="sparkles" tone="brand" size={28} style={styles.emptyIcon} />
-          <Text role="h1" style={styles.center}>Ask about your club</Text>
+          <Text role="h1" style={styles.center}>{identity.title}</Text>
           <Text tone="secondary" style={[styles.center, styles.emptySubtitle]}>
-            Player development, coach activity, homework completion — grounded in your live data.
+            {identity.scopeLine}
           </Text>
-          <View style={{ gap: space[2] }}>
-            {SUGGESTIONS.map((s) => (
-              <ListRow key={s.text} icon={s.icon} title={s.text} onPress={() => ask(s.text)} />
-            ))}
-          </View>
+
+          {/* The same numbers the Home card reasons over, shown before the
+              questions: a director who opens the Copilot should see the state
+              of the club without having to ask for it first. */}
+          {snapshot && snapshot.playerCount > 0 && (
+            <View style={styles.statRow}>
+              <StatTile
+                label={copilotRole === "director" ? "Players" : "Your players"}
+                value={String(snapshot.playerCount)}
+                footnote={copilotRole === "director" ? "Club roster" : "Across your teams"}
+              />
+              <StatTile
+                label="Evaluated (30d)"
+                value={String(snapshot.playersEvaluatedLast30Days)}
+                footnote={`of ${snapshot.playerCount}`}
+              />
+            </View>
+          )}
+
+          {snapshot && snapshot.playerCount === 0 && copilotRole === "coach" ? (
+            <Text tone="secondary" style={styles.center}>
+              You aren't assigned to a team yet, so there are no players for the Copilot to read.
+              Your director can add you to one.
+            </Text>
+          ) : (
+            <View style={{ gap: space[2] }}>
+              {identity.suggestions.map((s) => (
+                <ListRow key={s.text} icon={s.icon} title={s.text} onPress={() => ask(s.text)} />
+              ))}
+            </View>
+          )}
+
           <Badge label="GROUNDED IN YOUR LIVE DATA" tone="brand" style={styles.groundedBadge} />
         </View>
       ) : (
@@ -139,6 +175,7 @@ const styles = StyleSheet.create({
   emptyState: { flex: 1, padding: space[6], paddingTop: space[8], gap: space[3], alignItems: "stretch" },
   emptyIcon: { alignSelf: "center", width: space[9], height: space[9], borderRadius: radius.full, marginBottom: space[2] },
   emptySubtitle: { marginBottom: space[3] },
+  statRow: { flexDirection: "row", gap: space[3], marginBottom: space[3] },
   groundedBadge: { alignSelf: "center", marginTop: space[3] },
   bubbleRow: { marginBottom: space[3], alignItems: "flex-start" },
   bubbleRowMine: { alignItems: "flex-end" },

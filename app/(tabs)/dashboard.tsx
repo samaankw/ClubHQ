@@ -10,9 +10,11 @@ import {
   useMyPlayers,
   useLatestDevelopmentPlan,
   useSetupProgress,
+  useCopilotSnapshot,
 } from "@/lib/hooks";
 import ClubBioSection from "@/components/ClubBioSection";
 import CoachesSection from "@/components/CoachesSection";
+import CopilotCard from "@/components/CopilotCard";
 import {
   Screen,
   Card,
@@ -119,6 +121,7 @@ export default function Dashboard() {
     playerCount,
     refresh: refreshSetup,
   } = useSetupProgress();
+  const { snapshot: copilotSnapshot, loading: copilotLoading, refresh: refreshCopilot } = useCopilotSnapshot();
 
   // Team/player creation is director-gated in RLS (`teams_write_staff`,
   // `players_insert_staff` both require role = 'director'), so a coach or
@@ -129,7 +132,7 @@ export default function Dashboard() {
   const [refreshing, setRefreshing] = React.useState(false);
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refreshEvent(), refreshCounts(), refreshAnn(), refreshSetup()]);
+    await Promise.all([refreshEvent(), refreshCounts(), refreshAnn(), refreshSetup(), refreshCopilot()]);
     setRefreshing(false);
   };
 
@@ -149,6 +152,13 @@ export default function Dashboard() {
             onStepPress={(step) => router.push(step.href as never)}
           />
         )}
+
+        {/* Staff-only, and placed above the stat tiles: the Copilot's finding
+            is the one thing on a director's Home they can act on today, while
+            the tiles below are standing counts. Moved here from Profile, where
+            club-wide intelligence sat behind a screen about the viewer's own
+            account and bio. */}
+        <CopilotCard snapshot={copilotSnapshot} loading={copilotLoading} />
 
         {profile?.role === "director" && (
           <View style={{ flexDirection: "row", gap: space[3] }}>

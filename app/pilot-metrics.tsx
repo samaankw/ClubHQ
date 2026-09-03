@@ -99,13 +99,21 @@ export default function PilotMetrics() {
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    const { data: teams } = await supabase.from("teams").select("id").eq("club_id", profile.club_id);
+    // Archived teams and players are excluded here, in useCopilotSnapshot and
+    // in the director-copilot edge function, so the dashboard card, the chat
+    // and this screen never quote three different roster sizes for one club.
+    const { data: teams } = await supabase
+      .from("teams")
+      .select("id")
+      .eq("club_id", profile.club_id)
+      .is("archived_at", null);
     const teamIds = (teams ?? []).map((t) => t.id);
 
     const { data: players } = await supabase
       .from("players")
       .select("id")
-      .in("team_id", teamIds.length ? teamIds : ["00000000-0000-0000-0000-000000000000"]);
+      .in("team_id", teamIds.length ? teamIds : ["00000000-0000-0000-0000-000000000000"])
+      .is("archived_at", null);
     const playerIds = (players ?? []).map((p) => p.id);
     const totalPlayers = playerIds.length;
 

@@ -137,6 +137,10 @@ export default function Profile() {
   };
 
   const roleLabel = profile?.role ? profile.role[0].toUpperCase() + profile.role.slice(1) : "";
+  // The Copilot and Pilot Metrics used to live in this list. Both moved to the
+  // Home screen: they answer "what is happening across my club?", which is a
+  // daily-workflow question, not something to look for on a screen about the
+  // viewer's own account, bio and notification settings.
   const hasAdminRows = profile?.role === "director" || profile?.role === "parent" || canManageDrills;
 
   return (
@@ -219,12 +223,6 @@ export default function Profile() {
           )}
           {canManageDrills && (
             <ListRow icon="film" title="Manage Drill Library" onPress={() => router.push("/manage-drills")} />
-          )}
-          {canManageDrills && (
-            <ListRow icon="bulb" title="Director Copilot" onPress={() => router.push("/(tabs)/copilot")} />
-          )}
-          {profile?.role === "director" && (
-            <ListRow icon="stats-chart" title="Pilot Metrics" onPress={() => router.push("/pilot-metrics")} />
           )}
         </Card>
       )}

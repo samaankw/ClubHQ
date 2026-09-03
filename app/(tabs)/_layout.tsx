@@ -115,9 +115,12 @@ export default function TabsLayout() {
       />
 
       {/* Copilot is a coach/director tool, not a daily screen for every
-          role — reachable from Profile instead of taking a permanent slot
-          in an already-crowded tab bar. href: null keeps the route working
-          via router.push while hiding it from the tab bar itself. */}
+          role, so it doesn't take a permanent slot in an already-crowded tab
+          bar. It's reached from the Copilot card on Home (see
+          components/CopilotCard.tsx) — which also passes it a question via
+          ?q= so it opens on an answer rather than an empty prompt box.
+          href: null keeps the route working via router.push while hiding it
+          from the tab bar itself. */}
       <Tabs.Screen
         name="copilot"
         options={{

@@ -3,6 +3,8 @@ import { useFocusEffect } from "expo-router";
 import { supabase } from "./supabase";
 import { useAuth } from "./AuthProvider";
 import { dedupeLocations } from "./dedupeLocations";
+import { copilotRoleFor } from "./copilotScope";
+import type { CopilotSnapshot } from "./copilotInsight";
 import { Announcement, ClubEvent, DevelopmentPlan, Player } from "@/types/db";
 
 export function useNextEvent() {
@@ -439,4 +441,124 @@ export function useLatestDevelopmentPlan(playerId?: string) {
 
   useEffect(() => { load(); }, [load]);
   return { plan, loading, refresh: load };
+}
+
+/**
+ * The numbers behind the dashboard's Copilot card, scoped to what the viewer
+ * is actually responsible for: the whole club for a director, only their own
+ * teams for a coach.
+ *
+ * Returns null for parents and players — they never see the Copilot — so the
+ * card can mount unconditionally and this hook decides, rather than every
+ * caller repeating the role check.
+ *
+ * Archived teams and players are excluded throughout. Counting an archived
+ * player as "not evaluated in 30 days" would leave a permanent, unfixable
+ * warning on the dashboard, and the same filter is applied in the
+ * director-copilot edge function so the card and the chat never disagree
+ * about how many players a club has.
+ */
+export function useCopilotSnapshot() {
+  const { profile } = useAuth();
+  const role = copilotRoleFor(profile?.role);
+  const [snapshot, setSnapshot] = useState<CopilotSnapshot | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    if (!profile?.club_id || !profile.id || !role) {
+      setSnapshot(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      const { data: clubTeams } = await supabase
+        .from("teams")
+        .select("id")
+        .eq("club_id", profile.club_id)
+        .is("archived_at", null);
+      let teamIds = (clubTeams ?? []).map((t) => t.id as string);
+
+      // A coach sees only the teams they're assigned. Intersecting with the
+      // club's own team list (rather than trusting team_coaches alone) keeps
+      // a stale assignment to a team in another club from widening the scope.
+      if (role === "coach") {
+        const { data: assignments } = await supabase
+          .from("team_coaches")
+          .select("team_id")
+          .eq("coach_id", profile.id);
+        const assigned = new Set((assignments ?? []).map((a) => a.team_id as string));
+        teamIds = teamIds.filter((id) => assigned.has(id));
+      }
+
+      const empty: CopilotSnapshot = {
+        role,
+        playerCount: 0,
+        playersEvaluatedLast30Days: 0,
+        coachCount: 0,
+        inactiveCoachCount: 0,
+        homeworkTotal: 0,
+        homeworkCompleted: 0,
+      };
+
+      // No teams in scope — a brand-new club, or a coach nobody has assigned
+      // yet. Either way there is nothing to compute and nothing to say.
+      if (teamIds.length === 0) {
+        setSnapshot(empty);
+        return;
+      }
+
+      const { data: players } = await supabase
+        .from("players")
+        .select("id")
+        .in("team_id", teamIds)
+        .is("archived_at", null);
+      const playerIds = (players ?? []).map((p) => p.id as string);
+      if (playerIds.length === 0) {
+        setSnapshot(empty);
+        return;
+      }
+
+      const [evaluationResult, homeworkResult, coachResult] = await Promise.all([
+        supabase
+          .from("evaluations")
+          .select("player_id, coach_id")
+          .in("player_id", playerIds)
+          .gte("created_at", thirtyDaysAgo),
+        supabase.from("homework_items").select("completed").in("player_id", playerIds),
+        // Directors are the only role that gets a staff finding, so a coach
+        // never issues this query at all.
+        role === "director"
+          ? supabase.from("profiles").select("id").eq("club_id", profile.club_id).eq("role", "coach")
+          : Promise.resolve({ data: [] as { id: string }[] }),
+      ]);
+
+      const evaluations = evaluationResult.data ?? [];
+      const activeCoachIds = new Set(evaluations.map((e) => e.coach_id as string));
+      const clubCoaches = (coachResult.data ?? []) as { id: string }[];
+      const homework = homeworkResult.data ?? [];
+
+      setSnapshot({
+        role,
+        playerCount: playerIds.length,
+        playersEvaluatedLast30Days: new Set(evaluations.map((e) => e.player_id as string)).size,
+        coachCount: clubCoaches.length,
+        // Counted by filtering the club's coach list rather than subtracting
+        // the number of distinct evaluators: a director who runs evaluations
+        // themselves appears in `activeCoachIds` without being a coach, and
+        // subtraction would quietly hide one inactive coach per such director.
+        inactiveCoachCount: clubCoaches.filter((c) => !activeCoachIds.has(c.id)).length,
+        homeworkTotal: homework.length,
+        homeworkCompleted: homework.filter((h) => h.completed).length,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [profile?.club_id, profile?.id, role]);
+
+  useEffect(() => { load(); }, [load]);
+  return { snapshot, loading, refresh: load };
 }
