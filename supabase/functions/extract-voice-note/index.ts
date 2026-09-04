@@ -150,6 +150,14 @@ Only include players actually mentioned. If the coach's comment doesn't clearly 
       return { ...u, player_name: playerName, note };
     });
 
+    await supabase.from("ai_call_log").insert({
+      club_id: caller.clubId,
+      user_id: caller.userId,
+      function_name: "extract-voice-note",
+      model: "claude-haiku-4-5-20251001",
+      output_summary: JSON.stringify({ update_count: updates.length }),
+    });
+
     return new Response(JSON.stringify({ updates }), {
       headers: { ...corsHeaders, "content-type": "application/json" },
     });

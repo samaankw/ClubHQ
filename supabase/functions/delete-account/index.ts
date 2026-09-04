@@ -42,6 +42,7 @@ serve(async (req) => {
       ["evaluations", "coach_id"],
       ["drills", "added_by"],
       ["report_views", "viewer_id"],
+      ["player_payments", "marked_by"],
     ];
     for (const [table, column] of nullableRefs) {
       const { error: clearError } = await caller.admin.from(table).update({ [column]: null }).eq(column, caller.userId);

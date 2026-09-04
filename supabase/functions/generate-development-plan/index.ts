@@ -53,14 +53,17 @@ serve(async (req) => {
       .single();
     if (evalErr || !evaluation) throw evalErr ?? new Error("Evaluation not found");
 
-    // Confirm the evaluation belongs to the caller's own club (via the player's team),
-    // and that the caller either wrote it themselves or is a director of that club.
+    // Confirm the evaluation belongs to the caller's own club, and that the
+    // caller either wrote it themselves or is a director of that club.
+    // players.club_id is authoritative (Phase 6a) -- read it directly rather
+    // than joining through teams, which returns null (and denies) for a
+    // teamless player.
     const { data: player } = await supabase
       .from("players")
-      .select("id, full_name, team_id, teams(club_id)")
+      .select("id, full_name, club_id")
       .eq("id", evaluation.player_id)
       .single();
-    const clubId = (player?.teams as unknown as { club_id: string } | null)?.club_id ?? null;
+    const clubId = player?.club_id ?? null;
 
     if (clubId !== caller.clubId) {
       throw new AuthError("That evaluation isn't part of your club.", 403);
@@ -81,24 +84,33 @@ serve(async (req) => {
 
     const scores = Object.fromEntries(SKILLS.map((s) => [s, evaluation[s]]));
 
-    // Scrub the player's real name out of free-text coach notes before it ever
-    // reaches Claude — a coach very plausibly typed the name directly into their
-    // notes even though the structured "Player:" field above is anonymized.
-    // This is a best-effort text replace, not a guarantee: nicknames, misspellings,
-    // or a note that says "he" instead of a name obviously won't be caught.
-    const scrubName = (text: string, fullName: string): string => {
-      const parts = fullName.split(/\s+/).filter(Boolean);
+    // Scrub every roster player's name out of free-text coach notes before it
+    // ever reaches Claude — a coach very plausibly typed a name directly into
+    // notes even though the structured "Player:" field above is anonymized,
+    // and may mention a teammate too ("beat Jordan to it"), not just the
+    // player being evaluated. The evaluated player becomes the reversible
+    // {{PLAYER_NAME}} placeholder (substituted back below); every other
+    // roster player becomes a generic, non-reversible token, since the
+    // response never needs to name them. This is a best-effort text replace,
+    // not a guarantee: nicknames, misspellings, or a note that says "he"
+    // instead of a name obviously won't be caught.
+    const { data: roster } = await supabase.from("players").select("id, full_name").eq("club_id", clubId ?? "");
+    const namesLongestFirst = [...(roster ?? [])].sort((a, b) => b.full_name.length - a.full_name.length);
+    const scrubNotes = (text: string): string => {
       let scrubbed = text;
-      for (const part of parts) {
-        if (part.length < 2) continue; // skip single-letter middle initials etc.
-        const pattern = new RegExp(`\\b${part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
-        scrubbed = scrubbed.replace(pattern, "{{PLAYER_NAME}}");
+      for (const p of namesLongestFirst) {
+        const token = p.id === evaluation.player_id ? "{{PLAYER_NAME}}" : "{{TEAMMATE}}";
+        const nameParts = [p.full_name, ...p.full_name.split(/\s+/)].filter((part) => part.length >= 2);
+        for (const part of nameParts) {
+          const pattern = new RegExp(`\\b${part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
+          scrubbed = scrubbed.replace(pattern, token);
+        }
       }
-      return scrubbed;
+      return scrubbed.replace(/\S+@\S+\.\S+/g, "[EMAIL]");
     };
-    const safeCoachNotes = evaluation.coach_notes
-      ? scrubName(evaluation.coach_notes, player?.full_name ?? "")
-      : null;    const overallBefore = priorEval
+    const safeCoachNotes = evaluation.coach_notes ? scrubNotes(evaluation.coach_notes) : null;
+
+    const overallBefore = priorEval
       ? Math.round(SKILLS.reduce((sum, s) => sum + (priorEval[s] ?? 0), 0) / SKILLS.length * 10)
       : null;
     const overallAfter = Math.round(SKILLS.reduce((sum, s) => sum + (scores[s] ?? 0), 0) / SKILLS.length * 10);
@@ -141,6 +153,23 @@ Use the literal placeholder {{PLAYER_NAME}} anywhere you would naturally use the
     const rawText = aiData.content.map((c: { text?: string }) => c.text ?? "").join("");
     const cleaned = rawText.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned);
+
+    // Validate the model's response shape before any of it reaches the
+    // database — a parent-facing report shouldn't be able to carry a
+    // fabricated skill key or a missing summary just because the model
+    // returned syntactically valid JSON in an unexpected shape.
+    if (typeof parsed.summary !== "string" || !parsed.summary.trim()) {
+      throw new Error("Model response missing a valid summary.");
+    }
+    if (!Array.isArray(parsed.priorities) || parsed.priorities.length === 0) {
+      throw new Error("Model response missing valid priorities.");
+    }
+    const validSkills: readonly string[] = SKILLS;
+    for (const p of parsed.priorities) {
+      if (!p || typeof p !== "object" || typeof p.note !== "string" || typeof p.skill !== "string" || !validSkills.includes(p.skill)) {
+        throw new Error(`Model response contains an invalid priority: ${JSON.stringify(p)}`);
+      }
+    }
 
     // Substitute the real name back in now that Claude is done — the model
     // never saw it, only the {{PLAYER_NAME}} placeholder.
@@ -216,6 +245,17 @@ Use the literal placeholder {{PLAYER_NAME}} anywhere you would naturally use the
       const { error: hwErr } = await supabase.from("homework_items").insert(homeworkRows);
       if (hwErr) throw hwErr;
     }
+
+    // Audit trail: club/user/model/timestamp for every AI call, plus a
+    // non-identifying summary of what came back (skill keys only — never
+    // the parent-facing summary text or coach notes).
+    await supabase.from("ai_call_log").insert({
+      club_id: clubId,
+      user_id: caller.userId,
+      function_name: "generate-development-plan",
+      model: "claude-sonnet-5",
+      output_summary: JSON.stringify({ priority_skills: prioritySkills }),
+    });
 
     return new Response(JSON.stringify({ plan, homework: homeworkRows }), {
       headers: { ...corsHeaders, "content-type": "application/json" },

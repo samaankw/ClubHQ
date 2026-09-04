@@ -51,14 +51,13 @@ serve(async (req) => {
     const club_id = caller.clubId; // from the verified profile, never from the request body
     const supabase = caller.admin;
 
-    // All teams/players in this club
+    // All teams/players in this club. players.club_id is authoritative
+    // (Phase 6a) -- read it directly rather than joining through teams,
+    // which silently excludes a teamless (private-trainer) client from
+    // every aggregate below.
     const { data: teams } = await supabase.from("teams").select("id, name, age_group").eq("club_id", club_id);
-    const teamIds = (teams ?? []).map((t) => t.id);
 
-    const { data: players } = await supabase
-      .from("players")
-      .select("id, full_name, team_id")
-      .in("team_id", teamIds.length ? teamIds : ["00000000-0000-0000-0000-000000000000"]);
+    const { data: players } = await supabase.from("players").select("id, full_name, team_id").eq("club_id", club_id);
     const playerIds = (players ?? []).map((p) => p.id);
 
     // Latest evaluation per player (approximated by pulling recent evaluations and keeping first per player)
@@ -131,7 +130,23 @@ serve(async (req) => {
       }))
       .sort((a, b) => b.delta - a.delta);
 
-    // Evaluation activity per coach (who's completing evaluations consistently)
+    // Evaluation activity per coach (who's completing evaluations consistently).
+    // Coach names are real, identifiable adult staff data — anonymized with
+    // their own codebook (never the player one, to avoid a name collision
+    // producing a shared label) before anything built from them reaches the
+    // prompt below, the same discipline already applied to player names.
+    const coachCodebook = new Map<string, string>(); // real name -> label
+    const reverseCoachCodebook = new Map<string, string>(); // label -> real name
+    let coachLabelCounter = 1;
+    const coachLabelFor = (name: string): string => {
+      if (!coachCodebook.has(name)) {
+        const label = `Coach_${coachLabelCounter++}`;
+        coachCodebook.set(name, label);
+        reverseCoachCodebook.set(label, name);
+      }
+      return coachCodebook.get(name)!;
+    };
+
     const { data: coachActivity } = await supabase
       .from("evaluations")
       .select("coach_id, profiles(full_name)")
@@ -140,7 +155,8 @@ serve(async (req) => {
     const coachCounts = new Map<string, number>();
     (coachActivity ?? []).forEach((e) => {
       const name = (e.profiles as unknown as { full_name: string } | null)?.full_name ?? "Unknown coach";
-      coachCounts.set(name, (coachCounts.get(name) ?? 0) + 1);
+      const label = coachLabelFor(name);
+      coachCounts.set(label, (coachCounts.get(label) ?? 0) + 1);
     });
 
     // Homework completion rate
@@ -178,6 +194,7 @@ serve(async (req) => {
 Answer the director's question using ONLY the data below. Be specific and cite numbers where you have them.
 If the data doesn't cover what's being asked, say so plainly rather than guessing.
 Players are referred to by anonymized labels (Player_1, Player_2, etc.) — always use these exact labels in your answer, never invent a name.
+Coaches are referred to by anonymized labels (Coach_1, Coach_2, etc.) — always use these exact labels in your answer, never invent a name.
 
 Club data:
 ${JSON.stringify(dataContext, null, 2)}
@@ -204,8 +221,11 @@ Answer in 2-5 sentences, conversational but data-grounded. If it would help, sug
     let answer = aiData.content.map((c: { text?: string }) => c.text ?? "").join("");
 
     // Swap the anonymized labels back for real names now that Claude is done —
-    // the model only ever saw "Player_1", "Player_2", etc.
+    // the model only ever saw "Player_1", "Player_2", "Coach_1", etc.
     for (const [label, realName] of reverseCodebook) {
+      answer = answer.split(label).join(realName);
+    }
+    for (const [label, realName] of reverseCoachCodebook) {
       answer = answer.split(label).join(realName);
     }
 
@@ -221,7 +241,21 @@ Answer in 2-5 sentences, conversational but data-grounded. If it would help, sug
         ...p,
         player: reverseCodebook.get(p.player) ?? p.player,
       })),
+      evaluations_last_30_days_by_coach: Object.fromEntries(
+        Object.entries(dataContext.evaluations_last_30_days_by_coach).map(([label, count]) => [
+          reverseCoachCodebook.get(label) ?? label,
+          count,
+        ]),
+      ),
     };
+
+    await supabase.from("ai_call_log").insert({
+      club_id,
+      user_id: caller.userId,
+      function_name: "director-copilot",
+      model: "claude-sonnet-5",
+      output_summary: JSON.stringify({ answer_length: answer.length }),
+    });
 
     return new Response(JSON.stringify({ answer, data_context: deAnonymizedContext }), {
       headers: { ...corsHeaders, "content-type": "application/json" },
