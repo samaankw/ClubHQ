@@ -165,9 +165,9 @@ export function PrivacyPolicyContent() {
         ClubHQ's pre-launch operational retention schedule uses limited windows by record type. Proposed baselines include 7 to 30 days for
         incomplete signups, an active player relationship plus 30 to 90 days for player/development records, 12 to 24 months or a shorter
         configured period for messages, 0 to 30 days after evaluation confirmation for voice transcripts, 12 to 24 months for security/audit
-        records, and a rolling 30 to 90 days for operational backups. Raw coach voice audio is not retained by default. These are operational
-        baselines for attorney review, not universal statutory deadlines, and may be shortened or temporarily extended for an approved legal
-        hold, safety investigation, contract, insurance requirement, or other documented obligation.
+        records, and a rolling 30 to 90 days for operational backups. Raw coach voice audio is not retained by default. These are
+        operational baselines for attorney review, not universal statutory deadlines, and may be shortened or temporarily extended for an
+        approved legal hold, safety investigation, contract, insurance requirement, or other documented obligation.
       </Text>
 
       <Text role="h2" tone="brand" style={styles.h2}>

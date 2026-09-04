@@ -12,17 +12,17 @@ These timeframes are operational baselines, not statements of a universal statut
 
 ## Retention schedule
 
-| Record category | Proposed operational window | End-of-window action |
-| --- | --- | --- |
-| Unverified signup/account | 7 to 30 days when verification or club approval is not completed | Delete account and associated personal data |
-| Active player profile and development records | Active relationship plus 30 to 90 days | Delete or de-identify after the relationship/request lifecycle, subject to legal hold or contract |
-| Messages | 12 to 24 months, with a shorter club-configurable period preferred where practical | Delete unless preserved for a documented safety investigation or legal hold |
-| Voice transcript used for an evaluation | Through evaluation confirmation, then 0 to 30 days | Delete transcript after confirmation window |
-| Raw voice audio | Do not retain by default | Process transiently and delete |
-| AI prompt/output payloads at external vendors | Shortest vendor-supported period consistent with service operation | Expire/delete under vendor terms and DPA |
-| Security/audit records | 12 to 24 months | Delete after security/accountability purpose ends unless held |
-| Operational backups | Rolling 30 to 90 days | Age out through backup rotation; do not restore deleted data into active production except for disaster recovery |
-| Consent evidence | Only as long as reasonably necessary to document acceptance, withdrawal, deletion handling, disputes, or another approved compliance purpose | Purge under the approved legal/compliance schedule; retain only minimized/pseudonymous evidence after live account/player deletion |
+| Record category                               | Proposed operational window                                                                                                                  | End-of-window action                                                                                                               |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Unverified signup/account                     | 7 to 30 days when verification or club approval is not completed                                                                             | Delete account and associated personal data                                                                                        |
+| Active player profile and development records | Active relationship plus 30 to 90 days                                                                                                       | Delete or de-identify after the relationship/request lifecycle, subject to legal hold or contract                                  |
+| Messages                                      | 12 to 24 months, with a shorter club-configurable period preferred where practical                                                           | Delete unless preserved for a documented safety investigation or legal hold                                                        |
+| Voice transcript used for an evaluation       | Through evaluation confirmation, then 0 to 30 days                                                                                           | Delete transcript after confirmation window                                                                                        |
+| Raw voice audio                               | Do not retain by default                                                                                                                     | Process transiently and delete                                                                                                     |
+| AI prompt/output payloads at external vendors | Shortest vendor-supported period consistent with service operation                                                                           | Expire/delete under vendor terms and DPA                                                                                           |
+| Security/audit records                        | 12 to 24 months                                                                                                                              | Delete after security/accountability purpose ends unless held                                                                      |
+| Operational backups                           | Rolling 30 to 90 days                                                                                                                        | Age out through backup rotation; do not restore deleted data into active production except for disaster recovery                   |
+| Consent evidence                              | Only as long as reasonably necessary to document acceptance, withdrawal, deletion handling, disputes, or another approved compliance purpose | Purge under the approved legal/compliance schedule; retain only minimized/pseudonymous evidence after live account/player deletion |
 
 ## Consent evidence minimization
 

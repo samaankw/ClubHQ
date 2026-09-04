@@ -102,8 +102,8 @@ export default function PrivacyCenter() {
         <Eyebrow tone="brand">Your data</Eyebrow>
         <Text role="h2">Downloadable account export</Text>
         <Text tone="secondary">
-          The export contains your account/profile information, consent history, records you authored, and currently linked child records when
-          you are a parent. It does not grant access to data you are no longer authorized to view.
+          The export contains your account/profile information, consent history, records you authored, and currently linked child records
+          when you are a parent. It does not grant access to data you are no longer authorized to view.
         </Text>
         <Button label={exporting ? "Preparing export…" : "Export My Data"} onPress={exportMyData} disabled={exporting} fullWidth />
       </Card>
