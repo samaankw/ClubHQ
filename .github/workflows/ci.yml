@@ -65,13 +65,26 @@ jobs:
           "$PGBIN/pg_ctl" -D /tmp/clubhq-pgdata -o "-p 5439 -k /tmp" -l /tmp/clubhq-pg.log start
 
       - name: Migration replay + database test suite
+        shell: bash
         run: |
-          .venv/bin/python3 supabase/tests/run_migrations.py
-          .venv/bin/python3 supabase/tests/test_change_notices.py
-          .venv/bin/python3 supabase/tests/test_cancellation_notices.py
-          .venv/bin/python3 supabase/tests/test_function_grants.py
-          .venv/bin/python3 supabase/tests/test_public_rls.py
-          .venv/bin/python3 supabase/tests/test_privacy_rights.py
+          set -o pipefail
+          {
+            .venv/bin/python3 supabase/tests/run_migrations.py
+            .venv/bin/python3 supabase/tests/test_change_notices.py
+            .venv/bin/python3 supabase/tests/test_cancellation_notices.py
+            .venv/bin/python3 supabase/tests/test_function_grants.py
+            .venv/bin/python3 supabase/tests/test_public_rls.py
+            .venv/bin/python3 supabase/tests/test_privacy_rights.py
+          } 2>&1 | tee /tmp/clubhq-db-suite.log
+
+      - name: Upload database diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-suite-diagnostics
+          path: /tmp/clubhq-db-suite.log
+          if-no-files-found: ignore
+          retention-days: 3
 
       # Runs even if a prior step failed, so a red run doesn't leave a stray
       # postgres process on the runner (irrelevant for a throwaway CI VM, but
