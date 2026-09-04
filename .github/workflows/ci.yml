@@ -71,6 +71,7 @@ jobs:
           .venv/bin/python3 supabase/tests/test_cancellation_notices.py
           .venv/bin/python3 supabase/tests/test_function_grants.py
           .venv/bin/python3 supabase/tests/test_public_rls.py
+          .venv/bin/python3 supabase/tests/test_privacy_rights.py
 
       # Runs even if a prior step failed, so a red run doesn't leave a stray
       # postgres process on the runner (irrelevant for a throwaway CI VM, but
