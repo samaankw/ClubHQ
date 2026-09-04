@@ -21,11 +21,19 @@ export default function Login() {
     if (nextEmailError || nextPasswordError) return;
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
-    setLoading(false);
     if (error) {
+      setLoading(false);
       notify("Login failed", error.message);
       return;
     }
+
+    // Signup stores the acceptance/version in Auth metadata. On every normal
+    // login, idempotently copy that acceptance into the durable consent ledger
+    // so an account deletion cannot erase the only evidence that it happened.
+    const { error: consentError } = await supabase.functions.invoke("record-terms-consent");
+    if (consentError) console.warn("Couldn't persist terms consent ledger:", consentError.message);
+
+    setLoading(false);
     router.replace("/(tabs)/dashboard");
   };
 
