@@ -4,7 +4,7 @@ import Constants from "expo-constants";
 import { Text } from "@/components/ui";
 import { color, radius, space, type as typeTokens } from "@/theme";
 
-const UPDATED = "August 15, 2026";
+const UPDATED = "September 4, 2026";
 
 function Shell({ title, children }: { title: string; children: React.ReactNode }) {
   const configuredContact = String(process.env.EXPO_PUBLIC_LEGAL_CONTACT_EMAIL || Constants.expoConfig?.extra?.legalContactEmail || "");
@@ -78,7 +78,8 @@ export function TermsContent() {
       <Text tone="secondary" style={styles.p}>
         Adult users can request account deletion from Profile. Linked parents and club directors can permanently delete a player's ClubHQ
         record and its related development history from the player profile. Some club records may need to be reassigned or removed before an
-        adult account can be deleted.
+        adult account can be deleted. Minimized consent evidence may be retained after deletion only under ClubHQ's approved retention and
+        legal-hold process.
       </Text>
 
       <Text role="h2" tone="brand" style={styles.h2}>
@@ -99,8 +100,8 @@ export function PrivacyPolicyContent() {
         Who this covers
       </Text>
       <Text tone="secondary" style={styles.p}>
-        ClubHQ is designed around adult users. A player is a development record linked to a team and, when applicable, a parent/guardian
-        account. The current product does not require a child to create an account.
+        ClubHQ is designed around adult users. A player is a development record linked to a club and, when applicable, a team and a
+        parent/guardian account. The current product does not require a child to create an account.
       </Text>
 
       <Text role="h2" tone="brand" style={styles.h2}>
@@ -108,8 +109,8 @@ export function PrivacyPolicyContent() {
       </Text>
       <Text tone="secondary" style={styles.p}>
         Adult account data can include name, email, role, club membership, messages, and app activity. Player records can include name,
-        team, optional birth date, position, optional photo URL, evaluations, coach notes, development plans, homework completion, RSVP
-        status, attendance, and report-view activity.
+        club, optional team, optional birth date, position, optional photo URL, evaluations, coach notes, development plans, homework
+        completion, RSVP status, attendance, and report-view activity.
       </Text>
 
       <Text role="h2" tone="brand" style={styles.h2}>
@@ -118,7 +119,8 @@ export function PrivacyPolicyContent() {
       <Text tone="secondary" style={styles.p}>
         A club director generates a one-time player link code. A parent who claims that code must explicitly confirm parental/guardian
         authority and consent before ClubHQ links that specific player to the parent's account. Club membership by itself does not give a
-        parent access to the whole roster.
+        parent access to the whole roster. A linked parent can withdraw parental consent from Privacy & Data, which removes the live
+        parent-player link and ends that parent's access to the player's development data.
       </Text>
 
       <Text role="h2" tone="brand" style={styles.h2}>
@@ -127,6 +129,15 @@ export function PrivacyPolicyContent() {
       <Text tone="secondary" style={styles.p}>
         Row Level Security limits player and evaluation access to authorized club staff and the player's linked parent. Parents can see
         published development plans for their linked child, while draft plans remain visible only to staff for review.
+      </Text>
+
+      <Text role="h2" tone="brand" style={styles.h2}>
+        Your privacy controls
+      </Text>
+      <Text tone="secondary" style={styles.p}>
+        Authenticated adults can use Privacy & Data to export a portable copy of account data attributable to them. Parent exports include
+        records for children who are currently linked to that parent. Adult account deletion is available from Profile, and an authorized
+        linked parent or club director can permanently delete a player's ClubHQ record through the player profile.
       </Text>
 
       <Text role="h2" tone="brand" style={styles.h2}>
@@ -151,9 +162,22 @@ export function PrivacyPolicyContent() {
         Deletion and retention
       </Text>
       <Text tone="secondary" style={styles.p}>
-        Linked parents and directors can permanently delete a player's record and related development history in the app. Adult users can
-        request account deletion. Before public launch, the business must adopt and document a specific retention schedule for records that
-        are no longer needed rather than relying on indefinite storage.
+        ClubHQ's pre-launch operational retention schedule uses limited windows by record type. Proposed baselines include 7 to 30 days for
+        incomplete signups, an active player relationship plus 30 to 90 days for player/development records, 12 to 24 months or a shorter
+        configured period for messages, 0 to 30 days after evaluation confirmation for voice transcripts, 12 to 24 months for security/audit
+        records, and a rolling 30 to 90 days for operational backups. Raw coach voice audio is not retained by default. These are operational
+        baselines for attorney review, not universal statutory deadlines, and may be shortened or temporarily extended for an approved legal
+        hold, safety investigation, contract, insurance requirement, or other documented obligation.
+      </Text>
+
+      <Text role="h2" tone="brand" style={styles.h2}>
+        Consent evidence after deletion
+      </Text>
+      <Text tone="secondary" style={styles.p}>
+        Deleting an adult account or player record does not automatically erase the evidence that consent was previously accepted or later
+        withdrawn. ClubHQ can retain a minimized consent record containing the consent type, policy version, timestamps, status, and stable
+        subject identifiers for only as long as reasonably necessary under the approved retention or legal-hold schedule. The retained
+        consent ledger is designed not to copy deleted profile names, email addresses, child names, or profile photos.
       </Text>
 
       <Text role="h2" tone="brand" style={styles.h2}>
@@ -171,7 +195,7 @@ export function PrivacyPolicyContent() {
       <Text tone="secondary" style={styles.p}>
         This draft is technical product copy, not a determination that ClubHQ satisfies COPPA or any state, school, league, or international
         privacy regime. A qualified attorney should review the final data flows, parental-consent method, retention policy, vendor terms,
-        and notices before launch.
+        export/deletion workflows, and notices before launch.
       </Text>
     </Shell>
   );
@@ -181,8 +205,8 @@ export function LegalTermsContent() {
   return <TermsContent />;
 }
 
-// The draft banner deliberately keeps a warning tone — it is a legal notice,
-// not decoration, so it uses the warning tokens rather than blending in.
+// The draft banner deliberately keeps a warning tone because it is a legal
+// notice, not decoration, so it uses the warning tokens rather than blending in.
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: color.bg.surface, padding: space[5] },
   draftBanner: {
