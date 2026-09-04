@@ -37,8 +37,11 @@ def run():
                 f"director-{director_id}@example.test",
             ),
         )
-        cur.execute("insert into profiles (id, full_name, role) values (%s, 'Privacy Parent', 'parent')", (parent_id,))
-        cur.execute("insert into profiles (id, full_name, role) values (%s, 'Privacy Director', 'director')", (director_id,))
+        # ClubHQ's auth trigger creates profiles automatically for new auth
+        # users. Configure those generated rows rather than inserting duplicate
+        # profile primary keys in the test fixture.
+        cur.execute("update profiles set full_name = 'Privacy Parent', role = 'parent' where id = %s", (parent_id,))
+        cur.execute("update profiles set full_name = 'Privacy Director', role = 'director' where id = %s", (director_id,))
         cur.execute("insert into clubs (id, name) values (%s, 'Privacy Test Club')", (club_id,))
         cur.execute("update profiles set club_id = %s where id in (%s, %s)", (club_id, parent_id, director_id))
         cur.execute("insert into teams (id, club_id, name) values (%s, %s, 'Privacy Team')", (team_id, club_id))
