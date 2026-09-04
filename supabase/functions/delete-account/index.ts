@@ -2,6 +2,8 @@
 // Deploy with: supabase functions deploy delete-account
 // Permanently deletes the authenticated adult user's Auth record. Profile rows
 // cascade from auth.users. A director must transfer/delete any owned club first.
+// Consent evidence is intentionally preserved in pseudonymous form by migration
+// 0043 instead of cascading away with the profile.
 
 import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
 import { authenticate, errorResponse, AuthError } from "../_shared/auth.ts";
@@ -31,6 +33,18 @@ serve(async (req) => {
         throw new AuthError("Transfer or delete clubs you own before deleting your account.", 409);
       }
     }
+
+    // Account deletion ends any still-active parental consent relationship.
+    // Record that transition before auth.users/profile deletion nulls the live
+    // foreign key. The stable subject UUID remains only as consent evidence.
+    const withdrawnAt = new Date().toISOString();
+    const { error: consentError } = await caller.admin
+      .from("consent_records")
+      .update({ status: "withdrawn", withdrawn_at: withdrawnAt })
+      .eq("subject_user_id", caller.userId)
+      .eq("consent_type", "parental_data_consent")
+      .eq("status", "active");
+    if (consentError) throw consentError;
 
     // Preserve club history while removing personally attributable adult references.
     // Tables with ON DELETE CASCADE/SET NULL are handled by Postgres; these older
