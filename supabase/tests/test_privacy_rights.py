@@ -1,4 +1,4 @@
-"""Regression tests for 0043 privacy-rights and F8 consent-history behavior."""
+"""Regression tests for privacy rights, F8 consent history, and teamless deletion."""
 import uuid
 
 import psycopg2
@@ -25,17 +25,30 @@ def run():
     conn.autocommit = True
     cur = conn.cursor()
 
-    parent_id, club_id, team_id, player_id = (uuid.uuid4() for _ in range(4))
+    parent_id, director_id, club_id, team_id, player_id, teamless_player_id = (uuid.uuid4() for _ in range(6))
 
     try:
-        cur.execute("insert into auth.users (id, email) values (%s, %s)", (parent_id, f"privacy-{parent_id}@example.test"))
+        cur.execute(
+            "insert into auth.users (id, email) values (%s, %s), (%s, %s)",
+            (
+                parent_id,
+                f"privacy-{parent_id}@example.test",
+                director_id,
+                f"director-{director_id}@example.test",
+            ),
+        )
         cur.execute("insert into profiles (id, full_name, role) values (%s, 'Privacy Parent', 'parent')", (parent_id,))
+        cur.execute("insert into profiles (id, full_name, role) values (%s, 'Privacy Director', 'director')", (director_id,))
         cur.execute("insert into clubs (id, name) values (%s, 'Privacy Test Club')", (club_id,))
-        cur.execute("update profiles set club_id = %s where id = %s", (club_id, parent_id))
+        cur.execute("update profiles set club_id = %s where id in (%s, %s)", (club_id, parent_id, director_id))
         cur.execute("insert into teams (id, club_id, name) values (%s, %s, 'Privacy Team')", (team_id, club_id))
         cur.execute(
             "insert into players (id, team_id, club_id, parent_id, full_name) values (%s, %s, %s, %s, 'Privacy Player')",
             (player_id, team_id, club_id, parent_id),
+        )
+        cur.execute(
+            "insert into players (id, team_id, club_id, full_name) values (%s, null, %s, 'Teamless Privacy Player')",
+            (teamless_player_id, club_id),
         )
         cur.execute(
             """
@@ -92,9 +105,19 @@ def run():
             """
         )
         check("player consent FK uses SET NULL", cur.fetchone()[0] == "SET NULL")
+
+        # 0040 intentionally permits teamless players for private trainers and
+        # academies. The privacy replacement must not regress a director's
+        # ability to delete one of those club-owned records.
+        cur.execute("select set_config('test.uid', %s, false)", (str(director_id),))
+        cur.execute("select delete_player_data(%s)", (teamless_player_id,))
+        cur.execute("select exists(select 1 from players where id = %s)", (teamless_player_id,))
+        check("director can delete a teamless player after privacy hardening", cur.fetchone()[0] is False)
+        cur.execute("select set_config('test.uid', '', false)")
     finally:
+        cur.execute("select set_config('test.uid', '', false)")
         cur.execute("delete from clubs where id = %s", (club_id,))
-        cur.execute("delete from auth.users where id = %s", (parent_id,))
+        cur.execute("delete from auth.users where id in (%s, %s)", (parent_id, director_id))
         cur.close()
         conn.close()
 
