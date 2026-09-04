@@ -58,6 +58,13 @@ export default function Signup() {
         router.replace("/(auth)/login");
         return;
       }
+
+      // When email confirmation is disabled Supabase returns a session
+      // immediately, so there may be no later login event to persist the
+      // acceptance. Record it here as well; the endpoint is idempotent.
+      const { error: consentError } = await supabase.functions.invoke("record-terms-consent");
+      if (consentError) console.warn("Couldn't persist terms consent ledger:", consentError.message);
+
       router.replace("/(tabs)/dashboard");
     } finally {
       setLoading(false);
