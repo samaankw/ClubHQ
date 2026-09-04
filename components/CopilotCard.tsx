@@ -3,9 +3,9 @@ import { View, Pressable, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { computeCopilotInsight, CopilotSnapshot, InsightTone } from "@/lib/copilotInsight";
 import { copilotIdentity } from "@/lib/copilotScope";
-import { Card, CardHeader, Text, IconChip, ListRow, Divider } from "@/components/ui";
+import { Card, CardHeader, Text, IconChip, ListRow } from "@/components/ui";
 import type { ChipTone, IconName } from "@/components/ui";
-import { space } from "@/theme";
+import { color, radius, space } from "@/theme";
 
 const TONE_ICON: Record<InsightTone, IconName> = {
   warning: "alert-circle",
@@ -70,6 +70,11 @@ export default function CopilotCard({ snapshot, loading }: CopilotCardProps) {
     <Card style={styles.card}>
       <CardHeader title={identity.title} action="Open" onAction={() => openCopilot()} />
 
+      {/* The finding sits on its own sunken panel rather than above a rule.
+          A hairline divider across a card reads as a seam — an accident of
+          construction — while a tinted block reads as one thing set apart on
+          purpose, which is what this is. The panel stays neutral and lets the
+          icon carry the tone: a tinted chip on a same-tinted panel disappears. */}
       {insight ? (
         <Pressable
           accessibilityRole="button"
@@ -89,30 +94,40 @@ export default function CopilotCard({ snapshot, loading }: CopilotCardProps) {
         <Text tone="secondary">{identity.scopeLine}</Text>
       )}
 
-      <Divider />
+      <View style={styles.rows}>
+        {suggestions.map((s) => (
+          <ListRow key={s.text} icon={s.icon} title={s.text} onPress={() => openCopilot(s.text)} />
+        ))}
 
-      {suggestions.map((s) => (
-        <ListRow key={s.text} icon={s.icon} title={s.text} onPress={() => openCopilot(s.text)} />
-      ))}
-
-      {/* Pilot metrics used to sit next to the Copilot on Profile, and the
-          feedback treated them as one thing — they answer the same question
-          ("what is happening across my club?") at different depths. Keeping
-          them adjacent here preserves that pairing without sending a director
-          back to an account screen to find either one. */}
-      {snapshot.role === "director" && (
-        <ListRow
-          icon="stats-chart"
-          title="Full pilot metrics"
-          onPress={() => router.push("/pilot-metrics")}
-        />
-      )}
+        {/* Pilot metrics used to sit next to the Copilot on Profile, and the
+            feedback treated them as one thing — they answer the same question
+            ("what is happening across my club?") at different depths. Keeping
+            them adjacent here preserves that pairing without sending a director
+            back to an account screen to find either one. */}
+        {snapshot.role === "director" && (
+          <ListRow
+            icon="stats-chart"
+            title="Full pilot metrics"
+            onPress={() => router.push("/pilot-metrics")}
+          />
+        )}
+      </View>
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
   card: { gap: space[3] },
-  insight: { flexDirection: "row", alignItems: "flex-start", gap: space[3] },
+  insight: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: space[3],
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.md,
+    padding: space[3],
+  },
   insightText: { flex: 1, gap: space[1] },
+  // The rows carry their own vertical padding, so they need no gap of their
+  // own — and none between them and the panel beyond the card's own rhythm.
+  rows: { marginTop: -space[1] },
 });

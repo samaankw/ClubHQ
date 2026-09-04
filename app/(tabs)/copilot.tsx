@@ -6,6 +6,7 @@ import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { useCopilotSnapshot } from "@/lib/hooks";
 import { copilotIdentity, copilotRoleFor } from "@/lib/copilotScope";
+import { copilotFailureMessage, copilotResponseError } from "@/lib/copilotErrors";
 import { Screen, Text, IconChip, ListRow, Badge, EmptyState, StatTile } from "@/components/ui";
 import { color, space, radius, borderWidth, type as typeTokens, opacity } from "@/theme";
 
@@ -45,13 +46,16 @@ export default function Copilot() {
         },
         body: JSON.stringify({ question: question.trim() }),
       });
-      if (!resp.ok) throw new Error(await resp.text());
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        throw new Error(copilotResponseError(resp.status, body));
+      }
       const result = await resp.json();
       setMessages((prev) => [...prev, { id: `${Date.now()}-a`, role: "assistant", text: result.answer }]);
     } catch (e) {
       setMessages((prev) => [
         ...prev,
-        { id: `${Date.now()}-a`, role: "assistant", text: "Something went wrong pulling that data. Try again in a moment." },
+        { id: `${Date.now()}-a`, role: "assistant", text: copilotFailureMessage(e) },
       ]);
     } finally {
       setAsking(false);
