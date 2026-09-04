@@ -84,8 +84,6 @@ export default function Profile() {
       .update({ coach_title: coachTitle.trim() || null, coach_bio: coachBio.trim() || null })
       .eq("id", profile.id);
 
-    // Same stale-token retry as loadProfile: a token that fails the DB's
-    // JWT check can otherwise make this look like a silent no-op save.
     if (error && /jwt/i.test(error.message)) {
       const { error: refreshError } = await supabase.auth.refreshSession();
       if (!refreshError) {
@@ -131,7 +129,7 @@ export default function Profile() {
   const deleteAccount = async () => {
     const ok = await confirmAsync(
       "Delete your ClubHQ account?",
-      "This permanently deletes your adult account. If you're a director, transfer club ownership before deleting. This cannot be undone.",
+      "This permanently deletes your adult account. If you're a director, transfer club ownership before deleting. Consent evidence is retained only as required by ClubHQ's approved retention and legal-hold policy. This cannot be undone.",
       "Delete account",
     );
     if (!ok) return;
@@ -251,6 +249,7 @@ export default function Profile() {
           value={profile?.notify_announcements ?? true}
           onValueChange={(v) => setNotifyPref("notify_announcements", v)}
         />
+        <ListRow icon="shield-checkmark" title="Privacy & Data" onPress={() => router.push("/privacy-center")} />
         <ListRow title="Terms of Service" onPress={() => router.push("/legal/terms")} />
         <ListRow title="Privacy Policy" onPress={() => router.push("/legal/privacy")} />
       </Card>
