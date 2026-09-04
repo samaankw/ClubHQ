@@ -117,6 +117,43 @@ def run():
         cur.execute("select exists(select 1 from players where id = %s)", (teamless_player_id,))
         check("director can delete a teamless player after privacy hardening", cur.fetchone()[0] is False)
         cur.execute("select set_config('test.uid', '', false)")
+
+        # F10: player_payments.marked_by has no ON DELETE behavior of its own,
+        # and was missing from delete-account's cleanup list -- a director who
+        # had ever marked a fee paid (an ordinary, expected action) could never
+        # delete their own account at all. Reproduce the edge function's exact
+        # steps -- clear the same nullableRefs, including the now-added
+        # player_payments entry, then delete the auth user -- to prove this
+        # self-service deletion right now actually works for that director.
+        payment_player_id = uuid.uuid4()
+        cur.execute(
+            "insert into players (id, team_id, club_id, full_name) values (%s, null, %s, 'Payment Test Player')",
+            (payment_player_id, club_id),
+        )
+        cur.execute(
+            "insert into player_payments (player_id, club_id, period, status, marked_by) "
+            "values (%s, %s, '2026-09', 'paid', %s)",
+            (payment_player_id, club_id, director_id),
+        )
+        for table, column in [
+            ("announcements", "author_id"),
+            ("events", "created_by"),
+            ("messages", "sender_id"),
+            ("evaluations", "coach_id"),
+            ("drills", "added_by"),
+            ("report_views", "viewer_id"),
+            ("player_payments", "marked_by"),
+        ]:
+            cur.execute(f"update {table} set {column} = null where {column} = %s", (director_id,))
+        try:
+            cur.execute("delete from auth.users where id = %s", (director_id,))
+            director_deleted = True
+        except Exception as exc:  # noqa: BLE001
+            director_deleted = False
+            check("director with a marked payment can delete their account", False, f"{type(exc).__name__}: {exc}")
+        if director_deleted:
+            check("director with a marked payment can delete their account", True)
+        cur.execute("delete from players where id = %s", (payment_player_id,))
     finally:
         cur.execute("select set_config('test.uid', '', false)")
         cur.execute("delete from clubs where id = %s", (club_id,))
