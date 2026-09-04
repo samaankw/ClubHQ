@@ -63,6 +63,50 @@ export function useClubBio() {
   return { crestUrl: data.crestUrl, bio: data.bio, loading, error, refresh: retry };
 }
 
+interface EvaluationPulse {
+  evaluatedLast7Days: number;
+  totalPlayers: number;
+}
+
+const EMPTY_EVALUATION_PULSE: EvaluationPulse = { evaluatedLast7Days: 0, totalPlayers: 0 };
+
+// Deliberately queries players.club_id directly rather than joining through
+// teams the way the older pilot-metrics.tsx screen does -- that join misses
+// every teamless client entirely (a private-trainer org has no teams at
+// all), so it would always read 0 total players for that org_type. This is
+// the pattern Phase 6a's migration made correct; pilot-metrics.tsx itself
+// still has the older, broken version and needs its own separate fix.
+export function useEvaluationPulse() {
+  const { profile } = useAuth();
+  const clubId = profile?.club_id;
+
+  const { data, loading, error, retry } = useAsyncData<EvaluationPulse>(
+    async () => {
+      if (!clubId) return EMPTY_EVALUATION_PULSE;
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      const { data: players, error: playersError } = await supabase.from("players").select("id").eq("club_id", clubId);
+      if (playersError) throw playersError;
+      const playerIds = (players ?? []).map((p) => p.id);
+      const totalPlayers = playerIds.length;
+      if (!totalPlayers) return { evaluatedLast7Days: 0, totalPlayers: 0 };
+
+      const { data: evals, error: evalsError } = await supabase
+        .from("evaluations")
+        .select("player_id")
+        .in("player_id", playerIds)
+        .gte("created_at", sevenDaysAgo);
+      if (evalsError) throw evalsError;
+
+      return { evaluatedLast7Days: new Set((evals ?? []).map((e) => e.player_id)).size, totalPlayers };
+    },
+    [clubId],
+    EMPTY_EVALUATION_PULSE,
+  );
+
+  return { evaluatedLast7Days: data.evaluatedLast7Days, totalPlayers: data.totalPlayers, loading, error, refresh: retry };
+}
+
 const EMPTY_WEEK_COUNTS = { games: 0, practices: 0, tournaments: 0, clubEvents: 0 };
 
 export function useWeekCounts() {
@@ -364,11 +408,10 @@ export function useSetupProgress() {
       const [clubResult, teamResult, playerResult, eventResult] = await Promise.all([
         supabase.from("clubs").select("name").eq("id", clubId).maybeSingle(),
         supabase.from("teams").select("id", { count: "exact", head: true }).eq("club_id", clubId).is("archived_at", null),
-        supabase
-          .from("players")
-          .select("id, teams!inner(club_id)", { count: "exact", head: true })
-          .eq("teams.club_id", clubId)
-          .is("archived_at", null),
+        // Counted off club_id, not a teams!inner join -- the join counted a
+        // teamless roster as zero, so a private trainer's checklist never
+        // registered the players they'd actually added.
+        supabase.from("players").select("id", { count: "exact", head: true }).eq("club_id", clubId).is("archived_at", null),
         supabase.from("events").select("id", { count: "exact", head: true }).eq("club_id", clubId),
       ]);
       if (clubResult.error) throw clubResult.error;
