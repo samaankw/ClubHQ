@@ -78,6 +78,11 @@ jobs:
             .venv/bin/python3 supabase/tests/test_function_grants.py
             .venv/bin/python3 supabase/tests/test_public_rls.py
             .venv/bin/python3 supabase/tests/test_privacy_rights.py
+            .venv/bin/python3 supabase/tests/test_plan_review_journal.py
+            .venv/bin/python3 supabase/tests/test_teamless_players.py
+            .venv/bin/python3 supabase/tests/test_club_bio_fields.py
+            .venv/bin/python3 supabase/tests/test_club_org_type.py
+            .venv/bin/python3 supabase/tests/test_player_club_backfill.py
           } 2>&1 | tee /tmp/clubhq-db-suite.log
 
       - name: Upload database diagnostics
