@@ -7,7 +7,7 @@
 -- record, written by the edge functions themselves via the service role.
 
 create table if not exists ai_call_log (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default extensions.uuid_generate_v4(),
   club_id uuid references clubs(id) on delete cascade,
   user_id uuid references profiles(id) on delete set null,
   function_name text not null,

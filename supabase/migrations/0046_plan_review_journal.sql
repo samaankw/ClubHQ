@@ -20,7 +20,7 @@
 -- =========================================================
 
 create table if not exists plan_review_log (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default extensions.uuid_generate_v4(),
   -- SET NULL, not CASCADE: the journal outlives the plan it describes, but
   -- stops pointing at a record that no longer exists. Deleting a child's data
   -- must stay possible, so nothing here may block it.
