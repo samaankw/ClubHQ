@@ -30,6 +30,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Tenancy lint
+        run: npm run lint:tenancy
+
       - name: Format check
         run: npm run format:check
 
