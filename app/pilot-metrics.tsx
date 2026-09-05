@@ -102,13 +102,10 @@ export default function PilotMetrics() {
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    const { data: teams } = await supabase.from("teams").select("id").eq("club_id", profile.club_id);
-    const teamIds = (teams ?? []).map((t) => t.id);
-
-    const { data: players } = await supabase
-      .from("players")
-      .select("id")
-      .in("team_id", teamIds.length ? teamIds : ["00000000-0000-0000-0000-000000000000"]);
+    // Scoped by club_id, not by resolving the club's teams first -- that
+    // counted a teamless roster as zero, so every metric below read as "no
+    // activity" for a private trainer no matter how busy the week was.
+    const { data: players } = await supabase.from("players").select("id").eq("club_id", profile.club_id);
     const playerIds = (players ?? []).map((p) => p.id);
     const totalPlayers = playerIds.length;
 

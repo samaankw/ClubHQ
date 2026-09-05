@@ -93,17 +93,11 @@ export default function EventDetail() {
         if (ev.team_id) {
           playerQuery = playerQuery.eq("team_id", ev.team_id);
         } else {
-          const { data: clubTeams, error: clubTeamsError } = await supabase
-            .from("teams")
-            .select("id")
-            .eq("club_id", ev.club_id)
-            .is("archived_at", null);
-          if (clubTeamsError) throw clubTeamsError;
-          const teamIds = (clubTeams ?? []).map((t) => t.id);
-          if (!teamIds.length) {
-            return { event: ev, players: [], rsvps: [], attendance: [], payments: [], hasFutureInSeries };
-          }
-          playerQuery = playerQuery.in("team_id", teamIds);
+          // Club-wide event: scope by club_id directly. Resolving the club's
+          // teams first and filtering on those dropped every teamless player
+          // from an event meant for everyone -- and returned nobody at all
+          // for an org with no teams to resolve.
+          playerQuery = playerQuery.eq("club_id", ev.club_id);
         }
       } else if (profile?.id) {
         playerQuery = playerQuery.eq("parent_id", profile.id);

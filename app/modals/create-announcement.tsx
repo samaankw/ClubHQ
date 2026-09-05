@@ -134,9 +134,20 @@ export default function CreateAnnouncement() {
   useEffect(() => {
     (async () => {
       if (targetType !== "players" && targetType !== "parents") return;
+      if (!profile?.club_id) return;
       const teamIds = teams.map((t) => t.id);
+      // No teams at all means an org with no group concept (a private
+      // trainer), not an empty roster -- their clients are teamless by
+      // design, so scope by club instead of returning nothing. Clubs and
+      // academies keep the team-scoped query below untouched.
       if (!teamIds.length) {
-        setPlayers([]);
+        const { data } = await supabase
+          .from("players")
+          .select("id, full_name")
+          .eq("club_id", profile.club_id)
+          .is("archived_at", null)
+          .order("full_name");
+        setPlayers((data as PlayerOption[]) ?? []);
         return;
       }
       const { data } = await supabase
@@ -147,7 +158,7 @@ export default function CreateAnnouncement() {
         .order("full_name");
       setPlayers((data as PlayerOption[]) ?? []);
     })();
-  }, [targetType, teams]);
+  }, [targetType, teams, profile?.club_id]);
 
   const togglePlayer = (id: string) => {
     setSelectedPlayerIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));

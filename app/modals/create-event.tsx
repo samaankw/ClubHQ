@@ -289,9 +289,21 @@ export default function CreateEvent() {
   useEffect(() => {
     (async () => {
       if (audienceMode !== "player") return;
+      if (!profile?.club_id) return;
       const teamIds = teams.map((t) => t.id);
+      // No teams at all means an org with no group concept (a private
+      // trainer), not an empty roster -- their clients are teamless by
+      // design, so scope by club instead of returning nothing. There's no
+      // age_group to embed without a team, which the type already allows.
+      // Clubs and academies keep the team-scoped query below untouched.
       if (!teamIds.length) {
-        setPlayers([]);
+        const { data } = await supabase
+          .from("players")
+          .select("id, full_name")
+          .eq("club_id", profile.club_id)
+          .is("archived_at", null)
+          .order("full_name");
+        setPlayers((data as PlayerOption[]) ?? []);
         return;
       }
       const { data } = await supabase
@@ -302,7 +314,7 @@ export default function CreateEvent() {
         .order("full_name");
       setPlayers((data as unknown as PlayerOption[]) ?? []);
     })();
-  }, [audienceMode, teams]);
+  }, [audienceMode, teams, profile?.club_id]);
 
   // Android's hardware back button bypasses the header entirely, so it needs
   // its own guard: while a submit (especially a multi-week recurring create)

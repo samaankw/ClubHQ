@@ -95,12 +95,9 @@ export default function ClubManagement() {
     if (!profile?.club_id || profile.role !== "director") return;
     const [teamResult, playerResult, staffResult, coachResult] = await Promise.all([
       supabase.from("teams").select("*").eq("club_id", profile.club_id).is("archived_at", null).order("name"),
-      supabase
-        .from("players")
-        .select("*, teams!inner(club_id)")
-        .eq("teams.club_id", profile.club_id)
-        .is("archived_at", null)
-        .order("full_name"),
+      // club_id direct, not a teams!inner join -- that join silently dropped
+      // teamless players (Phase 6a made club_id authoritative).
+      supabase.from("players").select("*").eq("club_id", profile.club_id).is("archived_at", null).order("full_name"),
       supabase.from("profiles").select("*").eq("club_id", profile.club_id).in("role", ["coach", "director"]).order("full_name"),
       supabase.from("team_coaches").select("team_id, coach_id"),
     ]);

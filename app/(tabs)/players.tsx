@@ -56,7 +56,11 @@ export default function Players() {
       if (!clubId) return EMPTY_PLAYERS_DATA;
 
       const [playersResult, teamsResult] = await Promise.all([
-        supabase.from("players").select("*, teams!inner(club_id)").eq("teams.club_id", clubId).is("archived_at", null),
+        // players.club_id is authoritative (Phase 6a). The old teams!inner
+        // join was only ever a way to filter by club, but being an inner join
+        // it also dropped every teamless player -- a private trainer's whole
+        // roster -- from their own roster screen.
+        supabase.from("players").select("*").eq("club_id", clubId).is("archived_at", null),
 
         supabase.from("teams").select("*").eq("club_id", clubId).is("archived_at", null).order("name", { ascending: true }),
       ]);
