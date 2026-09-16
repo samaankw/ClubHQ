@@ -6,6 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { useVocab } from "@/lib/vocab";
+import { isClubStaff } from "@/lib/permissions";
 import { Player, DevelopmentPlan, HomeworkItem, Drill, Evaluation } from "@/types/db";
 import { confirmAsync, notify } from "@/lib/alertCompat";
 import DrillVideoModal from "@/components/DrillVideoModal";
@@ -154,7 +155,7 @@ export default function PlayerDetail() {
   }
 
   const { player, plan, homework, pastPlans } = data;
-  const isStaff = profile?.role === "coach" || profile?.role === "director";
+  const isStaff = isClubStaff(profile?.role);
   const isLinkedParent = profile?.role === "parent" && player.parent_id === profile.id;
   const latestEvaluation = evaluations[0];
 

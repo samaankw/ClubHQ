@@ -3,6 +3,7 @@ import { View, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicator } f
 import { Ionicons } from "@expo/vector-icons";
 import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { isClubStaff } from "@/lib/permissions";
 import { Screen, Text, IconChip, ListRow, Badge } from "@/components/ui";
 import NotAuthorized from "@/components/NotAuthorized";
 import type { IconName } from "@/components/ui";
@@ -28,7 +29,7 @@ export default function Copilot() {
   const [asking, setAsking] = useState(false);
   const listRef = useRef<FlatList>(null);
 
-  const canUse = profile?.role === "director" || profile?.role === "coach";
+  const canUse = isClubStaff(profile?.role);
 
   const ask = async (question: string) => {
     if (!question.trim() || !profile?.club_id) return;

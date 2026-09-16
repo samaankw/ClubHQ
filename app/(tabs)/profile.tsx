@@ -6,6 +6,7 @@ import * as ImagePicker from "expo-image-picker";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { useVocab } from "@/lib/vocab";
+import { isClubStaff } from "@/lib/permissions";
 import { shareText } from "@/lib/shareCompat";
 import { confirmAsync, notify } from "@/lib/alertCompat";
 import { Screen, Text, Eyebrow, Card, CardHeader, SpotlightCard, Button, Avatar, ListRow, Toggle, Field } from "@/components/ui";
@@ -32,7 +33,10 @@ async function uploadAvatarPhoto(userId: string, localUri: string): Promise<stri
 export default function Profile() {
   const { profile, refreshProfile } = useAuth();
   const vocab = useVocab();
-  const canManageDrills = profile?.role === "coach" || profile?.role === "director";
+  // Also gates the Director Copilot row below, not just drill management --
+  // it's the same "is this an operational staff role" check, shared via
+  // lib/permissions.ts with dashboard.tsx, copilot.tsx, and manage-drills.tsx.
+  const canManageDrills = isClubStaff(profile?.role);
   const [joinCode, setJoinCode] = useState<string | null>(null);
   const [clubName, setClubName] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);

@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { isClubStaff } from "@/lib/permissions";
 import { ClubEvent } from "@/types/db";
 import { useVocab } from "@/lib/vocab";
 import type { VocabSet } from "@/lib/vocab";
@@ -46,7 +47,7 @@ function EventsSection() {
   const { profile } = useAuth();
   const vocab = useVocab();
   const clubId = profile?.club_id;
-  const canCreate = profile?.role === "coach" || profile?.role === "director";
+  const canCreate = isClubStaff(profile?.role);
 
   const {
     data: events,

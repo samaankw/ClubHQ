@@ -6,6 +6,7 @@ import * as ImagePicker from "expo-image-picker";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
 import { useVocab } from "@/lib/vocab";
+import { isClubStaff, isDirector } from "@/lib/permissions";
 import { confirmAsync, notify } from "@/lib/alertCompat";
 import { Drill } from "@/types/db";
 import DrillVideoModal from "@/components/DrillVideoModal";
@@ -87,9 +88,9 @@ export default function ManageDrills() {
   const [titleError, setTitleError] = useState<string | undefined>();
   const [descriptionError, setDescriptionError] = useState<string | undefined>();
 
-  const canManageDrills = profile?.role === "coach" || profile?.role === "director";
+  const canManageDrills = isClubStaff(profile?.role);
 
-  const canEdit = (drill: Drill) => canManageDrills && !!drill.club_id && (profile?.role === "director" || drill.added_by === profile?.id);
+  const canEdit = (drill: Drill) => canManageDrills && !!drill.club_id && (isDirector(profile?.role) || drill.added_by === profile?.id);
 
   const resetForm = () => {
     setEditingId(null);

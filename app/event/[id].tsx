@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { isClubStaff } from "@/lib/permissions";
 import { AttendanceRecord, AttendanceStatus, ClubEvent, EventRSVP, PaymentStatus, Player, PlayerPayment, RSVPStatus } from "@/types/db";
 import { useVocab } from "@/lib/vocab";
 import type { VocabSet } from "@/lib/vocab";
@@ -53,7 +54,7 @@ export default function EventDetail() {
   const { profile } = useAuth();
   const vocab = useVocab();
   const [addingToCalendar, setAddingToCalendar] = useState(false);
-  const isStaff = profile?.role === "coach" || profile?.role === "director";
+  const isStaff = isClubStaff(profile?.role);
 
   const {
     data,

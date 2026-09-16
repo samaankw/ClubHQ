@@ -5,6 +5,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { format, isToday } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { isClubStaff } from "@/lib/permissions";
 import { useRecentAnnouncements } from "@/lib/hooks";
 import { ANNOUNCEMENT_CATEGORIES, FILTER_BUCKETS, FilterBucket } from "@/lib/announcementCategories";
 import SwipeableRow from "@/components/SwipeableRow";
@@ -28,7 +29,7 @@ export default function AnnouncementsList() {
   const { announcements, loading, error, refresh, markAllAsRead } = useRecentAnnouncements(50);
   const [filter, setFilter] = useState<FilterBucket | "all">("all");
   const [query, setQuery] = useState("");
-  const canPost = profile?.role === "coach" || profile?.role === "director";
+  const canPost = isClubStaff(profile?.role);
 
   // Switching to this section clears the unread badge, same as opening the
   // feed in GroupMe/TeamSnap — there's no per-item detail screen to mark

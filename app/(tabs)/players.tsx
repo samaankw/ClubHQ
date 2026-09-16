@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { isClubStaff } from "@/lib/permissions";
 import { Player, Team } from "@/types/db";
 import { teamLabel } from "@/lib/teamLabel";
 import { useAsyncData } from "@/lib/asyncData";
@@ -32,7 +33,7 @@ export default function Players() {
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState("");
 
-  const isCoachOrDirector = role === "coach" || role === "director";
+  const isCoachOrDirector = isClubStaff(role);
   // players_insert_staff (RLS) only allows a director to insert — a coach
   // or parent must never see a button the database would reject.
   const canCreate = role === "director";
