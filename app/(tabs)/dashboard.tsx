@@ -1,10 +1,20 @@
 import React from "react";
-import { View, ScrollView, RefreshControl } from "react-native";
+import { View, Pressable, ScrollView, RefreshControl } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { format } from "date-fns";
 import { router } from "expo-router";
 import { useAuth } from "@/lib/AuthProvider";
 import { useVocab } from "@/lib/vocab";
-import { useNextEvent, useWeekCounts, useRecentAnnouncements, useMyPlayers, useLatestDevelopmentPlan, useSetupProgress } from "@/lib/hooks";
+import { isClubStaff, isDirector } from "@/lib/permissions";
+import {
+  useNextEvent,
+  useWeekCounts,
+  useRecentAnnouncements,
+  useMyPlayers,
+  useLatestDevelopmentPlan,
+  useSetupProgress,
+  useEvaluationPulse,
+} from "@/lib/hooks";
 import ClubBioSection from "@/components/ClubBioSection";
 import CoachesSection from "@/components/CoachesSection";
 import ListState from "@/components/ListState";
@@ -24,7 +34,48 @@ import {
   Divider,
   SetupChecklist,
 } from "@/components/ui";
-import { space, opacity } from "@/theme";
+import { color, space, opacity } from "@/theme";
+import type { Role } from "@/types/db";
+
+// Both tools already existed, reachable only via Profile -> Administration
+// -- a director or coach who wanted either had to know to look there first.
+// Copilot gets full billing here since it's the one either role would reach
+// for regularly; Pilot Metrics is director-only and deliberately lighter --
+// a weekly pulse-check, not a daily action item, so it shouldn't compete
+// with the setup checklist or stats for attention.
+export function ToolsCard({ role }: { role: Role | undefined }) {
+  // Named for what it actually gates -- the whole card, not just the Copilot
+  // row -- since a parent or player should see neither Copilot nor a
+  // director-only metrics teaser.
+  const staff = isClubStaff(role);
+  const director = isDirector(role);
+  const { evaluatedLast7Days, totalPlayers } = useEvaluationPulse();
+
+  if (!staff) return null;
+
+  return (
+    <Card style={{ gap: space[1] }}>
+      <Eyebrow>Tools</Eyebrow>
+      <ListRow icon="bulb" title="Director Copilot" onPress={() => router.push("/(tabs)/copilot")} />
+      {director && (
+        <>
+          <Divider />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Pilot Metrics — ${evaluatedLast7Days} of ${totalPlayers} evaluated this week`}
+            onPress={() => router.push("/pilot-metrics")}
+            style={{ flexDirection: "row", alignItems: "center", gap: space[2], paddingVertical: space[2] }}
+          >
+            <Text role="bodySm" tone="secondary" style={{ flex: 1 }}>
+              📊 Pilot Metrics — {evaluatedLast7Days} of {totalPlayers} evaluated this week
+            </Text>
+            <Ionicons name="chevron-forward" size={18} color={color.icon.muted} />
+          </Pressable>
+        </>
+      )}
+    </Card>
+  );
+}
 
 function PlayerDevelopmentCard() {
   const vocab = useVocab();
@@ -162,6 +213,8 @@ export default function Dashboard() {
             </View>
           </View>
         )}
+
+        <ToolsCard role={profile?.role} />
 
         {/* Parent-facing: "Meet the Coaches" introduces staff to families. A
             coach or director looking at their own dashboard does not need an

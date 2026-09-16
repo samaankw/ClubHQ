@@ -70,27 +70,36 @@ interface EvaluationPulse {
 
 const EMPTY_EVALUATION_PULSE: EvaluationPulse = { evaluatedLast7Days: 0, totalPlayers: 0 };
 
-// Deliberately queries players.club_id directly rather than joining through
-// teams the way the older pilot-metrics.tsx screen does -- that join misses
-// every teamless client entirely (a private-trainer org has no teams at
-// all), so it would always read 0 total players for that org_type. This is
-// the pattern Phase 6a's migration made correct; pilot-metrics.tsx itself
-// still has the older, broken version and needs its own separate fix.
+// Queries players.club_id directly rather than joining through teams --
+// that join misses every teamless client entirely (a private-trainer org
+// has no teams at all), so it would always read 0 total players for that
+// org_type. This is the pattern Phase 6a's migration made authoritative.
+// Shared with pilot-metrics.tsx, which independently re-derived this same
+// "this club's active players" query and had to be fixed for the identical
+// club_id-scoping bug in the same commit (a64f4e8) that fixed this hook.
+export async function fetchActiveClubPlayerIds(clubId: string): Promise<string[]> {
+  const { data, error } = await supabase.from("players").select("id").eq("club_id", clubId).is("archived_at", null);
+  if (error) throw error;
+  return (data ?? []).map((p) => p.id);
+}
+
+// Director-only data (the Pilot Metrics teaser on the dashboard), so the
+// fetch is skipped entirely -- not just hidden after fetching -- for every
+// other role, matching useSetupProgress's same director-only gate below.
 export function useEvaluationPulse() {
   const { profile } = useAuth();
   const clubId = profile?.club_id;
+  const role = profile?.role;
 
   const { data, loading, error, retry } = useAsyncData<EvaluationPulse>(
     async () => {
-      if (!clubId) return EMPTY_EVALUATION_PULSE;
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      if (!clubId || role !== "director") return EMPTY_EVALUATION_PULSE;
 
-      const { data: players, error: playersError } = await supabase.from("players").select("id").eq("club_id", clubId);
-      if (playersError) throw playersError;
-      const playerIds = (players ?? []).map((p) => p.id);
+      const playerIds = await fetchActiveClubPlayerIds(clubId);
       const totalPlayers = playerIds.length;
       if (!totalPlayers) return { evaluatedLast7Days: 0, totalPlayers: 0 };
 
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const { data: evals, error: evalsError } = await supabase
         .from("evaluations")
         .select("player_id")
@@ -100,8 +109,17 @@ export function useEvaluationPulse() {
 
       return { evaluatedLast7Days: new Set((evals ?? []).map((e) => e.player_id)).size, totalPlayers };
     },
-    [clubId],
+    [clubId, role],
     EMPTY_EVALUATION_PULSE,
+  );
+
+  // Focus, not mount, matching useSetupProgress: a director who evaluates a
+  // few players and returns to this still-mounted tab would otherwise keep
+  // seeing the pre-evaluation count until the app relaunched.
+  useFocusEffect(
+    useCallback(() => {
+      retry();
+    }, [retry]),
   );
 
   return { evaluatedLast7Days: data.evaluatedLast7Days, totalPlayers: data.totalPlayers, loading, error, refresh: retry };

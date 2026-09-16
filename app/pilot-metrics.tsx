@@ -3,6 +3,7 @@ import { View, ScrollView, StyleSheet, RefreshControl } from "react-native";
 import { Stack } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthProvider";
+import { fetchActiveClubPlayerIds } from "@/lib/hooks";
 import { useVocab } from "@/lib/vocab";
 import { Screen, Card, SpotlightCard, Eyebrow, Text, StatTile } from "@/components/ui";
 import NotAuthorized from "@/components/NotAuthorized";
@@ -102,11 +103,10 @@ export default function PilotMetrics() {
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    // Scoped by club_id, not by resolving the club's teams first -- that
-    // counted a teamless roster as zero, so every metric below read as "no
-    // activity" for a private trainer no matter how busy the week was.
-    const { data: players } = await supabase.from("players").select("id").eq("club_id", profile.club_id);
-    const playerIds = (players ?? []).map((p) => p.id);
+    // Shared with useEvaluationPulse (lib/hooks.ts) -- both independently
+    // re-derived "this club's active players" and both had to be fixed for
+    // the identical club_id-scoping bug in the same commit (a64f4e8).
+    const playerIds = await fetchActiveClubPlayerIds(profile.club_id);
     const totalPlayers = playerIds.length;
 
     const safePlayerIds = playerIds.length ? playerIds : ["00000000-0000-0000-0000-000000000000"];
