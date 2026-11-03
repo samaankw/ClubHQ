@@ -1,13 +1,57 @@
 # ClubHQ
 
-React Native (Expo SDK ~57.0.17) + React 19.2.3 + TypeScript ~6.0.3 (strict)
+ClubHQ is a youth sports club management app (SkarioX Automation). Williams
+Soccer Clinic (WSC) is the live pilot, so changes touch real clubs, coaches,
+parents, and minors' data.
 
-- Expo Router (file-based routing) + Supabase/Postgres.
+React Native (Expo SDK ~57.0.31) + React 19.2.3 + TypeScript ~6.0.3 (strict)
+
+- Expo Router (file-based routing) + Supabase (Postgres, Auth, Realtime, Edge
+  Functions; project "ClubHQv1") + Claude API in edge functions.
+
+**Tradeoff:** the rules below favor caution over speed. For trivial tasks
+(typos, copy changes, styling), use judgment instead of ceremony.
 
 Working branch for the current hardening effort: `feat/unified-schedule-feed`.
 `main` is a separate, actively-shipping line of work (an org-type/adaptive-shell
 retrofit) and is intentionally not merged into this branch yet — don't merge
 them as a side effect of unrelated work.
+
+## How to work
+
+### Think before coding
+- State your assumptions before implementing. If uncertain, ask.
+- If a request has more than one reasonable reading, list them. Don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop, name what's confusing, and ask.
+
+### Simplicity first
+- No features, options, or config beyond what was asked.
+- No abstractions for single-use code.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+- Don't add new dependencies without asking first — Expo/React 19 peer
+  dependency conflicts have bitten this project before (see the Expo 57.0.31
+  upgrade, where `react-native-reanimated`/`react-native-worklets` had to be
+  pinned explicitly to match what Expo's own `expo-modules-core` expects).
+
+### Surgical changes
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken. Match existing style.
+- If you notice unrelated dead code or bugs, mention them. Don't fix or delete them unasked.
+- Remove imports/variables/functions that YOUR change made unused. Leave pre-existing dead code alone.
+- The test: every changed line should trace directly to the request.
+
+### Goal-driven execution
+- "Fix the bug" → reproduce it first (a test or exact steps), then make it pass.
+- "Add validation" → write checks for invalid inputs, then make them pass.
+- "Refactor X" → confirm behavior is the same before and after.
+- For multi-step tasks, state a short plan first: each step → how you'll verify it.
+- Run `npm run typecheck` after TypeScript changes. Report what you verified and what you couldn't.
+
+**These rules are working if:** diffs are smaller, there are fewer rewrites,
+questions come before code instead of after mistakes, and no change ever
+loosens tenant isolation or kids' privacy.
 
 ## Commands
 
@@ -76,6 +120,45 @@ migration failing is real. If the failure list ever contains anything besides
 - A table with RLS enabled and zero policies is allowed, but only when it's in
   `ZERO_POLICY_ALLOWLIST` in `supabase/tests/test_public_rls.py` **and** has a
   real `comment on table` explaining why in the migration that left it that way.
+- Before suggesting `supabase db push`, show the SQL and explain the impact.
+  Never run it yourself.
+- Call out anything destructive (drops, renames, `NOT NULL` on existing
+  columns, data rewrites) in **bold**.
+
+## Security / RLS
+
+- Every table is club-scoped (multi-tenant). Never weaken, drop, or bypass an
+  RLS policy to make something "work."
+- Tenancy flows through `players.club_id` and through `teams`. Many policies
+  infer club access via `teams`. Before changing any table, policy, or join
+  in that chain, list every policy that depends on it.
+- Watch for recursive RLS (the `profiles` table has broken this way before).
+  Policies must not query the table they protect in a way that re-triggers
+  themselves; use a `SECURITY DEFINER` helper with a fixed `search_path`
+  instead.
+- Never use the service role key in app (client) code. Service role belongs
+  only in edge functions.
+- New RPCs: state whether they are `SECURITY DEFINER` or `INVOKER`, and why.
+  Definer functions must check the caller's club membership themselves.
+
+## Kids' data & compliance (COPPA / MAAPP)
+
+- No direct coach ↔ player messaging. MAAPP requires it to be blocked. Don't
+  add any feature, endpoint, or UI that allows it.
+- Don't touch parental consent at signup, `consent_records`, or Terms/Privacy
+  links without asking.
+- AI edge functions (`generate-development-plan`, `extract-voice-note`,
+  `director-copilot`) must keep player anonymization: placeholders in,
+  first-name-only matching out. Never send full names or other identifying
+  details to the Claude API.
+- Keep the AI disclosure on parent-facing reports.
+- Never log player personal info (names, DOB, contact info) to the console or
+  edge function logs.
+
+## Secrets
+
+- Never hardcode API keys or tokens. Never commit `.env` files. Use Supabase
+  secrets for edge functions.
 
 ## TypeScript conventions
 
@@ -145,6 +228,22 @@ migration failing is real. If the failure list ever contains anything besides
   evaluation notes out of crash reports — not a runtime PII scan.
 - The root `ErrorBoundary` (`components/ErrorBoundary.tsx`, wrapping
   `RootLayout` in `app/_layout.tsx`) reports through the same function.
+
+## Mobile
+
+- Must work on iOS, Android, and web.
+- `lib/supabase.ts` already has a `platformStorage` helper (SecureStore on
+  iOS/Android, `localStorage` on web) backing the Supabase session storage
+  adapter — but it's currently private to that file, and nothing else in the
+  app imports `expo-secure-store` directly. If a future feature needs
+  platform-aware persistent storage outside of the Supabase client, export
+  `platformStorage` from `lib/supabase.ts` and reuse it rather than reaching
+  for `expo-secure-store` (or a new storage library) directly — don't call
+  `expo-secure-store` straight from app code, since its web implementation
+  doesn't support the same API surface.
+- Notification changes must account for Android OEM battery/background
+  restrictions. Flag anything that could make delivery unreliable.
+- Icons use Ionicons (`@expo/vector-icons/Ionicons`), not emoji.
 
 ## Working protocol
 
