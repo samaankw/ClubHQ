@@ -43,13 +43,13 @@ import type { Role } from "@/types/db";
 // for regularly; Pilot Metrics is director-only and deliberately lighter --
 // a weekly pulse-check, not a daily action item, so it shouldn't compete
 // with the setup checklist or stats for attention.
-export function ToolsCard({ role }: { role: Role | undefined }) {
+export function ToolsCard({ role, pulse }: { role: Role | undefined; pulse: ReturnType<typeof useEvaluationPulse> }) {
   // Named for what it actually gates -- the whole card, not just the Copilot
   // row -- since a parent or player should see neither Copilot nor a
   // director-only metrics teaser.
   const staff = isClubStaff(role);
   const director = isDirector(role);
-  const { evaluatedLast7Days, totalPlayers } = useEvaluationPulse();
+  const { evaluatedLast7Days, totalPlayers, loading, error, refresh } = pulse;
 
   if (!staff) return null;
 
@@ -60,17 +60,26 @@ export function ToolsCard({ role }: { role: Role | undefined }) {
       {director && (
         <>
           <Divider />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Pilot Metrics — ${evaluatedLast7Days} of ${totalPlayers} evaluated this week`}
-            onPress={() => router.push("/pilot-metrics")}
-            style={{ flexDirection: "row", alignItems: "center", gap: space[2], paddingVertical: space[2] }}
+          <ListState
+            loading={loading}
+            error={error ? { message: "Could not load Pilot Metrics." } : null}
+            isEmpty={false}
+            onRetry={refresh}
+            loadingLabel="Loading Pilot Metrics…"
+            emptyTitle=""
           >
-            <Text role="bodySm" tone="secondary" style={{ flex: 1 }}>
-              📊 Pilot Metrics — {evaluatedLast7Days} of {totalPlayers} evaluated this week
-            </Text>
-            <Ionicons name="chevron-forward" size={18} color={color.icon.muted} />
-          </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Pilot Metrics — ${evaluatedLast7Days} of ${totalPlayers} evaluated this week`}
+              onPress={() => router.push("/pilot-metrics")}
+              style={{ flexDirection: "row", alignItems: "center", gap: space[2], paddingVertical: space[2] }}
+            >
+              <Text role="bodySm" tone="secondary" style={{ flex: 1 }}>
+                📊 Pilot Metrics — {evaluatedLast7Days} of {totalPlayers} evaluated this week
+              </Text>
+              <Ionicons name="chevron-forward" size={18} color={color.icon.muted} />
+            </Pressable>
+          </ListState>
         </>
       )}
     </Card>
@@ -170,16 +179,22 @@ export default function Dashboard() {
   // parent must never see a checklist pointing at doors they can't open.
   const showSetupChecklist = profile?.role === "director" && !setupLoading && setupSteps.length > 0 && !setupAllDone;
 
+  const evaluationPulse = useEvaluationPulse();
+
   const [refreshing, setRefreshing] = React.useState(false);
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refreshEvent(), refreshCounts(), refreshAnn(), refreshSetup()]);
-    setRefreshing(false);
+    try {
+      await Promise.all([refreshEvent(), refreshCounts(), refreshAnn(), refreshSetup(), evaluationPulse.refresh()]);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   return (
     <Screen scroll={false}>
       <ScrollView
+        testID="dashboard-scroll"
         contentContainerStyle={{ padding: space[4], gap: space[4] }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
@@ -214,7 +229,7 @@ export default function Dashboard() {
           </View>
         )}
 
-        <ToolsCard role={profile?.role} />
+        <ToolsCard role={profile?.role} pulse={evaluationPulse} />
 
         {/* Parent-facing: "Meet the Coaches" introduces staff to families. A
             coach or director looking at their own dashboard does not need an
